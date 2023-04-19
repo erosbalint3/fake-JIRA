@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "149233536130",
+    "project_id": "fakejira-80c1f",
+    "storage_bucket": "fakejira-80c1f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:149233536130:android:5cf67ae1201a6ce0d6789b",
+        "android_client_info": {
+          "package_name": "com.example.fakejira"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "149233536130-jvlq00tqgv6qj6n12pa0ab681snmt16m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.fakejira",
+            "certificate_hash": "909f82eac0392d0a2b035505a84ec222ecc17666"
+          }
+        },
+        {
+          "client_id": "149233536130-bto84basksim17qnknp2e4gts9kmpvf5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBotdfzoIlNlN2ji_jWyXT70XsWkIyHznQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "149233536130-bto84basksim17qnknp2e4gts9kmpvf5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

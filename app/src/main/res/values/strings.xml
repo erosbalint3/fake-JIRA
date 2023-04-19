@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">FakeJIRA</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="username">Username</string>
+    <string name="confirm_password">Confirm Password</string>
+    <string name="google_sign_in">Google sign in</string>
+    <string name="log_in">Log in</string>
+    <string name="forgot_password">Forgot Password</string>
+    <string name="fake_jira">FAKE JIRA</string>
+    <string name="saj_t_feladatok">Saját feladatok</string>
+    <string name="el_rhet_feladatok">Elérhető feladatok</string>
+    <string name="rtes_t_sek">Értesítések</string>
+    <string name="beallitasok">Beállítások</string>
+    <string name="profil">Profil</string>
+</resources>
