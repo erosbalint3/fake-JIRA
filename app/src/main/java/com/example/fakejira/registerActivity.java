@@ -55,15 +55,15 @@ public class registerActivity extends AppCompatActivity {
     }
 
     private void registerUser() {
-        final var email = this.emailText.getText().toString();
-        final var password = this.password.getText().toString();
+        final String email = this.emailText.getText().toString();
+        final String password = this.password.getText().toString();
         this.mAuth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
                             Log.d(TAG, "createUserWithEmail:success");
-                            final var user = mAuth.getCurrentUser();
+                            final FirebaseUser user = mAuth.getCurrentUser();
                             updateUI(user);
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
@@ -76,8 +76,8 @@ public class registerActivity extends AppCompatActivity {
     }
 
     private boolean validateEmailWithRegex(final String email) {
-        final var pattern = Pattern.compile("[A-Za-z0-9]+@[A-Za-z0-9]+\\.[A-Za-z0-9]+", Pattern.CASE_INSENSITIVE);
-        final var matcher = pattern.matcher(email);
+        final Pattern pattern = Pattern.compile("[A-Za-z0-9]+@[A-Za-z0-9]+\\.[A-Za-z0-9]+", Pattern.CASE_INSENSITIVE);
+        final Matcher matcher = pattern.matcher(email);
         return matcher.matches();
     }
 
@@ -86,10 +86,10 @@ public class registerActivity extends AppCompatActivity {
     }
 
     private void validateFields() {
-        final var username = this.usernameText.getText().toString();
-        final var email = this.emailText.getText().toString();
-        final var password = this.password.getText().toString();
-        final var confirmPassword = this.confirmPassword.getText().toString();
+        final String username = this.usernameText.getText().toString();
+        final String email = this.emailText.getText().toString();
+        final String password = this.password.getText().toString();
+        final String confirmPassword = this.confirmPassword.getText().toString();
         if (username.length() < 4) {
             Toast.makeText(registerActivity.this, "Username must be at least 4 characters long",
                     Toast.LENGTH_SHORT).show();
@@ -109,7 +109,7 @@ public class registerActivity extends AppCompatActivity {
     }
 
     private void updateUI(final FirebaseUser user) {
-        final var loginIntent = new Intent(getApplicationContext(), LoginActivity.class);
+        final Intent loginIntent = new Intent(getApplicationContext(), LoginActivity.class);
         startActivity(loginIntent);
     }
 

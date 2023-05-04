@@ -7,6 +7,8 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 
+import com.example.fakejira.ui.AvailableTasks.HomeFragment;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
@@ -21,7 +23,7 @@ public class LoginActivity extends AppCompatActivity {
         setContentView(R.layout.activity_login);
 
         this.mAuth = FirebaseAuth.getInstance();
-        this.registerButton = (Button) findViewById(R.id.registerFromLoginButton);
+        this.registerButton = findViewById(R.id.registerFromLoginButton);
 
         this.setOnClickMethods();
     }
@@ -40,13 +42,13 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void onRegister() {
-        final var registerIntent = new Intent(getApplicationContext(), registerActivity.class);
+        final Intent registerIntent = new Intent(getApplicationContext(), registerActivity.class);
         startActivity(registerIntent);
     }
 
     private void reload() {
-        finish();
-        final var homeScreenIntent = new Intent(getApplicationContext(), MainActivity.class);
+        final Intent homeScreenIntent = new Intent(getApplicationContext(), NavigationActivity.class);
         startActivity(homeScreenIntent);
+        finish();
     }
 }

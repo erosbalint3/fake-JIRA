@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:screenOrientation="portrait"
+    tools:context=".TaskDetailActivity">
+
+    <TextView
+        android:id="@+id/TaskNameText"
+        android:layout_width="255dp"
+        android:layout_height="47dp"
+        android:layout_marginTop="32dp"
+        android:text="Task"
+        android:textAlignment="center"
+        android:textSize="34sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/TaskDescriptionLabel"
+        android:layout_width="241dp"
+        android:layout_height="36dp"
+        android:layout_marginTop="20dp"
+        android:text="Task Description"
+        android:textSize="20sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.094"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/TaskNameText" />
+
+    <TextView
+        android:id="@+id/TaskDescriptionText"
+        android:layout_width="383dp"
+        android:layout_height="245dp"
+        android:layout_marginTop="20dp"
+        android:text="Task Description"
+        android:textSize="20sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.428"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/TaskDescriptionLabel" />
+
+    <TextView
+        android:id="@+id/TaskPriorityLabel"
+        android:layout_width="235dp"
+        android:layout_height="49dp"
+        android:layout_marginTop="20dp"
+        android:text="Task Priority:"
+        android:textSize="34sp"
+        app:layout_constraintEnd_toStartOf="@+id/TaskPriorityText"
+        app:layout_constraintHorizontal_bias="0.615"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/TaskDescriptionText" />
+
+    <TextView
+        android:id="@+id/TaskPriorityText"
+        android:layout_width="130dp"
+        android:layout_height="42dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="16dp"
+        android:text="0"
+        android:textSize="34sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/TaskDescriptionText" />
+
+    <Button
+        android:id="@+id/AcceptTaskButton"
+        android:layout_width="160dp"
+        android:layout_height="60dp"
+        android:layout_marginTop="64dp"
+        android:text="Accept Task"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/TaskPriorityLabel"
+        app:layout_constraintVertical_bias="0.0" />
+</androidx.constraintlayout.widget.ConstraintLayout>
