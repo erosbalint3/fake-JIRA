@@ -3,6 +3,7 @@ package com.example.fakejira;
 import androidx.appcompat.app.AppCompatActivity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.TextView;
 import com.example.fakejira.models.Feladat;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -14,6 +15,7 @@ public class TaskDetailActivity extends AppCompatActivity {
     private TextView taskPriority;
     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
     private Feladat task;
+    private Button updateTaskButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,6 +31,8 @@ public class TaskDetailActivity extends AppCompatActivity {
         this.taskPriority = this.findViewById(R.id.TaskPriorityText);
         final var acceptTaskButton = this.findViewById(R.id.AcceptTaskButton);
         acceptTaskButton.setOnClickListener(task -> acceptTask());
+        this.updateTaskButton = this.findViewById(R.id.updateTaskButton);
+        this.updateTaskButton.setOnClickListener(task -> updateTask());
     }
 
     private void setTextValues() {
@@ -49,6 +53,13 @@ public class TaskDetailActivity extends AppCompatActivity {
         final var collectionReference = db.collection("OwnTasks");
         collectionReference.add(this.task)
             .addOnSuccessListener(documentReference -> openDialog());
+    }
+
+    private void updateTask() {
+        final var intent = new Intent(this.getApplicationContext(), UpdateTaskActivity.class);
+        final var extras = getIntent().getExtras();
+        intent.putExtra("id", extras.getInt("taskID"));
+        startActivity(intent);
     }
 
     private void openDialog() {

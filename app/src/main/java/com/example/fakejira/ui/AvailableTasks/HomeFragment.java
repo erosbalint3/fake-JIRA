@@ -58,25 +58,6 @@ public class HomeFragment extends Fragment {
         Navigation.findNavController(binding.getRoot()).navigate(R.id.action_nav_home_to_nav_add_task);
     }
 
-    private boolean collectionContainsTask(final Feladat feladat) {
-        AtomicBoolean contains = new AtomicBoolean(false);
-        final var collectionReference = db.collection("AvailableTasks");
-        collectionReference.get().addOnCompleteListener(task -> {
-           if (task.isSuccessful()){
-               for (final var document : task.getResult()) {
-                   Log.println(Log.ERROR, "ELEMEK", document.getData().toString());
-                   final var t = document.getData();
-                   if (Objects.equals(feladat.getTaskName(), Objects.requireNonNull(t.get("taskName")).toString())) {
-                       Log.println(Log.ERROR, "HIBA", Objects.requireNonNull(t.get("taskName")) + ",  " + feladat.getTaskName());
-                       contains.set(true);
-                       break;
-                   }
-               }
-           }
-        });
-        return contains.get();
-    }
-
     private void addTasksToListView() {
         final var collectionReference = db.collection("AvailableTasks");
         this.feladatok = new ArrayList<>();

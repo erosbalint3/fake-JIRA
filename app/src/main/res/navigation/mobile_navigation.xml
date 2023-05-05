@@ -19,7 +19,7 @@
     <fragment
         android:id="@+id/nav_home"
         android:name="com.example.fakejira.ui.AvailableTasks.HomeFragment"
-        android:label="fragment_home"
+        android:label="@string/nav_availableTasks"
         tools:layout="@layout/fragment_home" >
         <action
             android:id="@+id/action_nav_home_to_nav_add_task"
@@ -34,4 +34,9 @@
             android:id="@+id/action_nav_add_task_to_nav_home"
             app:destination="@id/nav_home" />
     </fragment>
+    <fragment
+        android:id="@+id/nav_profile"
+        android:name="com.example.fakejira.ui.Profile.profileFragment"
+        android:label="@string/nav_profileText"
+        tools:layout="@layout/fragment_profile" />
 </navigation>
