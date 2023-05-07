@@ -1,14 +1,11 @@
 package com.example.fakejira;
 
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
+import android.util.Log;
 import android.widget.Button;
-
-import com.example.fakejira.ui.AvailableTasks.HomeFragment;
-import com.google.firebase.FirebaseApp;
+import android.widget.EditText;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
@@ -16,6 +13,9 @@ public class LoginActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
     private Button registerButton;
+    private Button loginButton;
+    private EditText emailText;
+    private EditText passwordText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -24,6 +24,9 @@ public class LoginActivity extends AppCompatActivity {
 
         this.mAuth = FirebaseAuth.getInstance();
         this.registerButton = findViewById(R.id.registerFromLoginButton);
+        this.loginButton = findViewById(R.id.loginButton);
+        this.emailText = findViewById(R.id.emailText);
+        this.passwordText = findViewById(R.id.passwordText);
 
         this.setOnClickMethods();
     }
@@ -39,6 +42,7 @@ public class LoginActivity extends AppCompatActivity {
 
     private void setOnClickMethods() {
         this.registerButton.setOnClickListener(view -> onRegister());
+        this.loginButton.setOnClickListener(view -> onLogin());
     }
 
     private void onRegister() {
@@ -46,9 +50,18 @@ public class LoginActivity extends AppCompatActivity {
         startActivity(registerIntent);
     }
 
+    private void onLogin() {
+        final var email = this.emailText.getText().toString();
+        final var password = this.passwordText.getText().toString();
+
+        this.mAuth.signInWithEmailAndPassword(email, password).addOnCompleteListener(t -> {
+            Log.println(Log.INFO, "LoginActivity", "Successful signin!");
+            reload();
+        });
+    }
+
     private void reload() {
         final Intent homeScreenIntent = new Intent(getApplicationContext(), NavigationActivity.class);
         startActivity(homeScreenIntent);
-        finish();
     }
 }

@@ -1,12 +1,15 @@
 package com.example.fakejira.ui.AvailableTasks;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -44,8 +47,13 @@ public class HomeFragment extends Fragment {
         binding = FragmentHomeBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
         setActivityLayouts();
-        addTasksToListView();
         return root;
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        addTasksToListView();
     }
 
     private void setActivityLayouts() {
@@ -55,7 +63,25 @@ public class HomeFragment extends Fragment {
     }
 
     private void goToTaskAdding() {
-        Navigation.findNavController(binding.getRoot()).navigate(R.id.action_nav_home_to_nav_add_task);
+        final var animation = AnimationUtils.loadAnimation(getContext(), R.anim.blink);
+        animation.setAnimationListener(new Animation.AnimationListener() {
+            @Override
+            public void onAnimationStart(Animation animation) {
+
+            }
+
+            @Override
+            public void onAnimationEnd(Animation animation) {
+                Navigation.findNavController(binding.getRoot()).navigate(R.id.action_nav_home_to_nav_add_task);
+            }
+
+            @Override
+            public void onAnimationRepeat(Animation animation) {
+
+            }
+        });
+        this.addTaskButton.startAnimation(animation);
+        //Navigation.findNavController(binding.getRoot()).navigate(R.id.action_nav_home_to_nav_add_task);
     }
 
     private void addTasksToListView() {
@@ -120,11 +146,7 @@ public class HomeFragment extends Fragment {
                         "taskID",
                         Integer.parseInt(Objects.requireNonNull(tasks.get("taskID")).toString())
                 );
-                task1.getResult().getDocuments().forEach(t -> {
-                    Log.println(Log.ERROR, "igen", "deleted");
-                    t.getReference().delete();
-                });
-                startActivity(intent);
+                startActivity(intent,  ActivityOptions.makeSceneTransitionAnimation(getActivity()).toBundle());
             }
         });
     }

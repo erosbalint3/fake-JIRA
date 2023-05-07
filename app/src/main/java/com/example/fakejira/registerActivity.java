@@ -73,6 +73,7 @@ public class registerActivity extends AppCompatActivity {
                         }
                     }
                 });
+
     }
 
     private boolean validateEmailWithRegex(final String email) {

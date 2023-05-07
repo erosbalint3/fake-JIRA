@@ -10,7 +10,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FakeJIRA">
+        android:theme="@style/Theme.FakeJIRA"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".UpdateTaskActivity"
             android:exported="false">
@@ -40,9 +41,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true" />
-        <activity
-            android:name=".ui.Profile.profileFragment"
-            android:exported="false" />
         <activity
             android:name=".notificationsActivity"
             android:exported="false" />

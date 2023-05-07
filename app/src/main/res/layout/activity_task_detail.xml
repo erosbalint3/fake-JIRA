@@ -71,7 +71,7 @@
         android:id="@+id/AcceptTaskButton"
         android:layout_width="160dp"
         android:layout_height="60dp"
-        android:layout_marginTop="64dp"
+        android:layout_marginTop="24dp"
         android:text="Accept Task"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -84,12 +84,22 @@
         android:id="@+id/updateTaskButton"
         android:layout_width="155dp"
         android:layout_height="60dp"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="8dp"
         android:text="Update Task"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.507"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/AcceptTaskButton"
-        app:layout_constraintVertical_bias="0.101" />
+        app:layout_constraintTop_toBottomOf="@+id/AcceptTaskButton" />
+
+    <Button
+        android:id="@+id/DeleteTaskButton"
+        android:layout_width="158dp"
+        android:layout_height="54dp"
+        android:text="Delete Task"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.513"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/updateTaskButton"
+        app:layout_constraintVertical_bias="0.127" />
 </androidx.constraintlayout.widget.ConstraintLayout>

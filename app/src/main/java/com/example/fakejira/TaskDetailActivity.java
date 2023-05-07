@@ -1,6 +1,8 @@
 package com.example.fakejira;
 
 import androidx.appcompat.app.AppCompatActivity;
+
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
@@ -16,6 +18,7 @@ public class TaskDetailActivity extends AppCompatActivity {
     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
     private Feladat task;
     private Button updateTaskButton;
+    private Button deleteTaskButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,6 +36,8 @@ public class TaskDetailActivity extends AppCompatActivity {
         acceptTaskButton.setOnClickListener(task -> acceptTask());
         this.updateTaskButton = this.findViewById(R.id.updateTaskButton);
         this.updateTaskButton.setOnClickListener(task -> updateTask());
+        this.deleteTaskButton = this.findViewById(R.id.DeleteTaskButton);
+        this.deleteTaskButton.setOnClickListener(task -> deleteTask());
     }
 
     private void setTextValues() {
@@ -49,6 +54,20 @@ public class TaskDetailActivity extends AppCompatActivity {
         }
     }
 
+    private void deleteTask() {
+        final var collectionReference = db.collection("AvailableTasks");
+        final var task = collectionReference.whereEqualTo("taskName", taskName.getText().toString());
+        task.get().addOnCompleteListener(task1 -> {
+            if (task1.isSuccessful()) {
+                task1.getResult().getDocuments().forEach(t -> {
+                    t.getReference().delete();
+                });
+            }
+        });
+        final var intent = new Intent(this.getApplicationContext(), NavigationActivity.class);
+        startActivity(intent,  ActivityOptions.makeSceneTransitionAnimation(this).toBundle());
+    }
+
     private void acceptTask() {
         final var collectionReference = db.collection("OwnTasks");
         collectionReference.add(this.task)
@@ -59,11 +78,11 @@ public class TaskDetailActivity extends AppCompatActivity {
         final var intent = new Intent(this.getApplicationContext(), UpdateTaskActivity.class);
         final var extras = getIntent().getExtras();
         intent.putExtra("id", extras.getInt("taskID"));
-        startActivity(intent);
+        startActivity(intent,  ActivityOptions.makeSceneTransitionAnimation(this).toBundle());
     }
 
     private void openDialog() {
         final var intent = new Intent(this.getApplicationContext(), NavigationActivity.class);
-        startActivity(intent);
+        startActivity(intent,  ActivityOptions.makeSceneTransitionAnimation(this).toBundle());
     }
 }
