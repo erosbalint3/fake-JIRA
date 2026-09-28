@@ -44,6 +44,20 @@ public final class AuthDtos {
             String newPassword) {
     }
 
+    public record ForgotPasswordRequest(
+            @NotBlank(message = "Email is required") @Email(message = "Enter a valid email address") String email) {
+    }
+
+    public record ResetPasswordRequest(
+            @NotBlank(message = "The reset link is incomplete") String token,
+
+            @NotBlank(message = "Password is required")
+            @Size(min = 8, max = 100, message = "Password must be at least 8 characters long")
+            @Pattern(regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
+                    message = "Password needs an uppercase letter, a number and a special character")
+            String newPassword) {
+    }
+
     public record AuthResponse(String token, UserSummary user) {
     }
 }

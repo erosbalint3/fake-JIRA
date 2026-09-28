@@ -12,11 +12,36 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+    properties:
+      hibernate:
+        # Load lazy associations (labels, users, sprints) for lists in batches instead of one query per row.
+        default_batch_fetch_size: 100
   h2:
     console:
       enabled: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  mvc:
+    async:
+      # SSE streams manage their own timeout.
+      request-timeout: -1
+  # Email is optional. Set SPRING_MAIL_HOST (plus port/username/password) to enable
+  # notification emails and password reset links.
+  mail:
+    host: ${SPRING_MAIL_HOST:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:true}
 
 app:
+  # Public URL of the app, used in email links.
+  base-url: ${APP_BASE_URL:http://localhost:5173}
+  mail:
+    from: ${APP_MAIL_FROM:FakeJIRA <no-reply@localhost>}
+  storage:
+    dir: ${APP_STORAGE_DIR:./data/attachments}
   jwt:
     # Set APP_JWT_SECRET (32+ chars) in production so sessions survive restarts.
     secret: ${APP_JWT_SECRET:}

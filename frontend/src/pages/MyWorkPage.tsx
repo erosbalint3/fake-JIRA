@@ -1,0 +1,84 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Coffee, Search } from 'lucide-react';
+import { api, ApiError } from '../api';
+import { useLiveRefresh } from '../live';
+import { useFocusSearch } from '../shortcuts';
+import { TaskRow } from '../components/TaskRow';
+import { EmptyState, ErrorBanner, Spinner } from '../components/States';
+import { dueState } from '../format';
+import { PRIORITY_ORDER, STATUSES, STATUS_LABEL, type Task } from '../types';
+
+/** Everything assigned to the current user across projects, overdue first. */
+export function MyWorkPage() {
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [showDone, setShowDone] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  useFocusSearch(searchRef);
+
+  const load = useCallback(() => {
+    setError('');
+    api.tasks({ scope: 'MINE' }).then(setTasks).catch((e: ApiError) => setError(e.message));
+  }, []);
+
+  useEffect(load, [load]);
+  useLiveRefresh((m) => m.type === 'task' || m.type === 'project', load, 500);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (tasks ?? []).filter((t) => !q || t.title.toLowerCase().includes(q) || t.key.toLowerCase().includes(q));
+  }, [tasks, query]);
+
+  const overdue = filtered.filter((t) => t.dueDate && dueState(t.dueDate, t.status === 'DONE') === 'overdue');
+  const sortTasks = (list: Task[]) => [...list].sort((a, b) =>
+    (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+
+  return (
+    <div className="page">
+      <header className="page-header">
+        <div>
+          <h1>My work</h1>
+          <p className="muted">Everything assigned to you, across all your projects.</p>
+        </div>
+        <label className="toggle">
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
+        </label>
+      </header>
+
+      <div className="toolbar">
+        <label className="search">
+          <Search size={16} />
+          <input ref={searchRef} placeholder="Search my tasks  ( / )" value={query}
+            onChange={(e) => setQuery(e.target.value)} aria-label="Search my tasks" />
+        </label>
+      </div>
+
+      {error && <ErrorBanner message={error} onRetry={load} />}
+      {!tasks && !error && <Spinner />}
+      {tasks && tasks.length === 0 && (
+        <EmptyState icon={<Coffee size={28} />} title="Nothing assigned to you">
+          Pick something up from a project's <Link to="/projects">backlog</Link>.
+        </EmptyState>
+      )}
+
+      {overdue.length > 0 && (
+        <section className="group">
+          <h2 className="group-title overdue-text">Overdue <span className="count danger">{overdue.length}</span></h2>
+          <ul className="task-list">{sortTasks(overdue).map((t) => <TaskRow key={t.id} task={t} showProject />)}</ul>
+        </section>
+      )}
+      {tasks && STATUSES.filter((s) => showDone || s !== 'DONE').map((status) => {
+        const list = filtered.filter((t) => t.status === status && !overdue.includes(t));
+        if (!list.length) return null;
+        return (
+          <section key={status} className="group">
+            <h2 className="group-title">{STATUS_LABEL[status]} <span className="count muted-count">{list.length}</span></h2>
+            <ul className="task-list">{sortTasks(list).map((t) => <TaskRow key={t.id} task={t} showProject />)}</ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}

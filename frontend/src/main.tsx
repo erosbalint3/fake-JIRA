@@ -5,6 +5,8 @@ import '@fontsource-variable/inter';
 import './styles.css';
 import { App } from './App';
 import { AuthProvider } from './auth';
+import { LiveProvider } from './live';
+import { ProjectsProvider } from './projects';
 import { ToastProvider } from './toast';
 import { applyInitialTheme } from './theme';
 
@@ -15,7 +17,11 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
-          <App />
+          <LiveProvider>
+            <ProjectsProvider>
+              <App />
+            </ProjectsProvider>
+          </LiveProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

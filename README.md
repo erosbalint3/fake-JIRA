@@ -3,22 +3,39 @@
 A lightweight, Jira-style task tracker for small teams, built for a university course.
 Version 2.0 replaces the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend.
 
-![Backlog](docs/backlog.png)
+![Board](docs/board.png)
 
-| My board | Task detail | Mobile |
-| --- | --- | --- |
-| ![Board](docs/board.png) | ![Task detail](docs/task-detail.png) | ![Mobile](docs/mobile.png) |
+| Backlog & sprints | Task detail | Burndown | Mobile |
+| --- | --- | --- | --- |
+| ![Backlog](docs/backlog.png) | ![Task detail](docs/task-detail.png) | ![Burndown](docs/reports.png) | ![Mobile](docs/mobile.png) |
 
 ## Features
 
-- **Accounts**: register and sign in with a username or email. Passwords are hashed with BCrypt and the API uses JWT bearer tokens.
-- **Backlog**: shows available (unassigned) tasks, tasks you reported, or all tasks. You can search and filter by priority and status.
-- **Tasks**: create, edit and delete tasks with a title, a description and a priority (low, medium, high or critical). Tasks get keys like `FJ-12`.
-- **Accept and release**: accepting a task moves it from the shared backlog onto your board. Releasing it puts it back.
-- **My board**: a Kanban board with To do, In progress, In review and Done columns. Move cards by drag and drop or with the arrow buttons, which also work on touch screens.
-- **Comments** on every task.
-- **Notifications**: you get one when someone accepts, updates, moves, comments on, releases or deletes a task you are involved in. The sidebar shows an unread badge.
-- **Profile**: your task stats and a password change form.
+**Projects and planning**
+- **Projects** each have their own members, backlog, board and task keys (`WEB-1`, `API-7`, …). The owner manages members and settings. Members can leave.
+- **Sprints**: plan work in the backlog by dragging tasks into a sprint (or use the dropdown), start it with dates, and complete it. Unfinished tasks go back to the backlog.
+- **Board** for the active sprint (or every task if none is running), with drag and drop, an "only my tasks" filter, due dates, labels and checklist progress on cards.
+- **Burndown chart** per sprint: remaining tasks per day against the ideal line, with a hover tooltip and a table view.
+- **My work**: everything assigned to you across projects, with overdue tasks first.
+
+**Tasks**
+- Assign to any project member, or accept a task yourself.
+- **Due dates**, with overdue and due-soon highlighting.
+- **Labels**, with autocomplete and filtering.
+- **Checklists** with a progress bar.
+- **Markdown** in descriptions and comments, with a live preview. Raw HTML is not rendered.
+- **@mentions** in comments, with autocomplete; mentioned members get notified.
+- **Attachments** (up to 10 MB each): drag and drop to upload, with image previews. Files are always served as downloads.
+- **Activity history**, e.g. "changed status from To do to In progress".
+
+**Staying up to date**
+- **Live updates**: boards, backlogs, tasks and notification badges refresh by themselves when someone else changes something (server-sent events).
+- **Notifications** in the app, and optionally **by email** (each user turns it on in their profile).
+- **Keyboard shortcuts**: `c` to create a task, `/` to search, `g b` / `g k` / `g r` / `g m` / `g n` / `g p` to jump to board, backlog, reports, my work, notifications and projects, and `?` for help.
+
+**Accounts**
+- Register and sign in with a username or email. Passwords are hashed with BCrypt, and the API uses JWT bearer tokens.
+- **Password reset** by email: single-use links, valid for one hour.
 - Light and dark themes, and a responsive layout for phones.
 
 ## Tech stack
@@ -26,7 +43,7 @@ Version 2.0 replaces the original Android + Firebase app with a **Spring Boot** 
 | Layer | Stack |
 | --- | --- |
 | Backend | Java 17+, Spring Boot 3.5 (Web, Data JPA, Security, OAuth2 Resource Server/JWT, Validation), H2 database |
-| Frontend | React 19, TypeScript, Vite, React Router, lucide icons |
+| Frontend | React 19, TypeScript, Vite, React Router, react-markdown, lucide icons |
 
 ## Project layout
 
@@ -103,34 +120,57 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | --- | --- | --- |
 | `app.jwt.secret` | `APP_JWT_SECRET` | Random on each start. Set a value of 32+ characters so logins survive restarts. |
 | `app.jwt.validity` | `APP_JWT_VALIDITY` | `12h` |
+| `app.base-url` | `APP_BASE_URL` | `http://localhost:5173`. The public URL, used for links in emails. |
+| `app.storage.dir` | `APP_STORAGE_DIR` | `./data/attachments` (`/data/attachments` in Docker) |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:h2:file:./data/fakejira` |
+| `spring.mail.host` | `SPRING_MAIL_HOST` | Empty, so email is off. Also set `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` and `APP_MAIL_FROM`. For an SMTP relay without login, set `SPRING_MAIL_SMTP_AUTH=false`. |
+
+**Email is optional.** Without SMTP, the email toggle in profiles is disabled. Password reset links are then written to the server log instead (`docker logs fakejira`), so an administrator can pass them on.
+
+### Upgrading from 2.0
+
+Just deploy the new version on your existing database. On first start, all existing tasks move into a project called **FakeJIRA** (key `FJ`) and keep their `FJ-<number>` keys. Every existing user becomes a member of it. Logins stay valid if `APP_JWT_SECRET` is unchanged.
 
 ## Tests
 
 ```bash
-cd backend && mvn test          # API integration tests
+cd backend && mvn test          # API integration tests (projects, sprints, attachments, live events, email, upgrade)
 cd frontend && npm run build    # type-check + production build
 ```
 
 ## API overview
 
-All endpoints except register and login need an `Authorization: Bearer <token>` header.
+All endpoints except register, login and password reset need an `Authorization: Bearer <token>` header.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Create an account, returns `{ token, user }` |
-| POST | `/api/auth/login` | Sign in with `{ login, password }` |
+| POST | `/api/auth/register`, `/api/auth/login` | Create an account or sign in; returns `{ token, user }` |
+| POST | `/api/auth/forgot-password`, `/api/auth/reset-password` | Email a reset link / set a new password with the link's token |
 | GET | `/api/auth/me` | Current user |
-| GET | `/api/tasks?scope=AVAILABLE\|MINE\|REPORTED\|ALL&q=&priority=&status=` | List and search tasks |
-| POST | `/api/tasks` | Create a task |
-| GET / PUT / DELETE | `/api/tasks/{id}` | Read, update (reporter or assignee), or delete (reporter only) |
+| GET / POST | `/api/projects` | My projects / create a project (`{ key, name, description }`) |
+| GET / PUT / DELETE | `/api/projects/{key}` | Read, update or delete (owner) a project |
+| POST / DELETE | `/api/projects/{key}/members[/{userId}]` | Add a member by username or email / remove a member or leave |
+| GET | `/api/projects/{key}/labels` | Labels used in the project |
+| GET / POST | `/api/projects/{key}/sprints` | List or create sprints |
+| PUT / DELETE | `/api/sprints/{id}` | Edit or delete (planned only) a sprint |
+| POST | `/api/sprints/{id}/start`, `/api/sprints/{id}/complete` | Start or complete a sprint |
+| GET | `/api/sprints/{id}/burndown` | Burndown data points |
+| GET | `/api/tasks?project=&scope=AVAILABLE\|MINE\|REPORTED\|ALL&q=&priority=&status=&label=&sprint=<id>\|backlog&assignee=<id>\|me\|none` | List and search tasks in your projects |
+| POST | `/api/tasks` | Create a task (`projectKey`, `title`, `description`, `priority`, `dueDate`, `labels`, `assigneeId`, `sprintId`) |
+| GET / PUT / DELETE | `/api/tasks/{id}` | Read, update, or delete (reporter or project owner) |
 | PATCH | `/api/tasks/{id}/status` | Change status |
+| PUT | `/api/tasks/{id}/assignee`, `/api/tasks/{id}/sprint` | Assign (`null` unassigns) / move to a sprint (`null` = backlog) |
 | POST | `/api/tasks/{id}/accept`, `/api/tasks/{id}/release` | Take or give back a task |
-| GET / POST | `/api/tasks/{id}/comments` | List or add comments |
-| GET | `/api/notifications` | Notifications plus unread count |
+| GET / POST | `/api/tasks/{id}/comments` | List or add comments (`@username` mentions notify) |
+| GET / POST / PATCH / DELETE | `/api/tasks/{id}/checklist[/{itemId}]` | Checklist items |
+| GET | `/api/tasks/{id}/activity` | Task history |
+| GET / POST | `/api/tasks/{id}/attachments` | List or upload (`multipart/form-data`, field `file`) |
+| GET / DELETE | `/api/attachments/{id}/content`, `/api/attachments/{id}` | Download or delete a file |
+| GET | `/api/events` | Server-sent event stream of live changes |
+| GET | `/api/users?q=` | Username search (for adding members) |
+| GET | `/api/notifications`, `/api/notifications/unread-count` | Notifications |
 | POST | `/api/notifications/{id}/read`, `/api/notifications/read-all` | Mark as read |
-| GET | `/api/profile` | Profile and stats |
-| PUT | `/api/profile/password` | Change password |
+| GET / PUT | `/api/profile`, `/api/profile/settings`, `/api/profile/password` | Profile, email notification setting, password change |
 
 ## Contact
 

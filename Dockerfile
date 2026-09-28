@@ -27,6 +27,7 @@ COPY --from=backend /app/app.jar ./app.jar
 USER app
 
 ENV SPRING_DATASOURCE_URL=jdbc:h2:file:/data/fakejira \
+    APP_STORAGE_DIR=/data/attachments \
     JAVA_OPTS="-XX:MaxRAMPercentage=75"
 VOLUME /data
 EXPOSE 8080

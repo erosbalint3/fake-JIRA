@@ -51,7 +51,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
       if (mode === 'login') await login(fields.login.trim(), fields.password);
       else await register(fields.username.trim(), fields.email.trim(), fields.password);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== '/login' ? from : '/backlog', { replace: true });
+      navigate(from && from !== '/login' ? from : '/', { replace: true });
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors);
@@ -83,10 +83,10 @@ export function AuthPage({ mode }: { mode: Mode }) {
           <h1>Plan, pick up and ship work — together.</h1>
           <p>A lightweight task tracker for small teams. Post tasks, grab what you want to work on and move it across your board.</p>
           <ul className="auth-features">
-            <li><CheckCircle2 size={18} /> Shared backlog of available tasks</li>
-            <li><KanbanSquare size={18} /> Personal drag-and-drop board</li>
-            <li><Bell size={18} /> Notifications when your tasks change</li>
-            <li><Users size={18} /> Comments for quick collaboration</li>
+            <li><Users size={18} /> Projects with their own members and task keys</li>
+            <li><KanbanSquare size={18} /> Sprints, drag-and-drop boards and burndown charts</li>
+            <li><CheckCircle2 size={18} /> Checklists, labels, due dates and attachments</li>
+            <li><Bell size={18} /> Live updates, @mentions and email notifications</li>
           </ul>
         </div>
         <span className="auth-foot">FakeJIRA 2.0</span>
@@ -107,6 +107,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <>
               {field('login', 'Username or email', 'text', 'username')}
               {field('password', 'Password', 'password', 'current-password')}
+              <Link to="/forgot-password" className="small forgot-link">Forgot password?</Link>
             </>
           ) : (
             <>
