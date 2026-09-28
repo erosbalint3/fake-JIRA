@@ -6,9 +6,10 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  wide?: boolean;
 }
 
-export function Modal({ title, onClose, children, footer }: ModalProps) {
+export function Modal({ title, onClose, children, footer, wide }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={dialogRef}>
+      <div className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={dialogRef}>
         <header className="modal-header">
           <h2>{title}</h2>
           <button className="icon-button" onClick={onClose} aria-label="Close">
@@ -44,9 +45,10 @@ interface ConfirmProps {
   busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  children?: ReactNode;
 }
 
-export function ConfirmDialog({ title, message, confirmLabel, danger, busy, onConfirm, onClose }: ConfirmProps) {
+export function ConfirmDialog({ title, message, confirmLabel, danger, busy, onConfirm, onClose, children }: ConfirmProps) {
   return (
     <Modal
       title={title}
@@ -61,6 +63,7 @@ export function ConfirmDialog({ title, message, confirmLabel, danger, busy, onCo
       }
     >
       <p className="muted">{message}</p>
+      {children && <div className="confirm-extra">{children}</div>}
     </Modal>
   );
 }

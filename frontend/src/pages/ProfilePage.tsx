@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, Clock, ListChecks, PenSquare } from 'lucide-react';
+import { CheckCircle2, Clock, ListChecks, Mail, PenSquare } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useToast } from '../toast';
@@ -87,6 +87,30 @@ export function ProfilePage() {
           </div>
         ))}
       </div>
+
+      <section className="panel">
+        <h2 className="panel-title"><Mail size={16} /> Email notifications</h2>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={profile.emailNotifications}
+            disabled={!profile.emailAvailable || busy}
+            onChange={async (e) => {
+              const enabled = e.target.checked;
+              try {
+                setProfile(await api.updateSettings(enabled));
+                toast(enabled ? 'Email notifications on' : 'Email notifications off');
+              } catch (err) {
+                toast((err as ApiError).message, 'error');
+              }
+            }}
+          />
+          Email me when someone assigns, mentions or updates my tasks
+        </label>
+        {!profile.emailAvailable && (
+          <p className="muted small hint">Email is not set up on this server yet. Ask the administrator to configure SMTP.</p>
+        )}
+      </section>
 
       <section className="panel">
         <h2 className="panel-title">Change password</h2>

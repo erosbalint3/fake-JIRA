@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BellOff, CheckCheck } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useLiveRefresh } from '../live';
 import { NOTIFICATIONS_CHANGED } from '../components/Layout';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { timeAgo } from '../format';
@@ -18,6 +19,7 @@ export function NotificationsPage() {
   }, []);
 
   useEffect(load, [load]);
+  useLiveRefresh((m) => m.type === 'notification', load);
 
   const changed = () => window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED));
 

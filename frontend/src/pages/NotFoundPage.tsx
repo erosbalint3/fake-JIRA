@@ -6,7 +6,7 @@ export function NotFoundPage() {
   return (
     <div className="page">
       <EmptyState icon={<Compass size={28} />} title="Page not found">
-        <Link to="/backlog">Go to the backlog</Link>
+        <Link to="/">Go to your board</Link>
       </EmptyState>
     </div>
   );
