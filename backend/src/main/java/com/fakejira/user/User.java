@@ -29,6 +29,10 @@ public class User {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    // Explicit default so the column can be added to an existing users table.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean emailNotifications;
+
     protected User() {
     }
 
@@ -60,5 +64,13 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isEmailNotifications() {
+        return emailNotifications;
+    }
+
+    public void setEmailNotifications(boolean emailNotifications) {
+        this.emailNotifications = emailNotifications;
     }
 }

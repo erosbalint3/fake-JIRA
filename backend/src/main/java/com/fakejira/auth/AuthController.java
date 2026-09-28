@@ -1,8 +1,10 @@
 package com.fakejira.auth;
 
 import com.fakejira.auth.AuthDtos.AuthResponse;
+import com.fakejira.auth.AuthDtos.ForgotPasswordRequest;
 import com.fakejira.auth.AuthDtos.LoginRequest;
 import com.fakejira.auth.AuthDtos.RegisterRequest;
+import com.fakejira.auth.AuthDtos.ResetPasswordRequest;
 import com.fakejira.common.CurrentUser;
 import com.fakejira.user.UserSummary;
 import jakarta.validation.Valid;
@@ -21,10 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordReset;
     private final CurrentUser currentUser;
 
-    public AuthController(AuthService authService, CurrentUser currentUser) {
+    public AuthController(AuthService authService, PasswordResetService passwordReset, CurrentUser currentUser) {
         this.authService = authService;
+        this.passwordReset = passwordReset;
         this.currentUser = currentUser;
     }
 
@@ -37,6 +41,18 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordReset.requestReset(request.email());
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordReset.reset(request.token(), request.newPassword());
     }
 
     @GetMapping("/me")

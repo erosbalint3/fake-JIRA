@@ -1,7 +1,11 @@
 package com.fakejira.task;
 
+import com.fakejira.project.Project;
+import com.fakejira.sprint.Sprint;
 import com.fakejira.user.User;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -15,6 +19,9 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Set;
+import java.util.TreeSet;
 
 @Entity
 @Table(name = "tasks")
@@ -23,6 +30,16 @@ public class Task {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    // Nullable at the database level only so pre-projects databases can be upgraded in place
+    // (see LegacyDataMigration); every task gets a project.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id")
+    private Project project;
+
+    /** Sequence number within the project; the key is PROJECT-number. */
+    @Column(name = "task_number")
+    private Integer number;
 
     @Column(nullable = false, length = 120)
     private String title;
@@ -46,6 +63,20 @@ public class Task {
     @JoinColumn(name = "assignee_id")
     private User assignee;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sprint_id")
+    private Sprint sprint;
+
+    private LocalDate dueDate;
+
+    @ElementCollection
+    @CollectionTable(name = "task_labels", joinColumns = @JoinColumn(name = "task_id"))
+    @Column(name = "label", length = 30)
+    private Set<String> labels = new TreeSet<>();
+
+    /** When the task last entered DONE; drives the sprint burndown. */
+    private Instant completedAt;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -55,7 +86,9 @@ public class Task {
     protected Task() {
     }
 
-    public Task(String title, String description, TaskPriority priority, User reporter) {
+    public Task(Project project, int number, String title, String description, TaskPriority priority, User reporter) {
+        this.project = project;
+        this.number = number;
         this.title = title;
         this.description = description;
         this.priority = priority;
@@ -68,7 +101,7 @@ public class Task {
     }
 
     public String getKey() {
-        return "FJ-" + id;
+        return project.getKey() + "-" + number;
     }
 
     public boolean isReporter(User user) {
@@ -79,8 +112,25 @@ public class Task {
         return assignee != null && assignee.getId().equals(user.getId());
     }
 
+    public void setStatus(TaskStatus status) {
+        if (status == TaskStatus.DONE && this.status != TaskStatus.DONE) {
+            completedAt = Instant.now();
+        } else if (status != TaskStatus.DONE) {
+            completedAt = null;
+        }
+        this.status = status;
+    }
+
     public Long getId() {
         return id;
+    }
+
+    public Project getProject() {
+        return project;
+    }
+
+    public Integer getNumber() {
+        return number;
     }
 
     public String getTitle() {
@@ -111,10 +161,6 @@ public class Task {
         return status;
     }
 
-    public void setStatus(TaskStatus status) {
-        this.status = status;
-    }
-
     public User getReporter() {
         return reporter;
     }
@@ -125,6 +171,30 @@ public class Task {
 
     public void setAssignee(User assignee) {
         this.assignee = assignee;
+    }
+
+    public Sprint getSprint() {
+        return sprint;
+    }
+
+    public void setSprint(Sprint sprint) {
+        this.sprint = sprint;
+    }
+
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
+    public Set<String> getLabels() {
+        return labels;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
     }
 
     public Instant getCreatedAt() {

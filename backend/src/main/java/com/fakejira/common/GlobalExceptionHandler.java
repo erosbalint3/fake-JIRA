@@ -7,6 +7,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,6 +28,16 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
         return ResponseEntity.badRequest().body(new ErrorResponse("Please fix the highlighted fields.", fieldErrors));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse("That file is too large (max 10 MB)."));
+    }
+
+    @ExceptionHandler({MissingServletRequestPartException.class, MultipartException.class})
+    public ResponseEntity<ErrorResponse> handleMultipart(Exception ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponse("Choose a file to upload."));
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})

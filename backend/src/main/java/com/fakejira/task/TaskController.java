@@ -1,11 +1,18 @@
 package com.fakejira.task;
 
 import com.fakejira.common.CurrentUser;
+import com.fakejira.task.TaskDtos.ActivityResponse;
+import com.fakejira.task.TaskDtos.AssigneeRequest;
+import com.fakejira.task.TaskDtos.ChecklistItemRequest;
+import com.fakejira.task.TaskDtos.ChecklistItemResponse;
+import com.fakejira.task.TaskDtos.ChecklistUpdateRequest;
 import com.fakejira.task.TaskDtos.CommentRequest;
 import com.fakejira.task.TaskDtos.CommentResponse;
+import com.fakejira.task.TaskDtos.CreateTaskRequest;
+import com.fakejira.task.TaskDtos.SprintRequest;
 import com.fakejira.task.TaskDtos.StatusRequest;
-import com.fakejira.task.TaskDtos.TaskRequest;
 import com.fakejira.task.TaskDtos.TaskResponse;
+import com.fakejira.task.TaskDtos.UpdateTaskRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -38,27 +45,32 @@ public class TaskController {
 
     @GetMapping
     public List<TaskResponse> list(@AuthenticationPrincipal Jwt jwt,
+                                   @RequestParam(required = false) String project,
                                    @RequestParam(defaultValue = "ALL") TaskScope scope,
                                    @RequestParam(required = false) String q,
                                    @RequestParam(required = false) TaskPriority priority,
-                                   @RequestParam(required = false) TaskStatus status) {
-        return taskService.search(currentUser.from(jwt), scope, q, priority, status);
+                                   @RequestParam(required = false) TaskStatus status,
+                                   @RequestParam(required = false) String label,
+                                   @RequestParam(required = false) String sprint,
+                                   @RequestParam(required = false) String assignee) {
+        return taskService.search(currentUser.from(jwt),
+                new TaskFilter(project, scope, q, priority, status, label, sprint, assignee));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TaskResponse create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody TaskRequest request) {
+    public TaskResponse create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateTaskRequest request) {
         return taskService.create(currentUser.from(jwt), request);
     }
 
     @GetMapping("/{id}")
-    public TaskResponse get(@PathVariable Long id) {
-        return taskService.get(id);
+    public TaskResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.get(currentUser.from(jwt), id);
     }
 
     @PutMapping("/{id}")
     public TaskResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
-                               @Valid @RequestBody TaskRequest request) {
+                               @Valid @RequestBody UpdateTaskRequest request) {
         return taskService.update(currentUser.from(jwt), id, request);
     }
 
@@ -66,6 +78,18 @@ public class TaskController {
     public TaskResponse changeStatus(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                      @Valid @RequestBody StatusRequest request) {
         return taskService.changeStatus(currentUser.from(jwt), id, request.status());
+    }
+
+    @PutMapping("/{id}/assignee")
+    public TaskResponse assign(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                               @RequestBody AssigneeRequest request) {
+        return taskService.assign(currentUser.from(jwt), id, request.assigneeId());
+    }
+
+    @PutMapping("/{id}/sprint")
+    public TaskResponse moveToSprint(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                     @RequestBody SprintRequest request) {
+        return taskService.moveToSprint(currentUser.from(jwt), id, request.sprintId());
     }
 
     @PostMapping("/{id}/accept")
@@ -85,14 +109,45 @@ public class TaskController {
     }
 
     @GetMapping("/{id}/comments")
-    public List<CommentResponse> comments(@PathVariable Long id) {
-        return taskService.comments(id);
+    public List<CommentResponse> comments(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.comments(currentUser.from(jwt), id);
     }
 
     @PostMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse addComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                       @Valid @RequestBody CommentRequest request) {
-        return taskService.addComment(currentUser.from(jwt), id, request);
+        return taskService.addComment(currentUser.from(jwt), id, request.body());
+    }
+
+    @GetMapping("/{id}/checklist")
+    public List<ChecklistItemResponse> checklist(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.checklist(currentUser.from(jwt), id);
+    }
+
+    @PostMapping("/{id}/checklist")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChecklistItemResponse addChecklistItem(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                                  @Valid @RequestBody ChecklistItemRequest request) {
+        return taskService.addChecklistItem(currentUser.from(jwt), id, request.text());
+    }
+
+    @PatchMapping("/{id}/checklist/{itemId}")
+    public ChecklistItemResponse updateChecklistItem(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                                     @PathVariable Long itemId,
+                                                     @Valid @RequestBody ChecklistUpdateRequest request) {
+        return taskService.updateChecklistItem(currentUser.from(jwt), id, itemId, request);
+    }
+
+    @DeleteMapping("/{id}/checklist/{itemId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteChecklistItem(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                    @PathVariable Long itemId) {
+        taskService.deleteChecklistItem(currentUser.from(jwt), id, itemId);
+    }
+
+    @GetMapping("/{id}/activity")
+    public List<ActivityResponse> activity(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.activity(currentUser.from(jwt), id);
     }
 }

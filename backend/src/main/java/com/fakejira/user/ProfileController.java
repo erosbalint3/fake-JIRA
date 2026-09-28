@@ -3,6 +3,7 @@ package com.fakejira.user;
 import com.fakejira.auth.AuthDtos.ChangePasswordRequest;
 import com.fakejira.common.ApiException;
 import com.fakejira.common.CurrentUser;
+import com.fakejira.mail.MailService;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.task.TaskStatus;
 import jakarta.validation.Valid;
@@ -28,19 +29,25 @@ public class ProfileController {
     private final TaskRepository tasks;
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final MailService mail;
 
     public ProfileController(CurrentUser currentUser, TaskRepository tasks, UserRepository users,
-                             PasswordEncoder passwordEncoder) {
+                             PasswordEncoder passwordEncoder, MailService mail) {
         this.currentUser = currentUser;
         this.tasks = tasks;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.mail = mail;
     }
 
     public record Stats(long assigned, long inProgress, long done, long reported) {
     }
 
-    public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats) {
+    public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats,
+                                  boolean emailNotifications, boolean emailAvailable) {
+    }
+
+    public record SettingsRequest(boolean emailNotifications) {
     }
 
     @GetMapping
@@ -53,7 +60,17 @@ public class ProfileController {
                 tasks.countByAssigneeIdAndStatus(id, TaskStatus.IN_PROGRESS),
                 tasks.countByAssigneeIdAndStatus(id, TaskStatus.DONE),
                 tasks.countByReporterId(id));
-        return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats);
+        return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats,
+                user.isEmailNotifications(), mail.isEnabled());
+    }
+
+    @PutMapping("/settings")
+    @Transactional
+    public ProfileResponse updateSettings(@AuthenticationPrincipal Jwt jwt, @RequestBody SettingsRequest request) {
+        User user = currentUser.from(jwt);
+        user.setEmailNotifications(request.emailNotifications());
+        users.save(user);
+        return profile(jwt);
     }
 
     @PutMapping("/password")
