@@ -1,0 +1,14 @@
+# Add one of these site blocks to your existing Caddyfile, then reload Caddy.
+# Replace jira.example.com with your domain; Caddy obtains the TLS certificate.
+
+# Option A: Caddy installed on the host (docker-compose.yml publishes 127.0.0.1:8081)
+jira.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+# Option B: Caddy running in Docker on the shared network (docker-compose.caddy.yml)
+# jira.example.com {
+# 	encode zstd gzip
+# 	reverse_proxy fakejira:8080
+# }

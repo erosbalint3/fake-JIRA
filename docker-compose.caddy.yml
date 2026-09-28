@@ -1,0 +1,15 @@
+# Use this override when Caddy runs as a container in another compose project.
+# It attaches FakeJIRA to Caddy's existing Docker network so Caddy can proxy to
+# http://fakejira:8080, and stops publishing a host port.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
+services:
+  fakejira:
+    ports: !reset []
+    networks:
+      - caddy
+
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-caddy}
