@@ -4,6 +4,8 @@ services:
     image: fakejira:latest
     container_name: fakejira
     restart: unless-stopped
+    # Passes optional settings (APP_BASE_URL, SPRING_MAIL_*, ...) from .env into the app.
+    env_file: .env
     environment:
       APP_JWT_SECRET: ${APP_JWT_SECRET:?Set APP_JWT_SECRET (32+ characters) in .env}
     # The app listens on 8080 inside the container only. It is published on the
@@ -11,6 +13,7 @@ services:
     # clashing with anything already using port 8080.
     ports:
       - "127.0.0.1:${FAKEJIRA_PORT:-8081}:8080"
+    # Holds the H2 database and uploaded attachments.
     volumes:
       - fakejira-data:/data
 
