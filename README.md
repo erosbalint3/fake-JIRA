@@ -69,6 +69,34 @@ cd ../backend && mvn package
 java -jar target/fake-jira-2.0.0.jar      # http://localhost:8080
 ```
 
+## Running with Docker
+
+The multi-stage `Dockerfile` builds the frontend and the backend and produces one small JRE image. The image runs as a non-root user and stores its H2 database in the `/data` volume.
+
+Inside the container the app listens on port 8080. The compose file publishes it only on the host's loopback interface, on port **8081** by default, so it won't clash with another service already using 8080.
+
+```bash
+cp .env.example .env
+# Set APP_JWT_SECRET in .env (e.g. openssl rand -base64 48); change FAKEJIRA_PORT if 8081 is taken
+docker compose up -d --build
+```
+
+Updating: `git pull && docker compose up -d --build`. Your data stays in the `fakejira-data` volume.
+
+### Behind Caddy
+
+See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site block to your existing Caddyfile.
+
+- **Caddy installed on the host:** use `docker compose up -d` as above and set `reverse_proxy 127.0.0.1:8081`.
+- **Caddy running in Docker** (for example in another compose project): attach FakeJIRA to Caddy's network and don't publish a host port.
+
+  ```bash
+  # CADDY_NETWORK in .env = the network your Caddy container is on (see `docker network ls`)
+  docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
+  ```
+
+  Then use `reverse_proxy fakejira:8080` in the Caddyfile. This override needs Docker Compose v2.24 or newer.
+
 ### Configuration
 
 | Setting | Env var | Default |

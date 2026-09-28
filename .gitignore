@@ -12,3 +12,6 @@ frontend/dist/
 .vscode/
 *.iml
 .DS_Store
+
+# Local secrets
+.env

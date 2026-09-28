@@ -1,0 +1,18 @@
+services:
+  fakejira:
+    build: .
+    image: fakejira:latest
+    container_name: fakejira
+    restart: unless-stopped
+    environment:
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?Set APP_JWT_SECRET (32+ characters) in .env}
+    # The app listens on 8080 inside the container only. It is published on the
+    # host's loopback interface so a host-installed Caddy can reach it without
+    # clashing with anything already using port 8080.
+    ports:
+      - "127.0.0.1:${FAKEJIRA_PORT:-8081}:8080"
+    volumes:
+      - fakejira-data:/data
+
+volumes:
+  fakejira-data:
