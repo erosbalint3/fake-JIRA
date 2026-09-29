@@ -42,6 +42,23 @@ app:
     from: ${APP_MAIL_FROM:FakeJIRA <no-reply@localhost>}
   storage:
     dir: ${APP_STORAGE_DIR:./data/attachments}
+  registration:
+    # Initial sign-up mode (OPEN, INVITE or APPROVAL); admins can change it on the Admin page.
+    default-mode: ${APP_REGISTRATION_DEFAULT_MODE:OPEN}
+  rate-limit:
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
+    # Headers checked (in order) for the real client IP behind Cloudflare/Caddy.
+    client-ip-headers: ${APP_RATE_LIMIT_CLIENT_IP_HEADERS:CF-Connecting-IP,X-Forwarded-For}
+  backup:
+    dir: ${APP_BACKUP_DIR:./data/backups}
+    # Spring cron (sec min hour day month weekday); "-" disables scheduled backups.
+    cron: ${APP_BACKUP_CRON:0 30 3 * * *}
+    keep: ${APP_BACKUP_KEEP:14}
+  digest:
+    cron: ${APP_DIGEST_CRON:0 0 7 * * *}
+  push:
+    # VAPID "sub" claim; defaults to the app's https base URL.
+    subject: ${APP_PUSH_SUBJECT:}
   jwt:
     # Set APP_JWT_SECRET (32+ chars) in production so sessions survive restarts.
     secret: ${APP_JWT_SECRET:}

@@ -118,12 +118,16 @@ class FakeJiraApiTest extends ApiTestSupport {
     }
 
     @Test
-    void emailNotificationPreferenceIsSaved() throws Exception {
+    void profileSettingsAreSaved() throws Exception {
         Account account = register();
         perform(get("/api/profile"), account)
-                .andExpect(jsonPath("$.emailNotifications").value(false))
+                .andExpect(jsonPath("$.emailFrequency").value("OFF"))
                 .andExpect(jsonPath("$.emailAvailable").value(false));
-        perform(put("/api/profile/settings"), account, "{\"emailNotifications\":true}")
-                .andExpect(jsonPath("$.emailNotifications").value(true));
+        perform(put("/api/profile/settings"), account, "{\"emailFrequency\":\"DAILY\",\"displayName\":\"Ada L.\"}")
+                .andExpect(jsonPath("$.emailFrequency").value("DAILY"))
+                .andExpect(jsonPath("$.user.displayName").value("Ada L."));
+        perform(put("/api/profile/settings"), account, "{\"displayName\":\"\"}")
+                .andExpect(jsonPath("$.user.displayName").value(account.username()))
+                .andExpect(jsonPath("$.emailFrequency").value("DAILY"));
     }
 }

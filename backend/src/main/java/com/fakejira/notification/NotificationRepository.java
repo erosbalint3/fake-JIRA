@@ -16,6 +16,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     long countByRecipientIdAndReadFalse(Long recipientId);
 
+    List<Notification> findByRecipientIdAndCreatedAtAfterOrderByCreatedAtAsc(Long recipientId, java.time.Instant after);
+
     @Modifying
     @Query("update Notification n set n.read = true where n.recipient.id = :recipientId and n.read = false")
     int markAllRead(@Param("recipientId") Long recipientId);

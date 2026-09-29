@@ -1,6 +1,8 @@
 import type {
-  Activity, Attachment, Burndown, ChecklistItem, Comment, CreateTaskInput, Notification, Priority, Profile,
-  Project, Scope, Sprint, Status, Task, TaskInput, User,
+  Activity, AdminUser, Attachment, Backup, BoardColumn, BulkChange, Burndown, ChecklistItem, Comment,
+  CreateTaskInput, DevLink, EmailFrequency, Epic, GithubSettings, ImportResult, Invite, LinkType, Notification,
+  Priority, Profile, Project, RegistrationMode, Role, SavedFilter, Scope, Sprint, Status, Task, TaskInput,
+  TaskLink, TimeEntry, TimeReport, User, VelocityEntry,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -82,9 +84,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return response.json() as Promise<T>;
 }
 
-interface AuthResponse {
-  token: string;
+export interface AuthResponse {
+  token: string | null;
   user: User;
+  pending: boolean;
+  admin: boolean;
 }
 
 export interface TaskFilters {
@@ -96,6 +100,7 @@ export interface TaskFilters {
   label?: string;
   sprint?: string;
   assignee?: string;
+  epic?: string;
 }
 
 function query(params: Record<string, string | number | undefined | null>) {
@@ -110,9 +115,11 @@ function query(params: Record<string, string | number | undefined | null>) {
 export const api = {
   login: (login: string, password: string) =>
     request<AuthResponse>('POST', '/auth/login', { login, password }),
-  register: (username: string, email: string, password: string) =>
-    request<AuthResponse>('POST', '/auth/register', { username, email, password }),
-  me: () => request<User>('GET', '/auth/me'),
+  register: (username: string, email: string, password: string, inviteCode?: string) =>
+    request<AuthResponse>('POST', '/auth/register', { username, email, password, inviteCode }),
+  me: () => request<{ user: User; admin: boolean }>('GET', '/auth/me'),
+  inviteInfo: (code: string) => request<{ valid: boolean; email: string | null; projectName: string | null;
+    registrationMode: RegistrationMode }>('GET', `/auth/invite${query({ code })}`),
   forgotPassword: (email: string) => request<void>('POST', '/auth/forgot-password', { email }),
   resetPassword: (token: string, newPassword: string) =>
     request<void>('POST', '/auth/reset-password', { token, newPassword }),
@@ -124,7 +131,10 @@ export const api = {
   updateProject: (key: string, name: string, description: string) =>
     request<Project>('PUT', `/projects/${key}`, { name, description }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
-  addMember: (key: string, login: string) => request<Project>('POST', `/projects/${key}/members`, { login }),
+  addMember: (key: string, login: string, role: Role = 'MEMBER') =>
+    request<Project>('POST', `/projects/${key}/members`, { login, role }),
+  setRole: (key: string, userId: number, role: Role) =>
+    request<Project>('PUT', `/projects/${key}/members/${userId}/role`, { role }),
   removeMember: (key: string, userId: number) => request<void>('DELETE', `/projects/${key}/members/${userId}`),
   labels: (key: string) => request<string[]>('GET', `/projects/${key}/labels`),
   searchUsers: (q: string) => request<{ id: number; username: string }[]>('GET', `/users${query({ q })}`),
@@ -139,9 +149,44 @@ export const api = {
   completeSprint: (id: number) => request<Sprint>('POST', `/sprints/${id}/complete`),
   deleteSprint: (id: number) => request<void>('DELETE', `/sprints/${id}`),
   burndown: (id: number) => request<Burndown>('GET', `/sprints/${id}/burndown`),
+  velocity: (key: string) => request<VelocityEntry[]>('GET', `/projects/${key}/velocity`),
+  timeReport: (key: string, from?: string, to?: string) =>
+    request<TimeReport>('GET', `/projects/${key}/time${query({ from, to })}`),
+
+  epics: (key: string) => request<Epic[]>('GET', `/projects/${key}/epics`),
+  createEpic: (key: string, input: EpicInput) => request<Epic>('POST', `/projects/${key}/epics`, input),
+  updateEpic: (id: number, input: EpicInput) => request<Epic>('PUT', `/epics/${id}`, input),
+  deleteEpic: (id: number) => request<void>('DELETE', `/epics/${id}`),
+
+  columns: (key: string) => request<BoardColumn[]>('GET', `/projects/${key}/columns`),
+  addColumn: (key: string, input: ColumnInput) => request<BoardColumn[]>('POST', `/projects/${key}/columns`, input),
+  updateColumn: (id: number, input: ColumnInput) => request<BoardColumn[]>('PUT', `/columns/${id}`, input),
+  moveColumn: (id: number, direction: -1 | 1) => request<BoardColumn[]>('POST', `/columns/${id}/move${query({ direction })}`),
+  deleteColumn: (id: number) => request<BoardColumn[]>('DELETE', `/columns/${id}`),
+
+  filters: (key: string) => request<SavedFilter[]>('GET', `/projects/${key}/filters`),
+  saveFilter: (key: string, name: string, filterQuery: string, shared: boolean) =>
+    request<SavedFilter>('POST', `/projects/${key}/filters`, { name, query: filterQuery, shared }),
+  deleteFilter: (id: number) => request<void>('DELETE', `/filters/${id}`),
+
+  github: (key: string) => request<GithubSettings>('GET', `/projects/${key}/github`),
+  enableGithub: (key: string) => request<GithubSettings>('POST', `/projects/${key}/github`),
+  setGithubAutoDone: (key: string, autoDone: boolean) => request<GithubSettings>('PUT', `/projects/${key}/github`, { autoDone }),
+  disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
+
+  exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
+  importCsv: async (key: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', `/projects/${key}/import`, { body: form })).json() as Promise<ImportResult>;
+  },
 
   tasks: (filters: TaskFilters = {}) => request<Task[]>('GET', `/tasks${query({ ...filters })}`),
   task: (id: number) => request<Task>('GET', `/tasks/${id}`),
+  taskByKey: (key: string) => request<Task>('GET', `/tasks/key/${encodeURIComponent(key)}`),
+  subtasks: (id: number) => request<Task[]>('GET', `/tasks/${id}/subtasks`),
+  bulk: (taskIds: number[], change: BulkChange) => request<Task[]>('POST', '/tasks/bulk', { taskIds, ...change }),
+  moveToColumn: (id: number, columnId: number) => request<Task>('PATCH', `/tasks/${id}/column`, { columnId }),
   createTask: (input: CreateTaskInput) => request<Task>('POST', '/tasks', input),
   updateTask: (id: number, input: TaskInput) => request<Task>('PUT', `/tasks/${id}`, input),
   setStatus: (id: number, status: Status) => request<Task>('PATCH', `/tasks/${id}/status`, { status }),
@@ -154,6 +199,18 @@ export const api = {
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
   addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
   activity: (id: number) => request<Activity[]>('GET', `/tasks/${id}/activity`),
+  links: (id: number) => request<TaskLink[]>('GET', `/tasks/${id}/links`),
+  addLink: (id: number, type: LinkType, targetKey: string) =>
+    request<TaskLink>('POST', `/tasks/${id}/links`, { type, targetKey }),
+  deleteLink: (id: number, linkId: number) => request<void>('DELETE', `/tasks/${id}/links/${linkId}`),
+  time: (id: number) => request<TimeEntry[]>('GET', `/tasks/${id}/time`),
+  logTime: (id: number, minutes: number, date: string, note: string) =>
+    request<TimeEntry>('POST', `/tasks/${id}/time`, { minutes, date, note }),
+  deleteTime: (id: number, entryId: number) => request<void>('DELETE', `/tasks/${id}/time/${entryId}`),
+  watchers: (id: number) => request<{ watching: boolean; watchers: User[] }>('GET', `/tasks/${id}/watchers`),
+  watch: (id: number, watching: boolean) =>
+    request<{ watching: boolean; watchers: User[] }>(watching ? 'PUT' : 'DELETE', `/tasks/${id}/watch`),
+  devLinks: (id: number) => request<DevLink[]>('GET', `/tasks/${id}/dev`),
 
   checklist: (id: number) => request<ChecklistItem[]>('GET', `/tasks/${id}/checklist`),
   addChecklistItem: (id: number, text: string) => request<ChecklistItem>('POST', `/tasks/${id}/checklist`, { text }),
@@ -178,10 +235,60 @@ export const api = {
   markAllRead: () => request<void>('POST', '/notifications/read-all'),
 
   profile: () => request<Profile>('GET', '/profile'),
-  updateSettings: (emailNotifications: boolean) => request<Profile>('PUT', '/profile/settings', { emailNotifications }),
+  updateSettings: (settings: { emailFrequency?: EmailFrequency; displayName?: string }) =>
+    request<Profile>('PUT', '/profile/settings', settings),
+  uploadAvatar: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', '/profile/avatar', { body: form })).json() as Promise<User>;
+  },
+  removeAvatar: () => request<User>('DELETE', '/profile/avatar'),
+
+  pushKey: () => request<{ publicKey: string }>('GET', '/push/key'),
+  pushSubscribe: (subscription: PushSubscriptionJSON) => request<void>('POST', '/push/subscribe', subscription),
+  pushUnsubscribe: (endpoint: string) => request<void>('DELETE', '/push/subscribe', { endpoint }),
+  pushTest: () => request<{ delivered: number }>('POST', '/push/test'),
+
+  invites: () => request<Invite[]>('GET', '/invites'),
+  createInvite: (email: string | null, projectKey: string | null) =>
+    request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null }),
+  revokeInvite: (id: number) => request<void>('DELETE', `/invites/${id}`),
+
+  admin: () => request<{ registrationMode: RegistrationMode; users: AdminUser[] }>('GET', '/admin'),
+  setRegistrationMode: (mode: RegistrationMode) =>
+    request<{ registrationMode: RegistrationMode; users: AdminUser[] }>('PUT', '/admin/registration', { mode }),
+  approveUser: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/approve`),
+  rejectUser: (id: number) => request<void>('DELETE', `/admin/users/${id}`),
+  setAdmin: (id: number, admin: boolean) => request<AdminUser>('PUT', `/admin/users/${id}/admin`, { admin }),
+  backups: () => request<Backup[]>('GET', '/admin/backups'),
+  backupNow: () => request<Backup>('POST', '/admin/backups'),
+  backupBlob: async (name: string) => (await send('GET', `/admin/backups/${encodeURIComponent(name)}`)).blob(),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PUT', '/profile/password', { currentPassword, newPassword }),
 };
+
+export interface EpicInput {
+  name: string;
+  description: string;
+  startDate: string | null;
+  dueDate: string | null;
+}
+
+export interface ColumnInput {
+  name: string;
+  status: Status;
+  wipLimit: number | null;
+}
+
+/** Saves a blob as a file download. */
+export function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export interface LiveMessage {
   type: 'task' | 'project' | 'notification' | 'ready';

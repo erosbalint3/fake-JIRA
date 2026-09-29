@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { CalendarRange, Inbox, MoreHorizontal, Plus, Search, Zap } from 'lucide-react';
+import { Bookmark, CalendarRange, Eye, Inbox, MoreHorizontal, Plus, Search, Zap } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
 import { useFocusSearch } from '../shortcuts';
 import { useToast } from '../toast';
 import { useRouteProject } from '../useProject';
-import { useCreateTask } from '../components/Layout';
+import { FILTERS_CHANGED, useCreateTask } from '../components/Layout';
+import { BulkBar } from '../components/BulkBar';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { TaskRow } from '../components/TaskRow';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDay, todayIso } from '../format';
-import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Priority, type Sprint, type Task } from '../types';
+import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, type Sprint, type Task } from '../types';
 
 type SprintDialog = { kind: 'edit' | 'start'; sprint: Sprint } | { kind: 'create' } | null;
 
 export function BacklogPage() {
-  const { key, project, loading } = useRouteProject();
+  const { key, project, loading, canEdit } = useRouteProject();
   const { user } = useAuth();
   const toast = useToast();
   const openCreate = useCreateTask();
@@ -27,10 +29,23 @@ export function BacklogPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [priority, setPriority] = useState<Priority | ''>('');
-  const [label, setLabel] = useState('');
+  // Filters live in the URL so they can be bookmarked, shared and saved.
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const assignee = params.get('assignee') ?? '';
+  const priority = (params.get('priority') ?? '') as Priority | '';
+  const label = params.get('label') ?? '';
+  const epicFilter = params.get('epic') ?? '';
+  const setFilter = (name: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(name, value);
+    else next.delete(name);
+    setParams(next, { replace: true });
+  };
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [lastSelected, setLastSelected] = useState<number | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [dragging, setDragging] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -40,10 +55,12 @@ export function BacklogPage() {
   const load = useCallback(() => {
     if (!project) return;
     setError('');
-    Promise.all([api.tasks({ project: key }), api.sprints(key)])
-      .then(([t, s]) => {
+    Promise.all([api.tasks({ project: key }), api.sprints(key), api.epics(key)])
+      .then(([t, s, e]) => {
         setTasks(t);
         setSprints(s);
+        setEpics(e);
+        setSelected((current) => current.filter((id) => t.some((task) => task.id === id)));
       })
       .catch((e: ApiError) => setError(e.message));
   }, [key, project]);
@@ -67,10 +84,19 @@ export function BacklogPage() {
         || t.description.toLowerCase().includes(q))
       .filter((t) => !priority || t.priority === priority)
       .filter((t) => !label || t.labels.includes(label))
+      .filter((t) => !epicFilter || (epicFilter === 'none' ? !t.epic : t.epic?.id === Number(epicFilter)))
       .filter((t) => !assignee
         || (assignee === 'none' ? !t.assignee : t.assignee?.id === Number(assignee === 'me' ? user?.id : assignee)))
       .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || a.id - b.id);
-  }, [tasks, query, priority, label, assignee, user]);
+  }, [tasks, query, priority, label, assignee, epicFilter, user]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !document.querySelector('.modal')) setSelected([]);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!loading && !project) return <NotFoundPage />;
   if (!project) return <div className="page"><Spinner /></div>;
@@ -79,7 +105,35 @@ export function BacklogPage() {
     .sort((a, b) => (a.state === 'ACTIVE' ? -1 : b.state === 'ACTIVE' ? 1 : a.id - b.id));
   const hasActive = openSprints.some((s) => s.state === 'ACTIVE');
   const backlog = visible.filter((t) => !t.sprint && (showDone || t.status !== 'DONE'));
-  const filtered = !!(query || priority || label || assignee);
+  const filtered = !!(query || priority || label || assignee || epicFilter);
+  const ordered = [...openSprints.flatMap((s) => visible.filter((t) => t.sprint?.id === s.id)), ...backlog];
+
+  /** Click toggles one row; shift-click selects the range since the last click. */
+  const toggleSelect = (task: Task, shiftKey: boolean) => {
+    if (shiftKey && lastSelected !== null) {
+      const from = ordered.findIndex((t) => t.id === lastSelected);
+      const to = ordered.findIndex((t) => t.id === task.id);
+      if (from >= 0 && to >= 0) {
+        const range = ordered.slice(Math.min(from, to), Math.max(from, to) + 1).map((t) => t.id);
+        setSelected((current) => [...new Set([...current, ...range])]);
+        setLastSelected(task.id);
+        return;
+      }
+    }
+    setSelected((current) => (current.includes(task.id) ? current.filter((id) => id !== task.id) : [...current, task.id]));
+    setLastSelected(task.id);
+  };
+
+  const sectionCheckbox = (items: Task[]) => {
+    if (!canEdit || !items.length) return null;
+    const all = items.every((t) => selected.includes(t.id));
+    return (
+      <input type="checkbox" className="row-check" checked={all} aria-label="Select all in section"
+        onChange={() => setSelected((current) => (all
+          ? current.filter((id) => !items.some((t) => t.id === id))
+          : [...new Set([...current, ...items.map((t) => t.id)])]))} />
+    );
+  };
 
   const move = async (task: Task, sprintId: number | null) => {
     if ((task.sprint?.id ?? null) === sprintId) return;
@@ -102,7 +156,7 @@ export function BacklogPage() {
     if (task) move(task, sprintId);
   };
 
-  const dropProps = (id: string, sprintId: number | null) => ({
+  const dropProps = (id: string, sprintId: number | null) => (!canEdit ? {} : {
     onDragOver: (e: DragEvent) => {
       e.preventDefault();
       setDropTarget(id);
@@ -115,8 +169,10 @@ export function BacklogPage() {
 
   const row = (task: Task) => (
     <TaskRow key={task.id} task={task} className={dragging === task.id ? 'dragging' : ''}
+      selected={selected.includes(task.id)}
+      onToggleSelect={canEdit ? (shift) => toggleSelect(task, shift) : undefined}
       rowProps={{
-        draggable: true,
+        draggable: canEdit,
         onDragStart: (e) => {
           e.dataTransfer.setData('text/plain', String(task.id));
           e.dataTransfer.effectAllowed = 'move';
@@ -124,7 +180,7 @@ export function BacklogPage() {
         },
         onDragEnd: () => setDragging(null),
       }}
-      actions={
+      actions={canEdit &&
         <select className="move-select" value={task.sprint?.id ?? ''} aria-label={`Move ${task.key}`}
           onChange={(e) => move(task, e.target.value ? Number(e.target.value) : null)}>
           <option value="">Backlog</option>
@@ -152,12 +208,16 @@ export function BacklogPage() {
           <p className="muted">Plan sprints by dragging tasks between sections.</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-ghost" onClick={() => setDialog({ kind: 'create' })}>
-            <CalendarRange size={17} /> Create sprint
-          </button>
-          <button className="btn btn-primary" onClick={() => openCreate({ projectKey: key })}>
-            <Plus size={18} /> Create task
-          </button>
+          {canEdit ? (
+            <>
+              <button className="btn btn-ghost" onClick={() => setDialog({ kind: 'create' })}>
+                <CalendarRange size={17} /> Create sprint
+              </button>
+              <button className="btn btn-primary" onClick={() => openCreate({ projectKey: key })}>
+                <Plus size={18} /> Create task
+              </button>
+            </>
+          ) : <span className="readonly-badge"><Eye size={13} /> Read-only</span>}
         </div>
       </header>
 
@@ -165,22 +225,35 @@ export function BacklogPage() {
         <label className="search">
           <Search size={16} />
           <input ref={searchRef} placeholder="Search tasks  ( / )" value={query}
-            onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" />
+            onChange={(e) => setFilter('q', e.target.value)} aria-label="Search tasks" />
         </label>
-        <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Assignee">
+        <select value={assignee} onChange={(e) => setFilter('assignee', e.target.value)} aria-label="Assignee">
           <option value="">Anyone</option>
           <option value="me">Assigned to me</option>
           <option value="none">Unassigned</option>
-          {project.members.map((m) => <option key={m.id} value={m.id}>{m.username}</option>)}
+          {project.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
         </select>
-        <select value={priority} onChange={(e) => setPriority(e.target.value as Priority | '')} aria-label="Priority">
+        <select value={priority} onChange={(e) => setFilter('priority', e.target.value)} aria-label="Priority">
           <option value="">Any priority</option>
           {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
         </select>
-        <select value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Label">
+        <select value={label} onChange={(e) => setFilter('label', e.target.value)} aria-label="Label">
           <option value="">Any label</option>
           {labels.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
+        <select value={epicFilter} onChange={(e) => setFilter('epic', e.target.value)} aria-label="Epic">
+          <option value="">Any epic</option>
+          <option value="none">No epic</option>
+          {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
+        </select>
+        {filtered && (
+          <>
+            <button className="btn btn-ghost btn-sm filter-action" onClick={() => setSavingFilter(true)}>
+              <Bookmark size={15} /> Save filter
+            </button>
+            <button className="link small filter-action" onClick={() => setParams({}, { replace: true })}>Clear</button>
+          </>
+        )}
       </div>
 
       {error && <ErrorBanner message={error} onRetry={load} />}
@@ -194,6 +267,7 @@ export function BacklogPage() {
             {...dropProps(`s${sprint.id}`, sprint.id)}>
             <header className="sprint-header">
               <div className="sprint-title">
+                {sectionCheckbox(items)}
                 {sprint.state === 'ACTIVE' && <Zap size={16} className="sprint-active-icon" />}
                 <h2>{sprint.name}</h2>
                 <span className={`sprint-state state-${sprint.state.toLowerCase()}`}>{sprint.state === 'ACTIVE' ? 'Active' : 'Planned'}</span>
@@ -202,7 +276,7 @@ export function BacklogPage() {
                 )}
                 <span className="muted small">{items.length} task{items.length === 1 ? '' : 's'}{items.length ? ` · ${done} done` : ''}</span>
               </div>
-              <div className="sprint-actions">
+              {canEdit && <div className="sprint-actions">
                 {sprint.state === 'PLANNED' && (
                   <button className="btn btn-soft btn-sm" disabled={hasActive}
                     title={hasActive ? 'Complete the active sprint first' : undefined}
@@ -216,7 +290,7 @@ export function BacklogPage() {
                   onDelete={sprint.state === 'PLANNED' ? () => setConfirm({ kind: 'delete', sprint }) : undefined}
                   onAddTask={() => openCreate({ projectKey: key, sprintId: sprint.id })}
                 />
-              </div>
+              </div>}
             </header>
             {sprint.goal && <p className="sprint-goal muted">{sprint.goal}</p>}
             {items.length ? <ul className="task-list">{items.map(row)}</ul>
@@ -230,6 +304,7 @@ export function BacklogPage() {
           {...dropProps('backlog', null)}>
           <header className="sprint-header">
             <div className="sprint-title">
+              {sectionCheckbox(backlog)}
               <h2>Backlog</h2>
               <span className="muted small">{backlog.length} task{backlog.length === 1 ? '' : 's'}</span>
             </div>
@@ -239,12 +314,26 @@ export function BacklogPage() {
           </header>
           {backlog.length ? <ul className="task-list">{backlog.map(row)}</ul> : (
             <EmptyState icon={<Inbox size={28} />} title={filtered ? 'No matching tasks' : 'The backlog is empty'}>
-              {filtered ? 'Try a different filter.' : <>Everything is planned. <button className="link" onClick={() => openCreate({ projectKey: key })}>Create a task</button></>}
+              {filtered ? 'Try a different filter.' : canEdit ? <>Everything is planned. <button className="link" onClick={() => openCreate({ projectKey: key })}>Create a task</button></> : null}
             </EmptyState>
           )}
         </section>
       )}
 
+      {selected.length > 0 && (
+        <BulkBar selected={selected} members={project.members} sprints={sprints} epics={epics}
+          onClear={() => setSelected([])} onDone={() => {
+            load();
+          }} />
+      )}
+      {savingFilter && (
+        <SaveFilterModal projectKey={key} query={params.toString()} onClose={() => setSavingFilter(false)}
+          onSaved={(name) => {
+            setSavingFilter(false);
+            toast(`Filter "${name}" saved`);
+            window.dispatchEvent(new Event(FILTERS_CHANGED));
+          }} />
+      )}
       {dialog && (
         <SprintDialogModal dialog={dialog} projectKey={key} onClose={() => setDialog(null)} onDone={(message) => {
           setDialog(null);
@@ -381,6 +470,44 @@ function SprintDialogModal({ dialog, projectKey, onClose, onDone }: {
               onChange={(e) => setEndDate(e.target.value)} />
           </label>
         </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SaveFilterModal({ projectKey, query, onClose, onSaved }: {
+  projectKey: string; query: string; onClose: () => void; onSaved: (name: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [shared, setShared] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await api.saveFilter(projectKey, name.trim(), query, shared);
+      onSaved(name.trim());
+    } catch (e) {
+      setError((e as ApiError).message);
+    }
+  };
+  return (
+    <Modal title="Save filter" onClose={onClose} footer={
+      <>
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" form="filter-form" disabled={!name.trim()}>Save</button>
+      </>
+    }>
+      <form id="filter-form" className="form" onSubmit={submit}>
+        {error && <div className="alert">{error}</div>}
+        <label className="field">
+          <span>Name</span>
+          <input value={name} maxLength={60} placeholder="My open bugs" onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="toggle">
+          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+          Share with everyone in the project
+        </label>
+        <p className="muted small">It appears in the sidebar and in the command palette (Ctrl+K).</p>
       </form>
     </Modal>
   );

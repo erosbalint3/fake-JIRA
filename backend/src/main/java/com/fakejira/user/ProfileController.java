@@ -4,6 +4,7 @@ import com.fakejira.auth.AuthDtos.ChangePasswordRequest;
 import com.fakejira.common.ApiException;
 import com.fakejira.common.CurrentUser;
 import com.fakejira.mail.MailService;
+import com.fakejira.push.PushSubscriptionRepository;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.task.TaskStatus;
 import jakarta.validation.Valid;
@@ -30,9 +31,11 @@ public class ProfileController {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final MailService mail;
+    private final PushSubscriptionRepository push;
 
     public ProfileController(CurrentUser currentUser, TaskRepository tasks, UserRepository users,
-                             PasswordEncoder passwordEncoder, MailService mail) {
+                             PasswordEncoder passwordEncoder, MailService mail, PushSubscriptionRepository push) {
+        this.push = push;
         this.currentUser = currentUser;
         this.tasks = tasks;
         this.users = users;
@@ -43,11 +46,14 @@ public class ProfileController {
     public record Stats(long assigned, long inProgress, long done, long reported) {
     }
 
-    public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats,
-                                  boolean emailNotifications, boolean emailAvailable) {
+    public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats, boolean admin,
+                                  EmailFrequency emailFrequency, boolean emailAvailable, int pushDevices) {
     }
 
-    public record SettingsRequest(boolean emailNotifications) {
+    /** Only non-null fields change. An empty display name removes it. */
+    public record SettingsRequest(EmailFrequency emailFrequency,
+                                  @jakarta.validation.constraints.Size(max = 60, message = "Display name must be at most 60 characters")
+                                  String displayName) {
     }
 
     @GetMapping
@@ -60,15 +66,26 @@ public class ProfileController {
                 tasks.countByAssigneeIdAndStatus(id, TaskStatus.IN_PROGRESS),
                 tasks.countByAssigneeIdAndStatus(id, TaskStatus.DONE),
                 tasks.countByReporterId(id));
-        return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats,
-                user.isEmailNotifications(), mail.isEnabled());
+        return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats, user.isAdmin(),
+                user.getEmailFrequency(), mail.isEnabled(), (int) push.countByUserId(user.getId()));
     }
 
     @PutMapping("/settings")
     @Transactional
-    public ProfileResponse updateSettings(@AuthenticationPrincipal Jwt jwt, @RequestBody SettingsRequest request) {
+    public ProfileResponse updateSettings(@AuthenticationPrincipal Jwt jwt,
+                                          @jakarta.validation.Valid @RequestBody SettingsRequest request) {
         User user = currentUser.from(jwt);
-        user.setEmailNotifications(request.emailNotifications());
+        if (request.emailFrequency() != null) {
+            user.setEmailFrequency(request.emailFrequency());
+            if (user.getEmailFrequency() == EmailFrequency.DAILY || user.getEmailFrequency() == EmailFrequency.WEEKLY) {
+                // Start the digest from now rather than replaying older notifications.
+                user.setLastDigestAt(Instant.now());
+            }
+        }
+        if (request.displayName() != null) {
+            String name = request.displayName().trim();
+            user.setDisplayName(name.isEmpty() ? null : name);
+        }
         users.save(user);
         return profile(jwt);
     }

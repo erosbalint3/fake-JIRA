@@ -1,6 +1,10 @@
 package com.fakejira.task;
 
+import com.fakejira.board.BoardColumn;
+import com.fakejira.board.BoardColumnRepository;
 import com.fakejira.common.ApiException;
+import com.fakejira.epic.Epic;
+import com.fakejira.epic.EpicRepository;
 import com.fakejira.events.LiveEvents;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.project.Project;
@@ -9,10 +13,7 @@ import com.fakejira.project.ProjectRepository;
 import com.fakejira.sprint.Sprint;
 import com.fakejira.sprint.SprintRepository;
 import com.fakejira.sprint.SprintState;
-import com.fakejira.task.TaskDtos.ActivityResponse;
-import com.fakejira.task.TaskDtos.ChecklistItemResponse;
-import com.fakejira.task.TaskDtos.ChecklistUpdateRequest;
-import com.fakejira.task.TaskDtos.CommentResponse;
+import com.fakejira.task.TaskDtos.BulkRequest;
 import com.fakejira.task.TaskDtos.CreateTaskRequest;
 import com.fakejira.task.TaskDtos.TaskResponse;
 import com.fakejira.task.TaskDtos.UpdateTaskRequest;
@@ -23,12 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -43,25 +41,24 @@ public class TaskService {
     private final ProjectRepository projects;
     private final ProjectAccess access;
     private final SprintRepository sprints;
-    private final CommentRepository comments;
-    private final ChecklistItemRepository checklist;
-    private final TaskActivityRepository activity;
+    private final EpicRepository epics;
+    private final BoardColumnRepository columns;
     private final TaskCleanup cleanup;
+    private final TaskSupport support;
     private final NotificationService notifications;
     private final LiveEvents live;
 
-    public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access,
-                       SprintRepository sprints, CommentRepository comments, ChecklistItemRepository checklist,
-                       TaskActivityRepository activity, TaskCleanup cleanup, NotificationService notifications,
-                       LiveEvents live) {
+    public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
+                       EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
+                       NotificationService notifications, LiveEvents live) {
         this.tasks = tasks;
         this.projects = projects;
         this.access = access;
         this.sprints = sprints;
-        this.comments = comments;
-        this.checklist = checklist;
-        this.activity = activity;
+        this.epics = epics;
+        this.columns = columns;
         this.cleanup = cleanup;
+        this.support = support;
         this.notifications = notifications;
         this.live = live;
     }
@@ -74,40 +71,89 @@ public class TaskService {
             access.memberProject(filter.project(), user);
         }
         List<Task> found = tasks.findAll(TaskSpecifications.visibleTo(user, filter), Sort.by(Sort.Direction.DESC, "updatedAt"));
-        return responses(found);
+        return support.responses(found);
     }
 
     @Transactional(readOnly = true)
     public TaskResponse get(User user, Long id) {
-        return response(memberTask(id, user));
+        return support.response(support.memberTask(id, user));
+    }
+
+    /** Finds a task by key such as "WR-12" among the user's projects. */
+    @Transactional(readOnly = true)
+    public TaskResponse byKey(User user, String key) {
+        return support.response(taskByKey(user, key));
+    }
+
+    public Task taskByKey(User user, String key) {
+        int dash = key.lastIndexOf('-');
+        if (dash <= 0) {
+            throw ApiException.notFound("Task " + key + " does not exist.");
+        }
+        Project project = access.memberProject(key.substring(0, dash), user);
+        try {
+            return tasks.findByProjectIdAndNumber(project.getId(), Integer.valueOf(key.substring(dash + 1)))
+                    .orElseThrow(() -> ApiException.notFound("Task " + key + " does not exist."));
+        } catch (NumberFormatException e) {
+            throw ApiException.notFound("Task " + key + " does not exist.");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskResponse> subtasks(User user, Long id) {
+        support.memberTask(id, user);
+        return support.responses(tasks.findByParentIdOrderByIdAsc(id));
     }
 
     // ---------------------------------------------------------------- writing
 
     public TaskResponse create(User user, CreateTaskRequest request) {
-        Project project = access.memberProject(request.projectKey(), user);
+        Project project = access.editorProject(request.projectKey(), user);
+        Task parent = null;
+        if (request.parentId() != null) {
+            parent = support.memberTask(request.parentId(), user);
+            if (!parent.getProject().getId().equals(project.getId())) {
+                throw ApiException.badRequest("A subtask must be in the same project as its parent.");
+            }
+            if (parent.getParent() != null) {
+                throw ApiException.badRequest("Subtasks cannot have their own subtasks.");
+            }
+        }
         project = projects.lockById(project.getId()).orElseThrow();
         Task task = new Task(project, project.allocateNumber(), request.title().trim(),
                 normalize(request.description()), request.priority(), user);
         task.setDueDate(request.dueDate());
         task.getLabels().addAll(normalizeLabels(request.labels()));
+        task.setStoryPoints(request.storyPoints());
+        task.setParent(parent);
         if (request.sprintId() != null) {
             task.setSprint(openSprint(project, request.sprintId()));
+        } else if (parent != null) {
+            task.setSprint(parent.getSprint());
+        }
+        if (request.epicId() != null) {
+            task.setEpic(epic(project, request.epicId()));
+        } else if (parent != null) {
+            task.setEpic(parent.getEpic());
         }
         if (request.assigneeId() != null) {
-            task.setAssignee(member(project, request.assigneeId()));
+            task.setAssignee(editor(project, request.assigneeId()));
         }
         tasks.save(task);
-        record(task, user, "created the task");
+        support.record(task, user, parent == null ? "created the task" : "created the task as a subtask of " + parent.getKey());
+        if (parent != null) {
+            support.record(parent, user, "added subtask " + task.getKey());
+            live.taskChanged(parent);
+        }
         if (task.getAssignee() != null) {
             notifications.notify(task.getAssignee(), user, task, "assigned you to");
         }
         live.taskChanged(task);
-        return response(task);
+        return support.response(task);
     }
 
     public TaskResponse update(User user, Long id, UpdateTaskRequest request) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
         List<String> changes = new ArrayList<>();
         String title = request.title().trim();
         if (!title.equals(task.getTitle())) {
@@ -135,40 +181,84 @@ public class TaskService {
             task.getLabels().clear();
             task.getLabels().addAll(labels);
         }
+        if (!Objects.equals(request.storyPoints(), task.getStoryPoints())) {
+            changes.add(request.storyPoints() == null
+                    ? "removed the estimate"
+                    : "estimated the task at " + request.storyPoints() + " point" + (request.storyPoints() == 1 ? "" : "s"));
+            task.setStoryPoints(request.storyPoints());
+        }
+        Long currentEpic = task.getEpic() == null ? null : task.getEpic().getId();
+        if (!Objects.equals(request.epicId(), currentEpic)) {
+            Epic epic = request.epicId() == null ? null : epic(task.getProject(), request.epicId());
+            changes.add(epic == null ? "removed the task from its epic" : "added the task to epic " + epic.getName());
+            task.setEpic(epic);
+        }
         if (!changes.isEmpty()) {
-            changes.forEach(change -> record(task, user, change));
-            notifyParticipants(task, user, "updated");
+            changes.forEach(change -> support.record(task, user, change));
+            support.notifyParticipants(task, user, "updated");
             tasks.saveAndFlush(task);
             live.taskChanged(task);
         }
-        return response(task);
+        return support.response(task);
     }
 
     public TaskResponse changeStatus(User user, Long id, TaskStatus status) {
-        Task task = memberTask(id, user);
-        if (task.getStatus() != status) {
-            record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
-            task.setStatus(status);
-            notifyParticipants(task, user, "moved to " + status.label().toLowerCase(Locale.ROOT));
+        Task task = support.editableTask(id, user);
+        applyStatus(task, user, status);
+        return support.response(task);
+    }
+
+    /** Moves a card to a board column, which also sets the column's status. */
+    public TaskResponse moveToColumn(User user, Long id, Long columnId) {
+        Task task = support.editableTask(id, user);
+        BoardColumn column = columns.findById(columnId)
+                .filter(c -> c.getProject().getId().equals(task.getProject().getId()))
+                .orElseThrow(() -> ApiException.badRequest("That column does not belong to " + task.getProject().getKey() + "."));
+        BoardColumn previous = task.getBoardColumn();
+        task.setBoardColumn(column);
+        if (task.getStatus() != column.getStatus()) {
+            applyStatus(task, user, column.getStatus());
+            task.setBoardColumn(column);
+        } else if (previous == null || !previous.getId().equals(column.getId())) {
+            support.record(task, user, "moved the task to column " + column.getName());
             tasks.saveAndFlush(task);
             live.taskChanged(task);
         }
-        return response(task);
+        return support.response(task);
+    }
+
+    private void applyStatus(Task task, User user, TaskStatus status) {
+        if (task.getStatus() == status) {
+            return;
+        }
+        support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
+        task.setStatus(status);
+        // A column pinned to another status no longer fits; fall back to the first column of the new status.
+        if (task.getBoardColumn() != null && task.getBoardColumn().getStatus() != status) {
+            task.setBoardColumn(null);
+        }
+        support.notifyParticipants(task, user, "moved to " + status.label().toLowerCase(Locale.ROOT));
+        tasks.saveAndFlush(task);
+        live.taskChanged(task);
     }
 
     public TaskResponse assign(User user, Long id, Long assigneeId) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
+        applyAssignee(task, user, assigneeId == null ? null : editor(task.getProject(), assigneeId));
+        return support.response(task);
+    }
+
+    private void applyAssignee(Task task, User user, User next) {
         User previous = task.getAssignee();
-        User next = assigneeId == null ? null : member(task.getProject(), assigneeId);
         if (Objects.equals(previous == null ? null : previous.getId(), next == null ? null : next.getId())) {
-            return response(task);
+            return;
         }
         task.setAssignee(next);
         if (next == null) {
-            record(task, user, "unassigned " + previous.getUsername());
+            support.record(task, user, "unassigned " + previous.getUsername());
             notifications.notify(previous, user, task, "unassigned you from");
         } else {
-            record(task, user, next.getId().equals(user.getId())
+            support.record(task, user, next.getId().equals(user.getId())
                     ? "assigned the task to themselves"
                     : "assigned the task to " + next.getUsername());
             notifications.notify(next, user, task, "assigned you to");
@@ -178,188 +268,145 @@ public class TaskService {
         }
         tasks.saveAndFlush(task);
         live.taskChanged(task);
-        return response(task);
     }
 
     public TaskResponse accept(User user, Long id) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
         if (task.getAssignee() != null) {
             throw ApiException.conflict(task.isAssignee(user)
                     ? "You already own this task."
                     : "This task was already taken by " + task.getAssignee().getUsername() + ".");
         }
         task.setAssignee(user);
-        record(task, user, "accepted the task");
+        support.record(task, user, "accepted the task");
         notifications.notify(task.getReporter(), user, task, "accepted");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
-        return response(task);
+        return support.response(task);
     }
 
     public TaskResponse release(User user, Long id) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
         if (!task.isAssignee(user)) {
             throw ApiException.forbidden("Only the assignee can release this task.");
         }
         task.setAssignee(null);
         task.setStatus(TaskStatus.TODO);
-        record(task, user, "released the task");
+        task.setBoardColumn(null);
+        support.record(task, user, "released the task");
         notifications.notify(task.getReporter(), user, task, "released");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
-        return response(task);
+        return support.response(task);
     }
 
     public TaskResponse moveToSprint(User user, Long id, Long sprintId) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
+        applySprint(task, user, sprintId);
+        return support.response(task);
+    }
+
+    private void applySprint(Task task, User user, Long sprintId) {
         Sprint target = sprintId == null ? null : openSprint(task.getProject(), sprintId);
         Long current = task.getSprint() == null ? null : task.getSprint().getId();
         if (!Objects.equals(current, sprintId)) {
             task.setSprint(target);
-            record(task, user, target == null ? "moved the task to the backlog" : "moved the task to " + target.getName());
+            support.record(task, user, target == null ? "moved the task to the backlog" : "moved the task to " + target.getName());
             tasks.saveAndFlush(task);
             live.taskChanged(task);
         }
-        return response(task);
     }
 
     public void delete(User user, Long id) {
-        Task task = memberTask(id, user);
+        Task task = support.editableTask(id, user);
         if (!task.isReporter(user) && !task.getProject().isOwner(user)) {
             throw ApiException.forbidden("Only the reporter or the project owner can delete this task.");
         }
         notifications.notify(task.getAssignee(), user, task, "deleted");
         Project project = task.getProject();
         Long taskId = task.getId();
+        Task parent = task.getParent();
         cleanup.delete(task);
         live.taskDeleted(project, taskId);
+        if (parent != null) {
+            live.taskChanged(parent);
+        }
     }
 
-    // ---------------------------------------------------------------- comments
-
-    @Transactional(readOnly = true)
-    public List<CommentResponse> comments(User user, Long taskId) {
-        memberTask(taskId, user);
-        return comments.findForTask(taskId).stream().map(CommentResponse::of).toList();
-    }
-
-    public CommentResponse addComment(User user, Long taskId, String body) {
-        Task task = memberTask(taskId, user);
-        Comment comment = comments.save(new Comment(task, user, body.trim()));
-
-        Map<Long, User> mentioned = new HashMap<>();
-        Set<String> names = MentionParser.usernames(comment.getBody());
-        for (User member : task.getProject().getMembers()) {
-            if (names.contains(member.getUsername().toLowerCase(Locale.ROOT))) {
-                mentioned.put(member.getId(), member);
+    /** Applies one change to many tasks in a single transaction; all tasks must be editable. */
+    public List<TaskResponse> bulk(User user, BulkRequest request) {
+        List<Task> selected = new ArrayList<>();
+        for (Long id : new LinkedHashSet<>(request.taskIds())) {
+            selected.add(support.editableTask(id, user));
+        }
+        if (request.delete()) {
+            for (Task task : selected) {
+                delete(user, task.getId());
+            }
+            return List.of();
+        }
+        for (Task task : selected) {
+            if (request.status() != null) {
+                applyStatus(task, user, request.status());
+            }
+            if (request.unassign()) {
+                applyAssignee(task, user, null);
+            } else if (request.assigneeId() != null) {
+                applyAssignee(task, user, editor(task.getProject(), request.assigneeId()));
+            }
+            if (request.clearSprint()) {
+                applySprint(task, user, null);
+            } else if (request.sprintId() != null) {
+                applySprint(task, user, request.sprintId());
+            }
+            boolean changed = false;
+            if (request.priority() != null && request.priority() != task.getPriority()) {
+                support.record(task, user, "changed priority from " + task.getPriority().label() + " to " + request.priority().label());
+                task.setPriority(request.priority());
+                changed = true;
+            }
+            if (request.clearEpic() && task.getEpic() != null) {
+                support.record(task, user, "removed the task from its epic");
+                task.setEpic(null);
+                changed = true;
+            } else if (request.epicId() != null && (task.getEpic() == null || !task.getEpic().getId().equals(request.epicId()))) {
+                Epic epic = epic(task.getProject(), request.epicId());
+                support.record(task, user, "added the task to epic " + epic.getName());
+                task.setEpic(epic);
+                changed = true;
+            }
+            Set<String> labels = new TreeSet<>(task.getLabels());
+            labels.addAll(normalizeLabels(request.addLabels()));
+            labels.removeAll(normalizeLabels(request.removeLabels()));
+            if (labels.size() > 10) {
+                throw ApiException.badRequest(task.getKey() + " would have more than 10 labels.");
+            }
+            if (!labels.equals(task.getLabels())) {
+                support.record(task, user, labels.isEmpty() ? "removed all labels" : "set labels to " + String.join(", ", labels));
+                task.getLabels().clear();
+                task.getLabels().addAll(labels);
+                changed = true;
+            }
+            if (changed) {
+                tasks.saveAndFlush(task);
+                live.taskChanged(task);
             }
         }
-        mentioned.values().forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
-        for (User participant : participants(task)) {
-            if (!mentioned.containsKey(participant.getId())) {
-                notifications.notify(participant, user, task, "commented on");
-            }
-        }
-        live.taskChanged(task);
-        return CommentResponse.of(comment);
-    }
-
-    // ---------------------------------------------------------------- checklist
-
-    @Transactional(readOnly = true)
-    public List<ChecklistItemResponse> checklist(User user, Long taskId) {
-        memberTask(taskId, user);
-        return checklist.findByTaskIdOrderByPositionAscIdAsc(taskId).stream().map(ChecklistItemResponse::of).toList();
-    }
-
-    public ChecklistItemResponse addChecklistItem(User user, Long taskId, String text) {
-        Task task = memberTask(taskId, user);
-        ChecklistItem item = checklist.save(new ChecklistItem(task, text.trim(), checklist.maxPosition(taskId) + 1));
-        live.taskChanged(task);
-        return ChecklistItemResponse.of(item);
-    }
-
-    public ChecklistItemResponse updateChecklistItem(User user, Long taskId, Long itemId, ChecklistUpdateRequest request) {
-        Task task = memberTask(taskId, user);
-        ChecklistItem item = checklist.findByIdAndTaskId(itemId, taskId)
-                .orElseThrow(() -> ApiException.notFound("Checklist item not found."));
-        if (request.text() != null) {
-            item.setText(request.text().trim());
-        }
-        if (request.done() != null) {
-            item.setDone(request.done());
-        }
-        live.taskChanged(task);
-        return ChecklistItemResponse.of(item);
-    }
-
-    public void deleteChecklistItem(User user, Long taskId, Long itemId) {
-        Task task = memberTask(taskId, user);
-        ChecklistItem item = checklist.findByIdAndTaskId(itemId, taskId)
-                .orElseThrow(() -> ApiException.notFound("Checklist item not found."));
-        checklist.delete(item);
-        live.taskChanged(task);
-    }
-
-    // ---------------------------------------------------------------- activity
-
-    @Transactional(readOnly = true)
-    public List<ActivityResponse> activity(User user, Long taskId) {
-        memberTask(taskId, user);
-        return activity.findForTask(taskId).stream().map(ActivityResponse::of).toList();
-    }
-
-    public void record(Task task, User actor, String message) {
-        activity.save(new TaskActivity(task, actor, message));
+        return support.responses(selected);
     }
 
     // ---------------------------------------------------------------- helpers
 
-    /** Loads a task the user may see; non-members get the same 404 as a missing task. */
-    public Task memberTask(Long id, User user) {
-        Task task = tasks.findById(id).orElseThrow(() -> ApiException.notFound("Task does not exist."));
-        if (!task.getProject().hasMember(user)) {
-            throw ApiException.notFound("Task does not exist.");
-        }
-        return task;
-    }
-
-    public List<TaskResponse> responses(Collection<Task> list) {
-        if (list.isEmpty()) {
-            return List.of();
-        }
-        Map<Long, int[]> progress = new HashMap<>();
-        for (Object[] row : checklist.progressFor(list.stream().map(Task::getId).toList())) {
-            progress.put((Long) row[0], new int[]{((Number) row[1]).intValue(), ((Number) row[2]).intValue()});
-        }
-        return list.stream().map(task -> {
-            int[] counts = progress.getOrDefault(task.getId(), new int[]{0, 0});
-            return TaskResponse.of(task, counts[0], counts[1]);
-        }).toList();
-    }
-
-    private TaskResponse response(Task task) {
-        return responses(List.of(task)).get(0);
-    }
-
-    private void notifyParticipants(Task task, User actor, String action) {
-        participants(task).forEach(participant -> notifications.notify(participant, actor, task, action));
-    }
-
-    private static Set<User> participants(Task task) {
-        Map<Long, User> byId = new HashMap<>();
-        if (task.getAssignee() != null) {
-            byId.put(task.getAssignee().getId(), task.getAssignee());
-        }
-        byId.put(task.getReporter().getId(), task.getReporter());
-        return new LinkedHashSet<>(byId.values());
-    }
-
-    private static User member(Project project, Long userId) {
-        return project.getMembers().stream()
+    /** Assignees must be members who can edit (viewers cannot own work). */
+    private static User editor(Project project, Long userId) {
+        User user = project.getMembers().stream()
                 .filter(member -> member.getId().equals(userId))
                 .findFirst()
                 .orElseThrow(() -> ApiException.badRequest("The assignee must be a member of " + project.getKey() + "."));
+        if (project.isViewer(user)) {
+            throw ApiException.badRequest(user.getUsername() + " has read-only access and cannot be assigned tasks.");
+        }
+        return user;
     }
 
     private Sprint openSprint(Project project, Long sprintId) {
@@ -372,15 +419,22 @@ public class TaskService {
         return sprint;
     }
 
+    private Epic epic(Project project, Long epicId) {
+        return epics.findById(epicId)
+                .filter(candidate -> candidate.getProject().getId().equals(project.getId()))
+                .orElseThrow(() -> ApiException.badRequest("That epic does not belong to " + project.getKey() + "."));
+    }
+
     private static String normalize(String description) {
         return description == null ? "" : description.trim();
     }
 
-    static Set<String> normalizeLabels(List<String> labels) {
+    public static Set<String> normalizeLabels(List<String> labels) {
         Set<String> result = new TreeSet<>();
         if (labels != null) {
             for (String label : labels) {
-                String clean = label == null ? "" : label.trim().replaceAll("\\s+", "-").toLowerCase(Locale.ROOT);
+                String clean = label == null ? "" : label.trim().replaceAll("\\s+", "-").replaceAll("[,;|]", "")
+                        .toLowerCase(Locale.ROOT);
                 if (!clean.isEmpty()) {
                     result.add(clean.length() > 30 ? clean.substring(0, 30) : clean);
                 }

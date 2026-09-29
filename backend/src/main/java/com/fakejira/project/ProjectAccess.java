@@ -24,10 +24,28 @@ public class ProjectAccess {
         return project;
     }
 
+    public Project memberProjectById(Long id) {
+        return projects.findById(id).orElseThrow(() -> ApiException.notFound("Project not found."));
+    }
+
     public void requireMember(Project project, User user) {
         if (!project.hasMember(user)) {
             throw ApiException.notFound("Project " + project.getKey() + " does not exist.");
         }
+    }
+
+    /** Members who are viewers get a clear 403 when they try to change something. */
+    public void requireEditor(Project project, User user) {
+        requireMember(project, user);
+        if (!project.canEdit(user)) {
+            throw ApiException.forbidden("You have read-only access to " + project.getKey() + ".");
+        }
+    }
+
+    public Project editorProject(String key, User user) {
+        Project project = memberProject(key, user);
+        requireEditor(project, user);
+        return project;
     }
 
     public void requireOwner(Project project, User user) {

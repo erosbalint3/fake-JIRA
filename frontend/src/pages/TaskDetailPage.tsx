@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, CheckSquare, Download, FileQuestion, FileText, History, MessageSquare, Paperclip, Pencil, Trash2, Upload, X,
+  ArrowLeft, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
+  Pencil, Trash2, Upload, X,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
@@ -9,17 +10,24 @@ import { useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
-import { DueBadge, Labels, PriorityBadge, StatusBadge } from '../components/Badges';
+import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge } from '../components/Badges';
+import { useCreateTask } from '../components/Layout';
+import { DevPanel } from '../components/task/DevPanel';
+import { LinksPanel } from '../components/task/LinksPanel';
+import { SubtasksPanel } from '../components/task/SubtasksPanel';
+import { TimePanel } from '../components/task/TimePanel';
+import { useProjectAccess } from '../useProject';
 import { LabelInput } from '../components/LabelInput';
 import { Markdown } from '../components/Markdown';
 import { MarkdownEditor } from '../components/MarkdownEditor';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { TaskFormModal } from '../components/TaskFormModal';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
-import { fileSize, formatDate, timeAgo } from '../format';
+import { fileSize, formatDate, formatMinutes, timeAgo } from '../format';
 import {
   PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Activity, type Attachment, type ChecklistItem, type Comment,
-  type Priority, type Sprint, type Status, type Task, type TaskInput,
+  type DevLink, type Epic, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
+  type User,
 } from '../types';
 
 const MAX_UPLOAD = 10 * 1024 * 1024;
@@ -27,6 +35,7 @@ const MAX_UPLOAD = 10 * 1024 * 1024;
 function inputOf(task: Task): TaskInput {
   return {
     title: task.title, description: task.description, priority: task.priority, dueDate: task.dueDate, labels: task.labels,
+    storyPoints: task.storyPoints, epicId: task.epic?.id ?? null,
   };
 }
 
@@ -52,18 +61,33 @@ export function TaskDetailPage() {
   const [comment, setComment] = useState('');
   const [newItem, setNewItem] = useState('');
   const [tab, setTab] = useState<'comments' | 'activity'>('comments');
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [links, setLinks] = useState<TaskLink[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [devLinks, setDevLinks] = useState<DevLink[]>([]);
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [watching, setWatching] = useState(false);
+  const [watchers, setWatchers] = useState<User[]>([]);
+  const openCreate = useCreateTask();
 
   const load = useCallback(() => {
     setError(null);
     Promise.all([
       api.task(taskId), api.comments(taskId), api.checklist(taskId), api.attachments(taskId), api.activity(taskId),
+      api.subtasks(taskId), api.links(taskId), api.time(taskId), api.devLinks(taskId), api.watchers(taskId),
     ])
-      .then(([t, c, items, files, history]) => {
+      .then(([t, c, items, files, history, subs, taskLinks, time, dev, watch]) => {
         setTask(t);
         setComments(c);
         setChecklist(items);
         setAttachments(files);
         setActivity(history);
+        setSubtasks(subs);
+        setLinks(taskLinks);
+        setTimeEntries(time);
+        setDevLinks(dev);
+        setWatching(watch.watching);
+        setWatchers(watch.watchers);
       })
       .catch((e: ApiError) => setError(e));
   }, [taskId]);
@@ -73,12 +97,16 @@ export function TaskDetailPage() {
   useEffect(() => {
     if (!task) return;
     api.sprints(task.projectKey).then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED'))).catch(() => {});
+    api.epics(task.projectKey).then(setEpics).catch(() => {});
   }, [task?.projectKey]);
 
   useLiveRefresh((m) => m.type === 'task' && m.data.taskId === taskId, () => {
     // A live "deleted" event arrives after someone else removed the task.
     api.task(taskId).then(() => load()).catch((e: ApiError) => e.status === 404 ? setDeleted(true) : undefined);
   });
+
+  const project = task ? byKey(task.projectKey) : undefined;
+  const { canEdit, isOwner } = useProjectAccess(project);
 
   if (deleted || error?.status === 404 || Number.isNaN(taskId)) {
     return (
@@ -92,10 +120,10 @@ export function TaskDetailPage() {
   if (error) return <div className="page"><ErrorBanner message={error.message} onRetry={load} /></div>;
   if (!task || !user) return <div className="page"><Spinner /></div>;
 
-  const project = byKey(task.projectKey);
   const members = project?.members ?? [];
+  const assignable = members.filter((m) => m.role !== 'VIEWER');
   const isAssignee = task.assignee?.id === user.id;
-  const canDelete = task.reporter.id === user.id || project?.owner.id === user.id;
+  const canDelete = canEdit && (task.reporter.id === user.id || isOwner);
 
   const run = async (action: () => Promise<Task>, message?: string) => {
     setBusy(true);
@@ -201,8 +229,10 @@ export function TaskDetailPage() {
           <ArrowLeft size={16} /> Back
         </button>
         <span className="breadcrumb muted">
-          <Link to={`/p/${task.projectKey}/board`}>{task.projectName}</Link> / {task.key}
+          <Link to={`/p/${task.projectKey}/board`}>{task.projectName}</Link>
+          {task.parent && <> / <Link to={`/tasks/${task.parent.id}`}>{task.parent.key}</Link></>} / {task.key}
         </span>
+        {!canEdit && <span className="readonly-badge"><Eye size={13} /> Read-only</span>}
       </div>
 
       <div className="detail">
@@ -210,26 +240,48 @@ export function TaskDetailPage() {
           <div className="detail-key">
             <span className="task-key">{task.key}</span>
             <StatusBadge status={task.status} />
+            <BlockedBadge blocked={task.blocked} />
             {task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
           </div>
+          {task.parent && (
+            <Link to={`/tasks/${task.parent.id}`} className="parent-link">
+              <CornerLeftUp size={14} /> Subtask of {task.parent.key} · {task.parent.title}
+            </Link>
+          )}
           <h1 className="detail-title">{task.title}</h1>
-          <Labels labels={task.labels} />
+          <div className="detail-tags">
+            <EpicChip epic={task.epic} />
+            <Labels labels={task.labels} />
+          </div>
 
           <div className="detail-actions">
-            {!task.assignee && (
+            {canEdit && !task.assignee && (
               <button className="btn btn-primary" disabled={busy}
                 onClick={() => run(() => api.acceptTask(task.id), `${task.key} assigned to you`)}>
                 Accept task
               </button>
             )}
-            {isAssignee && (
+            {canEdit && isAssignee && (
               <button className="btn btn-soft" disabled={busy}
                 onClick={() => run(() => api.releaseTask(task.id), `${task.key} released`)}>
                 Release
               </button>
             )}
-            <button className="btn btn-ghost" onClick={() => setEditing(true)}>
-              <Pencil size={16} /> Edit
+            {canEdit && (
+              <button className="btn btn-ghost" onClick={() => setEditing(true)}>
+                <Pencil size={16} /> Edit
+              </button>
+            )}
+            <button className="btn btn-ghost" aria-pressed={watching}
+              title={watchers.length ? `Watching: ${watchers.map((w) => w.displayName).join(', ')}` : 'Nobody else is watching'}
+              onClick={async () => {
+                const result = await api.watch(task.id, !watching);
+                setWatching(result.watching);
+                setWatchers(result.watchers);
+                toast(result.watching ? 'You will be notified about changes' : 'Stopped watching');
+              }}>
+              {watching ? <EyeOff size={16} /> : <Eye size={16} />} {watching ? 'Unwatch' : 'Watch'}
+              {watchers.length > 0 && <span className="count muted-count">{watchers.length}</span>}
             </button>
             {canDelete && (
               <button className="btn btn-ghost danger" onClick={() => setConfirmDelete(true)}>
@@ -242,8 +294,13 @@ export function TaskDetailPage() {
             <h2 className="panel-title"><FileText size={16} /> Description</h2>
             {task.description
               ? <Markdown>{task.description}</Markdown>
-              : <p className="muted">No description yet. <button className="link" onClick={() => setEditing(true)}>Add one</button></p>}
+              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={() => setEditing(true)}>Add one</button></>}</p>}
           </section>
+
+          {!task.parent && (
+            <SubtasksPanel subtasks={subtasks} canEdit={canEdit}
+              onAdd={() => openCreate({ projectKey: task.projectKey, parent: { id: task.id, key: task.key } })} />
+          )}
 
           <section className="panel">
             <h2 className="panel-title">
@@ -260,23 +317,30 @@ export function TaskDetailPage() {
               {checklist.map((item) => (
                 <li key={item.id} className={item.done ? 'done' : ''}>
                   <label>
-                    <input type="checkbox" checked={item.done} onChange={() => toggleItem(item)} />
+                    <input type="checkbox" checked={item.done} disabled={!canEdit} onChange={() => toggleItem(item)} />
                     <span>{item.text}</span>
                   </label>
-                  <button className="icon-button sm" onClick={() => removeItem(item)} aria-label={`Delete ${item.text}`}>
-                    <X size={14} />
-                  </button>
+                  {canEdit && (
+                    <button className="icon-button sm" onClick={() => removeItem(item)} aria-label={`Delete ${item.text}`}>
+                      <X size={14} />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
-            <form className="inline-add" onSubmit={addItem}>
-              <input value={newItem} maxLength={200} placeholder="Add an item…" onChange={(e) => setNewItem(e.target.value)}
-                aria-label="New checklist item" />
-              <button className="btn btn-soft btn-sm" disabled={!newItem.trim()}>Add</button>
-            </form>
+            {canEdit && (
+              <form className="inline-add" onSubmit={addItem}>
+                <input value={newItem} maxLength={200} placeholder="Add an item…" onChange={(e) => setNewItem(e.target.value)}
+                  aria-label="New checklist item" />
+                <button className="btn btn-soft btn-sm" disabled={!newItem.trim()}>Add</button>
+              </form>
+            )}
+            {!canEdit && checklist.length === 0 && <p className="muted">No checklist.</p>}
           </section>
 
-          <Attachments attachments={attachments} userId={user.id} ownerId={project?.owner.id}
+          <LinksPanel taskId={task.id} projectKey={task.projectKey} links={links} canEdit={canEdit} onChange={load} />
+
+          <Attachments attachments={attachments} userId={user.id} ownerId={project?.owner.id} canEdit={canEdit}
             onUpload={upload}
             onDelete={async (attachment) => {
               try {
@@ -286,6 +350,9 @@ export function TaskDetailPage() {
                 toast((e as ApiError).message, 'error');
               }
             }} />
+
+          <TimePanel taskId={task.id} entries={timeEntries} userId={user.id} isOwner={isOwner} canEdit={canEdit} onChange={load} />
+          <DevPanel links={devLinks} />
 
           <section className="panel">
             <div className="tabs compact" role="tablist">
@@ -304,10 +371,10 @@ export function TaskDetailPage() {
                 <ul className="comments">
                   {comments.map((c) => (
                     <li key={c.id} className="comment">
-                      <Avatar name={c.author.username} size={32} />
+                      <Avatar user={c.author} size={32} />
                       <div className="comment-body">
                         <div className="comment-head">
-                          <strong>{c.author.username}</strong>
+                          <strong>{c.author.displayName}</strong>
                           <span className="muted small" title={new Date(c.createdAt).toLocaleString()}>{timeAgo(c.createdAt)}</span>
                         </div>
                         <Markdown>{c.body}</Markdown>
@@ -315,22 +382,22 @@ export function TaskDetailPage() {
                     </li>
                   ))}
                 </ul>
-                <form className="comment-form" onSubmit={postComment}>
-                  <Avatar name={user.username} size={32} />
+                {canEdit && <form className="comment-form" onSubmit={postComment}>
+                  <Avatar user={user} size={32} />
                   <div className="comment-input">
                     <MarkdownEditor value={comment} onChange={setComment} members={members} rows={3} maxLength={2000}
                       label="Comment" placeholder="Add a comment… Type @ to mention someone. Ctrl+Enter to send."
                       onSubmitShortcut={() => postComment()} />
                     <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>Comment</button>
                   </div>
-                </form>
+                </form>}
               </>
             ) : (
               <ul className="activity">
                 {activity.map((a) => (
                   <li key={a.id}>
-                    <Avatar name={a.actor.username} size={24} />
-                    <span><strong>{a.actor.username}</strong> {a.message}</span>
+                    <Avatar user={a.actor} size={24} />
+                    <span><strong>{a.actor.displayName}</strong> {a.message}</span>
                     <span className="muted small" title={new Date(a.createdAt).toLocaleString()}>{timeAgo(a.createdAt)}</span>
                   </li>
                 ))}
@@ -344,7 +411,7 @@ export function TaskDetailPage() {
           <dl className="props">
             <dt>Status</dt>
             <dd>
-              <select value={task.status} disabled={busy} aria-label="Status"
+              <select value={task.status} disabled={busy || !canEdit} aria-label="Status"
                 onChange={(e) => run(() => api.setStatus(task.id, e.target.value as Status),
                   `Moved to ${STATUS_LABEL[e.target.value as Status]}`)}>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
@@ -352,18 +419,18 @@ export function TaskDetailPage() {
             </dd>
             <dt>Assignee</dt>
             <dd>
-              <select value={task.assignee?.id ?? ''} disabled={busy} aria-label="Assignee"
+              <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label="Assignee"
                 onChange={(e) => run(() => api.assign(task.id, e.target.value ? Number(e.target.value) : null),
                   e.target.value ? 'Assignee updated' : 'Unassigned')}>
                 <option value="">Unassigned</option>
-                {members.map((m) => <option key={m.id} value={m.id}>{m.username}{m.id === user.id ? ' (me)' : ''}</option>)}
+                {assignable.map((m) => <option key={m.id} value={m.id}>{m.displayName}{m.id === user.id ? ' (me)' : ''}</option>)}
               </select>
             </dd>
             <dt>Priority</dt>
             <dd>
               <div className="with-icon">
                 <PriorityBadge priority={task.priority} compact />
-                <select value={task.priority} disabled={busy} aria-label="Priority"
+                <select value={task.priority} disabled={busy || !canEdit} aria-label="Priority"
                   onChange={(e) => update({ priority: e.target.value as Priority }, 'Priority updated')}>
                   {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
                 </select>
@@ -371,7 +438,7 @@ export function TaskDetailPage() {
             </dd>
             <dt>Sprint</dt>
             <dd>
-              <select value={task.sprint?.id ?? ''} disabled={busy} aria-label="Sprint"
+              <select value={task.sprint?.id ?? ''} disabled={busy || !canEdit} aria-label="Sprint"
                 onChange={(e) => run(() => api.moveToSprint(task.id, e.target.value ? Number(e.target.value) : null),
                   e.target.value ? 'Moved to sprint' : 'Moved to backlog')}>
                 <option value="">Backlog</option>
@@ -381,17 +448,36 @@ export function TaskDetailPage() {
             </dd>
             <dt>Due date</dt>
             <dd>
-              <input type="date" value={task.dueDate ?? ''} disabled={busy} aria-label="Due date"
+              <input type="date" value={task.dueDate ?? ''} disabled={busy || !canEdit} aria-label="Due date"
                 onChange={(e) => update({ dueDate: e.target.value || null }, e.target.value ? 'Due date set' : 'Due date removed')} />
+            </dd>
+            <dt>Points</dt>
+            <dd>
+              <input type="number" min={0} max={100} key={`sp-${task.storyPoints}`} defaultValue={task.storyPoints ?? ''}
+                disabled={busy || !canEdit} aria-label="Story points" placeholder="–"
+                onBlur={(e) => {
+                  const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value)));
+                  if (value !== task.storyPoints) update({ storyPoints: value }, 'Estimate updated');
+                }} />
+            </dd>
+            <dt>Epic</dt>
+            <dd>
+              <select value={task.epic?.id ?? ''} disabled={busy || !canEdit} aria-label="Epic"
+                onChange={(e) => update({ epicId: e.target.value ? Number(e.target.value) : null }, 'Epic updated')}>
+                <option value="">No epic</option>
+                {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
+              </select>
             </dd>
             <dt>Labels</dt>
             <dd>
-              <button className="labels-button" onClick={() => setEditingLabels(task.labels)} aria-label="Edit labels">
+              <button className="labels-button" disabled={!canEdit} onClick={() => setEditingLabels(task.labels)} aria-label="Edit labels">
                 {task.labels.length ? <Labels labels={task.labels} /> : <span className="muted">None</span>}
               </button>
             </dd>
+            <dt>Time spent</dt>
+            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">None</span>}</dd>
             <dt>Reporter</dt>
-            <dd><span className="person"><Avatar name={task.reporter.username} size={24} /> {task.reporter.username}</span></dd>
+            <dd><span className="person"><Avatar user={task.reporter} size={24} /> {task.reporter.displayName}</span></dd>
             <dt>Created</dt>
             <dd>{formatDate(task.createdAt)}</dd>
             <dt>Updated</dt>
@@ -460,10 +546,11 @@ function LabelsModal({ projectKey, value, onSave, onClose }: {
   );
 }
 
-function Attachments({ attachments, userId, ownerId, onUpload, onDelete }: {
+function Attachments({ attachments, userId, ownerId, canEdit, onUpload, onDelete }: {
   attachments: Attachment[];
   userId: number;
   ownerId?: number;
+  canEdit: boolean;
   onUpload: (files: FileList | File[]) => Promise<void>;
   onDelete: (attachment: Attachment) => void;
 }) {
@@ -517,7 +604,7 @@ function Attachments({ attachments, userId, ownerId, onUpload, onDelete }: {
     <section
       className={`panel attachments ${dragOver ? 'drop-target' : ''}`}
       onDragOver={(e: DragEvent) => {
-        if (e.dataTransfer.types.includes('Files')) {
+        if (canEdit && e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
           setDragOver(true);
         }
@@ -534,16 +621,18 @@ function Attachments({ attachments, userId, ownerId, onUpload, onDelete }: {
       <h2 className="panel-title">
         <Paperclip size={16} /> Attachments {attachments.length > 0 && <span className="count">{attachments.length}</span>}
         <span className="spacer" />
-        <button className="btn btn-soft btn-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          <Upload size={15} /> {uploading ? 'Uploading…' : 'Upload'}
-        </button>
+        {canEdit && (
+          <button className="btn btn-soft btn-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+            <Upload size={15} /> {uploading ? 'Uploading…' : 'Upload'}
+          </button>
+        )}
         <input ref={inputRef} type="file" multiple hidden onChange={(e) => {
           handle(e.target.files);
           e.target.value = '';
         }} />
       </h2>
       {attachments.length === 0 ? (
-        <p className="muted drop-hint">Drop files here or use Upload (max 10 MB each).</p>
+        <p className={canEdit ? 'muted drop-hint' : 'muted'}>{canEdit ? 'Drop files here or use Upload (max 10 MB each).' : 'No attachments.'}</p>
       ) : (
         <ul className="attachment-grid">
           {attachments.map((a) => (
@@ -557,13 +646,13 @@ function Attachments({ attachments, userId, ownerId, onUpload, onDelete }: {
               )}
               <div className="attachment-info">
                 <span className="attachment-name" title={a.filename}>{a.filename}</span>
-                <span className="muted small">{fileSize(a.size)} · {a.uploader.username}</span>
+                <span className="muted small">{fileSize(a.size)} · {a.uploader.displayName}</span>
               </div>
               <div className="attachment-actions">
                 <button className="icon-button sm" onClick={() => download(a)} aria-label={`Download ${a.filename}`}>
                   <Download size={15} />
                 </button>
-                {(a.uploader.id === userId || ownerId === userId) && (
+                {canEdit && (a.uploader.id === userId || ownerId === userId) && (
                   <button className="icon-button sm" onClick={() => onDelete(a)} aria-label={`Delete ${a.filename}`}>
                     <Trash2 size={15} />
                   </button>

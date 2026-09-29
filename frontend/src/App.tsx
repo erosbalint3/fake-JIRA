@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { useProjects } from './projects';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/States';
+import { AdminPage } from './pages/AdminPage';
 import { AuthPage } from './pages/AuthPage';
 import { BacklogPage } from './pages/BacklogPage';
 import { BoardPage } from './pages/BoardPage';
@@ -15,6 +16,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { RoadmapPage } from './pages/RoadmapPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -65,12 +67,14 @@ export function App() {
         <Route path="/p/:key" element={<ProjectIndex />} />
         <Route path="/p/:key/board" element={<BoardPage />} />
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
+        <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
         <Route path="/p/:key/reports" element={<ReportsPage />} />
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/backlog" element={<LegacyRedirect to="backlog" />} />
         <Route path="/board" element={<LegacyRedirect to="board" />} />
         <Route path="*" element={<NotFoundPage />} />

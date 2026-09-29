@@ -1,5 +1,7 @@
 package com.fakejira.task;
 
+import com.fakejira.board.BoardColumn;
+import com.fakejira.epic.Epic;
 import com.fakejira.project.Project;
 import com.fakejira.sprint.Sprint;
 import com.fakejira.user.User;
@@ -14,12 +16,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -76,6 +81,30 @@ public class Task {
 
     /** When the task last entered DONE; drives the sprint burndown. */
     private Instant completedAt;
+
+    /** Estimate in story points; optional. */
+    private Integer storyPoints;
+
+    /** Set for subtasks. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Task parent;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "epic_id")
+    private Epic epic;
+
+    /** Explicit board column; null means the first column of the task's status. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "board_column_id")
+    private BoardColumn boardColumn;
+
+    /** People who follow this task's notifications in addition to reporter and assignee. */
+    @ManyToMany
+    @JoinTable(name = "task_watchers",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<User> watchers = new LinkedHashSet<>();
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -195,6 +224,46 @@ public class Task {
 
     public Instant getCompletedAt() {
         return completedAt;
+    }
+
+    public Integer getStoryPoints() {
+        return storyPoints;
+    }
+
+    public void setStoryPoints(Integer storyPoints) {
+        this.storyPoints = storyPoints;
+    }
+
+    public Task getParent() {
+        return parent;
+    }
+
+    public void setParent(Task parent) {
+        this.parent = parent;
+    }
+
+    public Epic getEpic() {
+        return epic;
+    }
+
+    public void setEpic(Epic epic) {
+        this.epic = epic;
+    }
+
+    public BoardColumn getBoardColumn() {
+        return boardColumn;
+    }
+
+    public void setBoardColumn(BoardColumn boardColumn) {
+        this.boardColumn = boardColumn;
+    }
+
+    public Set<User> getWatchers() {
+        return watchers;
+    }
+
+    public boolean isWatchedBy(User user) {
+        return watchers.stream().anyMatch(watcher -> watcher.getId().equals(user.getId()));
     }
 
     public Instant getCreatedAt() {

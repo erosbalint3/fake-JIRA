@@ -12,5 +12,7 @@ public record TaskFilter(
         TaskStatus status,
         String label,
         String sprint,
-        String assignee) {
+        String assignee,
+        /** Epic id or "none". */
+        String epic) {
 }

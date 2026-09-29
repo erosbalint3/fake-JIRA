@@ -2,6 +2,7 @@ package com.fakejira.notification;
 
 import com.fakejira.events.LiveEvent;
 import com.fakejira.task.Task;
+import com.fakejira.user.EmailFrequency;
 import com.fakejira.user.User;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,7 @@ public class NotificationService {
         }
         notifications.save(new Notification(recipient, message, taskId));
         events.publishEvent(new LiveEvent(Set.of(recipient.getId()), "notification", Map.of()));
-        events.publishEvent(new NotificationCreated(
-                recipient.getEmail(), recipient.isEmailNotifications(), message, taskId));
+        events.publishEvent(new NotificationCreated(recipient.getId(), recipient.getEmail(),
+                recipient.getEmailFrequency() == EmailFrequency.INSTANT, message, taskId));
     }
 }

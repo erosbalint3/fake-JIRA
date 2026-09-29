@@ -15,6 +15,25 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
 
     List<Task> findByProjectId(Long projectId);
 
+    /** Rows of [parentId, total, done] for subtasks of the given tasks. */
+    @Query("""
+            select t.parent.id, count(t), sum(case when t.status = com.fakejira.task.TaskStatus.DONE then 1 else 0 end)
+            from Task t where t.parent.id in :taskIds group by t.parent.id
+            """)
+    List<Object[]> subtaskProgressFor(@Param("taskIds") java.util.Collection<Long> taskIds);
+
+    List<Task> findByParentIdOrderByIdAsc(Long parentId);
+
+    List<Task> findByEpicId(Long epicId);
+
+    List<Task> findByBoardColumnId(Long columnId);
+
+    java.util.Optional<Task> findByProjectIdAndNumber(Long projectId, Integer number);
+
+    @Modifying
+    @Query("update Task t set t.parent = null where t.parent.id = :parentId")
+    int detachSubtasks(@Param("parentId") Long parentId);
+
     long countByAssigneeId(Long assigneeId);
 
     long countByAssigneeIdAndStatus(Long assigneeId, TaskStatus status);

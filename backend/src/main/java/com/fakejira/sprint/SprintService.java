@@ -8,9 +8,10 @@ import com.fakejira.sprint.SprintDtos.Burndown;
 import com.fakejira.sprint.SprintDtos.BurndownPoint;
 import com.fakejira.sprint.SprintDtos.SprintRequest;
 import com.fakejira.sprint.SprintDtos.SprintResponse;
+import com.fakejira.sprint.SprintDtos.VelocityEntry;
 import com.fakejira.task.Task;
 import com.fakejira.task.TaskRepository;
-import com.fakejira.task.TaskService;
+import com.fakejira.task.TaskSupport;
 import com.fakejira.task.TaskStatus;
 import com.fakejira.user.User;
 import org.springframework.stereotype.Service;
@@ -32,16 +33,16 @@ public class SprintService {
 
     private final SprintRepository sprints;
     private final TaskRepository tasks;
-    private final TaskService taskService;
+    private final TaskSupport taskSupport;
     private final ProjectAccess access;
     private final LiveEvents live;
     private final Clock clock;
 
-    public SprintService(SprintRepository sprints, TaskRepository tasks, TaskService taskService,
+    public SprintService(SprintRepository sprints, TaskRepository tasks, TaskSupport taskSupport,
                          ProjectAccess access, LiveEvents live) {
         this.sprints = sprints;
         this.tasks = tasks;
-        this.taskService = taskService;
+        this.taskSupport = taskSupport;
         this.access = access;
         this.live = live;
         this.clock = Clock.systemDefaultZone();
@@ -54,7 +55,7 @@ public class SprintService {
     }
 
     public SprintResponse create(User user, String projectKey, SprintRequest request) {
-        Project project = access.memberProject(projectKey, user);
+        Project project = access.editorProject(projectKey, user);
         String name = blank(request.name())
                 ? project.getKey() + " Sprint " + (sprints.countByProjectId(project.getId()) + 1)
                 : request.name().trim();
@@ -65,7 +66,7 @@ public class SprintService {
     }
 
     public SprintResponse update(User user, Long id, SprintRequest request) {
-        Sprint sprint = memberSprint(id, user);
+        Sprint sprint = editableSprint(id, user);
         if (sprint.getState() == SprintState.COMPLETED) {
             throw ApiException.badRequest("Completed sprints cannot be changed.");
         }
@@ -81,7 +82,7 @@ public class SprintService {
     }
 
     public SprintResponse start(User user, Long id, SprintRequest request) {
-        Sprint sprint = memberSprint(id, user);
+        Sprint sprint = editableSprint(id, user);
         if (sprint.getState() != SprintState.PLANNED) {
             throw ApiException.badRequest("Only planned sprints can be started.");
         }
@@ -101,19 +102,22 @@ public class SprintService {
 
     /** Finishes the sprint; unfinished tasks go back to the backlog. */
     public SprintResponse complete(User user, Long id) {
-        Sprint sprint = memberSprint(id, user);
+        Sprint sprint = editableSprint(id, user);
         if (sprint.getState() != SprintState.ACTIVE) {
             throw ApiException.badRequest("Only the active sprint can be completed.");
         }
         int carried = 0;
+        int carriedPoints = 0;
         for (Task task : tasks.findBySprintId(sprint.getId())) {
             if (task.getStatus() != TaskStatus.DONE) {
                 task.setSprint(null);
-                taskService.record(task, user, "moved the task to the backlog when " + sprint.getName() + " was completed");
+                taskSupport.record(task, user, "moved the task to the backlog when " + sprint.getName() + " was completed");
                 carried++;
+                carriedPoints += points(task);
             }
         }
         sprint.setCarriedOver(carried);
+        sprint.setCarriedOverPoints(carriedPoints);
         sprint.setState(SprintState.COMPLETED);
         sprint.setCompletedAt(Instant.now());
         live.projectChanged(sprint.getProject());
@@ -122,7 +126,7 @@ public class SprintService {
 
     /** Deletes a sprint that has not started; its tasks go back to the backlog. */
     public void delete(User user, Long id) {
-        Sprint sprint = memberSprint(id, user);
+        Sprint sprint = editableSprint(id, user);
         if (sprint.getState() != SprintState.PLANNED) {
             throw ApiException.badRequest("Only planned sprints can be deleted.");
         }
@@ -132,8 +136,8 @@ public class SprintService {
     }
 
     /**
-     * Remaining (not done) task count at the end of each sprint day, plus the ideal straight line.
-     * Tasks carried over to the backlog at completion count as never done.
+     * Remaining (not done) tasks and story points at the end of each sprint day, plus the ideal
+     * straight lines. Tasks carried over to the backlog at completion count as never done.
      */
     @Transactional(readOnly = true)
     public Burndown burndown(User user, Long id) {
@@ -144,7 +148,9 @@ public class SprintService {
         ZoneId zone = clock.getZone();
         List<Task> sprintTasks = tasks.findBySprintId(sprint.getId());
         int total = sprintTasks.size() + sprint.getCarriedOver();
-        int done = (int) sprintTasks.stream().filter(task -> task.getStatus() == TaskStatus.DONE).count();
+        int totalPoints = sprintTasks.stream().mapToInt(SprintService::points).sum() + sprint.getCarriedOverPoints();
+        List<Task> done = sprintTasks.stream().filter(task -> task.getStatus() == TaskStatus.DONE).toList();
+        int donePoints = done.stream().mapToInt(SprintService::points).sum();
 
         LocalDate start = sprint.getStartDate();
         LocalDate end = sprint.getEndDate();
@@ -163,17 +169,53 @@ public class SprintService {
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             Instant endOfDay = day.plusDays(1).atStartOfDay(zone).toInstant();
             Integer remaining = null;
+            Integer remainingPoints = null;
             if (!day.isAfter(lastActual)) {
-                long finished = sprintTasks.stream()
-                        .filter(task -> task.getStatus() == TaskStatus.DONE && task.getCompletedAt() != null
-                                && task.getCompletedAt().isBefore(endOfDay))
-                        .count();
-                remaining = total - (int) finished;
+                List<Task> finished = done.stream()
+                        .filter(task -> task.getCompletedAt() != null && task.getCompletedAt().isBefore(endOfDay))
+                        .toList();
+                remaining = total - finished.size();
+                remainingPoints = totalPoints - finished.stream().mapToInt(SprintService::points).sum();
             }
-            double ideal = total * (1.0 - (double) ChronoUnit.DAYS.between(start, day) / days);
-            points.add(new BurndownPoint(day, remaining, Math.max(0, Math.round(ideal * 100) / 100.0)));
+            double fraction = 1.0 - (double) ChronoUnit.DAYS.between(start, day) / days;
+            points.add(new BurndownPoint(day, remaining, round(total * fraction), remainingPoints,
+                    round(totalPoints * fraction)));
         }
-        return new Burndown(SprintResponse.of(sprint), total, done, points);
+        return new Burndown(SprintResponse.of(sprint), total, done.size(), totalPoints, donePoints, points);
+    }
+
+    /** Committed vs completed points and tasks for the last 10 completed sprints, oldest first. */
+    @Transactional(readOnly = true)
+    public List<VelocityEntry> velocity(User user, String projectKey) {
+        Project project = access.memberProject(projectKey, user);
+        List<Sprint> completed = sprints.findByProjectIdOrderByCreatedAtAsc(project.getId()).stream()
+                .filter(s -> s.getState() == SprintState.COMPLETED)
+                .toList();
+        List<Sprint> recent = completed.subList(Math.max(0, completed.size() - 10), completed.size());
+        List<VelocityEntry> result = new ArrayList<>();
+        for (Sprint sprint : recent) {
+            List<Task> doneTasks = tasks.findBySprintId(sprint.getId()).stream()
+                    .filter(task -> task.getStatus() == TaskStatus.DONE).toList();
+            int donePoints = doneTasks.stream().mapToInt(SprintService::points).sum();
+            result.add(new VelocityEntry(sprint.getId(), sprint.getName(),
+                    donePoints + sprint.getCarriedOverPoints(), donePoints,
+                    doneTasks.size() + sprint.getCarriedOver(), doneTasks.size()));
+        }
+        return result;
+    }
+
+    private static int points(Task task) {
+        return task.getStoryPoints() == null ? 0 : task.getStoryPoints();
+    }
+
+    private static double round(double value) {
+        return Math.max(0, Math.round(value * 100) / 100.0);
+    }
+
+    private Sprint editableSprint(Long id, User user) {
+        Sprint sprint = memberSprint(id, user);
+        access.requireEditor(sprint.getProject(), user);
+        return sprint;
     }
 
     private Sprint memberSprint(Long id, User user) {

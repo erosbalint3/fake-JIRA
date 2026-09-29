@@ -26,18 +26,27 @@ public final class SprintDtos {
             LocalDate startDate,
             LocalDate endDate,
             Instant completedAt,
-            int carriedOver) {
+            int carriedOver,
+            int carriedOverPoints) {
 
         public static SprintResponse of(Sprint sprint) {
             return new SprintResponse(sprint.getId(), sprint.getName(), sprint.getGoal(), sprint.getState(),
-                    sprint.getStartDate(), sprint.getEndDate(), sprint.getCompletedAt(), sprint.getCarriedOver());
+                    sprint.getStartDate(), sprint.getEndDate(), sprint.getCompletedAt(), sprint.getCarriedOver(),
+                    sprint.getCarriedOverPoints());
         }
     }
 
-    /** {@code remaining} is null for days that have not happened yet. */
-    public record BurndownPoint(LocalDate date, Integer remaining, double ideal) {
+    /** {@code remaining}/{@code remainingPoints} are null for days that have not happened yet. */
+    public record BurndownPoint(LocalDate date, Integer remaining, double ideal, Integer remainingPoints,
+                                double idealPoints) {
     }
 
-    public record Burndown(SprintResponse sprint, int total, int done, List<BurndownPoint> points) {
+    public record Burndown(SprintResponse sprint, int total, int done, int totalPoints, int donePoints,
+                           List<BurndownPoint> points) {
+    }
+
+    /** Committed vs completed work per finished sprint (oldest first). */
+    public record VelocityEntry(Long sprintId, String name, int committedPoints, int completedPoints,
+                                int committedTasks, int completedTasks) {
     }
 }

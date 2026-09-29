@@ -6,10 +6,11 @@ const HEIGHT = 280;
 const PAD = { top: 16, right: 64, bottom: 32, left: 40 };
 
 /**
- * Sprint burndown: remaining open tasks per day (solid) against the ideal straight line (dashed).
+ * Sprint burndown: remaining open tasks (or story points) per day (solid) against the ideal straight line (dashed).
  * Colors come from the validated chart palette (--viz-remaining / --viz-ideal).
  */
-export function BurndownChart({ points, total }: { points: BurndownPoint[]; total: number }) {
+export function BurndownChart({ points, total, unit = 'tasks' }: { points: BurndownPoint[]; total: number; unit?: 'tasks' | 'points' }) {
+  const noun = unit === 'points' ? 'points' : 'tasks';
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -38,10 +39,13 @@ export function BurndownChart({ points, total }: { points: BurndownPoint[]; tota
   }, [yMax]);
 
   const xEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(plotW / 70))));
-  const actual = points.map((p, i) => ({ ...p, i })).filter((p) => p.remaining !== null);
+  const series = useMemo(() => (unit === 'points'
+    ? points.map((p) => ({ ...p, remaining: p.remainingPoints, ideal: p.idealPoints }))
+    : points), [points, unit]);
+  const actual = series.map((p, i) => ({ ...p, i })).filter((p) => p.remaining !== null);
   const last = actual[actual.length - 1];
   const actualPath = actual.map((p, k) => `${k ? 'L' : 'M'}${x(p.i)},${y(p.remaining!)}`).join(' ');
-  const idealPath = points.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.ideal)}`).join(' ');
+  const idealPath = series.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p.ideal)}`).join(' ');
 
   const onMove = (event: PointerEvent<SVGRectElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -50,13 +54,13 @@ export function BurndownChart({ points, total }: { points: BurndownPoint[]; tota
     setHover(Math.max(0, Math.min(points.length - 1, index)));
   };
 
-  const hovered = hover === null ? null : points[hover];
+  const hovered = hover === null ? null : series[hover];
 
   return (
     <div className="viz-root">
       <div className="viz-head">
         <ul className="viz-legend" aria-label="Legend">
-          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-remaining" /></svg>Remaining tasks</li>
+          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-remaining" /></svg>Remaining {noun}</li>
           <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-ideal" /></svg>Ideal</li>
         </ul>
         <button type="button" className="link small" onClick={() => setAsTable(!asTable)}>
@@ -69,7 +73,7 @@ export function BurndownChart({ points, total }: { points: BurndownPoint[]; tota
           <table className="viz-table">
             <thead><tr><th>Day</th><th>Remaining</th><th>Ideal</th></tr></thead>
             <tbody>
-              {points.map((p) => (
+              {series.map((p) => (
                 <tr key={p.date}>
                   <td>{formatDay(p.date)}</td>
                   <td>{p.remaining ?? '—'}</td>
@@ -82,7 +86,7 @@ export function BurndownChart({ points, total }: { points: BurndownPoint[]; tota
       ) : (
         <div className="viz-plot" ref={wrapRef}>
           <svg width={width} height={HEIGHT} role="img"
-            aria-label={`Burndown: ${last ? `${last.remaining} of ${total} tasks remaining` : 'no data yet'}`}>
+            aria-label={`Burndown: ${last ? `${last.remaining} of ${total} ${noun} remaining` : 'no data yet'}`}>
             {yTicks.map((v) => (
               <g key={v}>
                 <line x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} className="viz-grid" />

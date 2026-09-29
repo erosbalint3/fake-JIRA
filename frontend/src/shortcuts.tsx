@@ -3,11 +3,13 @@ import { useEffect, useRef } from 'react';
 export const FOCUS_SEARCH = 'fakejira:focus-search';
 
 export const SHORTCUTS: [string, string][] = [
+  ['Ctrl+K', 'Command palette: search tasks, projects and pages'],
   ['c', 'Create a task'],
-  ['/', 'Search'],
+  ['/', 'Search this page'],
   ['g then b', 'Go to board'],
   ['g then k', 'Go to backlog'],
   ['g then r', 'Go to sprint reports'],
+  ['g then o', 'Go to roadmap'],
   ['g then m', 'Go to my work'],
   ['g then n', 'Go to notifications'],
   ['g then p', 'Go to projects'],
@@ -23,7 +25,7 @@ function isTyping(target: EventTarget | null) {
 /** Global single-key shortcuts; ignored while typing or when a dialog is open. */
 export function useShortcuts(handlers: {
   create: () => void;
-  go: (target: 'b' | 'k' | 'r' | 'm' | 'n' | 'p') => void;
+  go: (target: 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p') => void;
   help: () => void;
 }) {
   const latest = useRef(handlers);
@@ -35,10 +37,10 @@ export function useShortcuts(handlers: {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       if (document.querySelector('.modal')) return;
       const key = event.key;
-      if (pendingG && Date.now() - pendingG < 1200 && 'bkrmnp'.includes(key) && key.length === 1) {
+      if (pendingG && Date.now() - pendingG < 1200 && 'bkromnp'.includes(key) && key.length === 1) {
         event.preventDefault();
         pendingG = 0;
-        latest.current.go(key as 'b' | 'k' | 'r' | 'm' | 'n' | 'p');
+        latest.current.go(key as 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p');
         return;
       }
       pendingG = 0;

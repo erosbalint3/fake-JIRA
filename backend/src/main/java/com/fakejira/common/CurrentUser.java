@@ -19,7 +19,19 @@ public class CurrentUser {
     }
 
     public User from(Jwt jwt) {
-        return users.findById(Long.valueOf(jwt.getSubject()))
+        User user = users.findById(Long.valueOf(jwt.getSubject()))
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Your session is no longer valid."));
+        if (user.getStatus() != com.fakejira.user.AccountStatus.ACTIVE) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Your account is not active.");
+        }
+        return user;
+    }
+
+    public User admin(Jwt jwt) {
+        User user = from(jwt);
+        if (!user.isAdmin()) {
+            throw ApiException.forbidden("Only admins can do that.");
+        }
+        return user;
     }
 }

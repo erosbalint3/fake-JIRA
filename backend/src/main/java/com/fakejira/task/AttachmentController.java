@@ -29,15 +29,15 @@ import java.util.List;
 @RestController
 public class AttachmentController {
 
-    private final TaskService taskService;
+    private final TaskSupport support;
     private final AttachmentRepository attachments;
     private final AttachmentStorage storage;
     private final CurrentUser currentUser;
     private final LiveEvents live;
 
-    public AttachmentController(TaskService taskService, AttachmentRepository attachments,
+    public AttachmentController(TaskSupport support, AttachmentRepository attachments,
                                 AttachmentStorage storage, CurrentUser currentUser, LiveEvents live) {
-        this.taskService = taskService;
+        this.support = support;
         this.attachments = attachments;
         this.storage = storage;
         this.currentUser = currentUser;
@@ -47,7 +47,7 @@ public class AttachmentController {
     @GetMapping("/api/tasks/{taskId}/attachments")
     @Transactional(readOnly = true)
     public List<AttachmentResponse> list(@AuthenticationPrincipal Jwt jwt, @PathVariable Long taskId) {
-        taskService.memberTask(taskId, currentUser.from(jwt));
+        support.memberTask(taskId, currentUser.from(jwt));
         return attachments.findForTask(taskId).stream().map(AttachmentResponse::of).toList();
     }
 
@@ -57,7 +57,7 @@ public class AttachmentController {
     public AttachmentResponse upload(@AuthenticationPrincipal Jwt jwt, @PathVariable Long taskId,
                                      @RequestParam("file") MultipartFile file) {
         User user = currentUser.from(jwt);
-        Task task = taskService.memberTask(taskId, user);
+        Task task = support.editableTask(taskId, user);
         if (file.isEmpty()) {
             throw ApiException.badRequest("The file is empty.");
         }
@@ -68,7 +68,7 @@ public class AttachmentController {
         String storageName = storage.store(file);
         Attachment attachment = attachments.save(
                 new Attachment(task, user, filename, contentType, file.getSize(), storageName));
-        taskService.record(task, user, "attached " + filename);
+        support.record(task, user, "attached " + filename);
         live.taskChanged(task);
         return AttachmentResponse.of(attachment);
     }
@@ -96,11 +96,14 @@ public class AttachmentController {
         User user = currentUser.from(jwt);
         Attachment attachment = memberAttachment(id, user);
         Task task = attachment.getTask();
+        if (!task.getProject().canEdit(user)) {
+            throw ApiException.forbidden("You have read-only access to " + task.getProject().getKey() + ".");
+        }
         if (!attachment.getUploader().getId().equals(user.getId()) && !task.getProject().isOwner(user)) {
             throw ApiException.forbidden("Only the uploader or the project owner can delete this file.");
         }
         attachments.delete(attachment);
-        taskService.record(task, user, "removed attachment " + attachment.getFilename());
+        support.record(task, user, "removed attachment " + attachment.getFilename());
         TaskCleanup.afterCommit(() -> storage.delete(attachment.getStorageName()));
         live.taskChanged(task);
     }

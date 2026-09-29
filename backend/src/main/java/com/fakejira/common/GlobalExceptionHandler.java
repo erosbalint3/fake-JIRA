@@ -1,5 +1,6 @@
 package com.fakejira.common;
 
+import com.fakejira.config.RateLimitFilter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -28,6 +29,13 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
         return ResponseEntity.badRequest().body(new ErrorResponse("Please fix the highlighted fields.", fieldErrors));
+    }
+
+    @ExceptionHandler(RateLimitFilter.RateLimitedException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimited(RateLimitFilter.RateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(new ErrorResponse(ex.getMessage()));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

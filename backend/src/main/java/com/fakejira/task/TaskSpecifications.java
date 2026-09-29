@@ -69,6 +69,13 @@ final class TaskSpecifications {
                     default -> where.add(cb.equal(root.get("assignee").get("id"), parseId(filter.assignee(), "assignee")));
                 }
             }
+            if (filter.epic() != null && !filter.epic().isBlank()) {
+                if ("none".equalsIgnoreCase(filter.epic())) {
+                    where.add(cb.isNull(root.get("epic")));
+                } else {
+                    where.add(cb.equal(root.get("epic").get("id"), parseId(filter.epic(), "epic")));
+                }
+            }
             return cb.and(where.toArray(Predicate[]::new));
         };
     }

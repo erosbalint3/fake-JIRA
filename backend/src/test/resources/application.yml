@@ -10,3 +10,9 @@ app:
   jwt:
     secret: test-secret-test-secret-test-secret-123
     validity: 1h
+  rate-limit:
+    enabled: false
+  backup:
+    cron: "-"
+  digest:
+    cron: "-"

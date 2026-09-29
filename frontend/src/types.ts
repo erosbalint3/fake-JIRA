@@ -3,10 +3,22 @@ export type Status = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
 export type Scope = 'AVAILABLE' | 'MINE' | 'REPORTED' | 'ALL';
 export type SprintState = 'PLANNED' | 'ACTIVE' | 'COMPLETED';
 
+export type Role = 'OWNER' | 'MEMBER' | 'VIEWER';
+export type EmailFrequency = 'OFF' | 'INSTANT' | 'DAILY' | 'WEEKLY';
+export type RegistrationMode = 'OPEN' | 'INVITE' | 'APPROVAL';
+export type LinkType = 'BLOCKS' | 'RELATES' | 'DUPLICATES';
+
 export interface User {
   id: number;
   username: string;
   email: string;
+  /** Display name, or the username when none is set. */
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface Member extends User {
+  role: Role;
 }
 
 export interface Project {
@@ -15,7 +27,9 @@ export interface Project {
   name: string;
   description: string;
   owner: User;
-  members: User[];
+  members: Member[];
+  githubEnabled: boolean;
+  githubAutoDone: boolean;
   createdAt: string;
 }
 
@@ -31,6 +45,39 @@ export interface Sprint extends SprintRef {
   endDate: string | null;
   completedAt: string | null;
   carriedOver: number;
+  carriedOverPoints: number;
+}
+
+export interface EpicRef {
+  id: number;
+  name: string;
+  colorIndex: number;
+}
+
+export interface Epic extends EpicRef {
+  description: string;
+  startDate: string | null;
+  dueDate: string | null;
+  taskCount: number;
+  doneCount: number;
+  points: number;
+  donePoints: number;
+}
+
+export interface TaskRef {
+  id: number;
+  key: string;
+  title: string;
+  status: Status;
+  assignee: User | null;
+}
+
+export interface BoardColumn {
+  id: number;
+  name: string;
+  status: Status;
+  position: number;
+  wipLimit: number | null;
 }
 
 export interface Task {
@@ -46,10 +93,18 @@ export interface Task {
   reporter: User;
   assignee: User | null;
   sprint: SprintRef | null;
+  epic: EpicRef | null;
+  parent: TaskRef | null;
+  columnId: number | null;
   dueDate: string | null;
   labels: string[];
+  storyPoints: number | null;
   checklistTotal: number;
   checklistDone: number;
+  subtaskTotal: number;
+  subtaskDone: number;
+  timeSpentMinutes: number;
+  blocked: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -61,12 +116,120 @@ export interface TaskInput {
   priority: Priority;
   dueDate: string | null;
   labels: string[];
+  storyPoints: number | null;
+  epicId: number | null;
 }
 
 export interface CreateTaskInput extends TaskInput {
   projectKey: string;
   assigneeId: number | null;
   sprintId: number | null;
+  parentId?: number | null;
+}
+
+export interface BulkChange {
+  status?: Status;
+  priority?: Priority;
+  assigneeId?: number;
+  unassign?: boolean;
+  sprintId?: number;
+  clearSprint?: boolean;
+  epicId?: number;
+  clearEpic?: boolean;
+  addLabels?: string[];
+  removeLabels?: string[];
+  delete?: boolean;
+}
+
+export interface TaskLink {
+  id: number;
+  type: LinkType;
+  label: string;
+  task: TaskRef;
+}
+
+export interface TimeEntry {
+  id: number;
+  user: User;
+  minutes: number;
+  date: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface DevLink {
+  id: number;
+  kind: 'COMMIT' | 'PULL_REQUEST';
+  url: string;
+  title: string;
+  state: string | null;
+  author: string | null;
+  updatedAt: string;
+}
+
+export interface SavedFilter {
+  id: number;
+  name: string;
+  query: string;
+  shared: boolean;
+  owner: string;
+  mine: boolean;
+}
+
+export interface TimeReport {
+  from: string;
+  to: string;
+  totalMinutes: number;
+  entries: number;
+  byUser: { user: User; minutes: number }[];
+  byTask: { task: TaskRef; minutes: number }[];
+}
+
+export interface VelocityEntry {
+  sprintId: number;
+  name: string;
+  committedPoints: number;
+  completedPoints: number;
+  committedTasks: number;
+  completedTasks: number;
+}
+
+export interface Invite {
+  id: number;
+  code: string;
+  link: string;
+  email: string | null;
+  projectKey: string | null;
+  createdBy: string;
+  expiresAt: string;
+  usedAt: string | null;
+  usedBy: string | null;
+}
+
+export interface AdminUser {
+  user: User;
+  admin: boolean;
+  status: 'ACTIVE' | 'PENDING';
+  createdAt: string;
+}
+
+export interface Backup {
+  name: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface GithubSettings {
+  enabled: boolean;
+  webhookUrl: string;
+  secret: string | null;
+  autoDone: boolean;
+}
+
+export interface ImportResult {
+  created: number;
+  keys: string[];
+  errors: { row: number; message: string }[];
 }
 
 export interface Comment {
@@ -110,20 +273,26 @@ export interface Profile {
   user: User;
   memberSince: string;
   stats: { assigned: number; inProgress: number; done: number; reported: number };
-  emailNotifications: boolean;
+  admin: boolean;
+  emailFrequency: EmailFrequency;
   emailAvailable: boolean;
+  pushDevices: number;
 }
 
 export interface BurndownPoint {
   date: string;
   remaining: number | null;
   ideal: number;
+  remainingPoints: number | null;
+  idealPoints: number;
 }
 
 export interface Burndown {
   sprint: Sprint;
   total: number;
   done: number;
+  totalPoints: number;
+  donePoints: number;
   points: BurndownPoint[];
 }
 
@@ -145,3 +314,16 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 };
 
 export const PRIORITY_ORDER: Record<Priority, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+export const LINK_TYPES: { type: LinkType; outward: string }[] = [
+  { type: 'BLOCKS', outward: 'blocks' },
+  { type: 'RELATES', outward: 'relates to' },
+  { type: 'DUPLICATES', outward: 'duplicates' },
+];
+
+export const EMAIL_FREQUENCY_LABEL: Record<EmailFrequency, string> = {
+  OFF: 'Off',
+  INSTANT: 'Right away',
+  DAILY: 'Daily digest',
+  WEEKLY: 'Weekly digest (Mondays)',
+};
