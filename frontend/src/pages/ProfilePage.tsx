@@ -6,6 +6,12 @@ import { currentSubscription, disablePush, enablePush, pushSupported } from '../
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
+import { ConnectedAccounts } from '../components/profile/ConnectedAccounts';
+import { DataPanel } from '../components/profile/DataPanel';
+import { PasswordForm } from '../components/profile/PasswordForm';
+import { SessionsPanel } from '../components/profile/SessionsPanel';
+import { TwoFactorPanel, useLinkedToast } from '../components/profile/TwoFactorPanel';
+import { useLocation } from 'react-router-dom';
 import { formatDate } from '../format';
 import { EMAIL_FREQUENCY_LABEL, type EmailFrequency, type Profile } from '../types';
 
@@ -15,11 +21,15 @@ export function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const location = useLocation();
+  useLinkedToast((location.state as { linked?: string } | null)?.linked);
+  const reload = () => {
+    api.profile().then(setProfile).catch(() => {});
+  };
 
   useEffect(() => {
     api.profile().then((p) => {
@@ -87,28 +97,6 @@ export function ProfilePage() {
     }
   };
 
-  const changePassword = async (event: FormEvent) => {
-    event.preventDefault();
-    if (passwords.next !== passwords.confirm) {
-      setErrors({ confirm: 'Passwords do not match' });
-      return;
-    }
-    setBusy(true);
-    setErrors({});
-    try {
-      await api.changePassword(passwords.current, passwords.next);
-      setPasswords({ current: '', next: '', confirm: '' });
-      toast('Password updated');
-    } catch (e) {
-      const apiError = e as ApiError;
-      setErrors(Object.keys(apiError.fieldErrors).length
-        ? { current: apiError.fieldErrors.currentPassword, next: apiError.fieldErrors.newPassword }
-        : { current: apiError.message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (error) return <div className="page"><ErrorBanner message={error} /></div>;
   if (!profile) return <div className="page"><Spinner /></div>;
 
@@ -118,15 +106,6 @@ export function ProfilePage() {
     { label: 'Completed', value: profile.stats.done, icon: CheckCircle2 },
     { label: 'Reported', value: profile.stats.reported, icon: PenSquare },
   ];
-
-  const input = (key: keyof typeof passwords, label: string, autoComplete: string) => (
-    <label className="field">
-      <span>{label}</span>
-      <input type="password" autoComplete={autoComplete} value={passwords[key]}
-        onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })} aria-invalid={!!errors[key]} />
-      {errors[key] && <small className="field-error">{errors[key]}</small>}
-    </label>
-  );
 
   return (
     <div className="page">
@@ -215,17 +194,18 @@ export function ProfilePage() {
         )}
       </section>
 
+      <h2 className="section-heading" id="security">Security</h2>
       <section className="panel">
-        <h2 className="panel-title">Change password</h2>
-        <form className="form narrow" onSubmit={changePassword}>
-          {input('current', 'Current password', 'current-password')}
-          {input('next', 'New password', 'new-password')}
-          {input('confirm', 'Confirm new password', 'new-password')}
-          <div>
-            <button className="btn btn-primary" disabled={busy || !passwords.current || !passwords.next}>Update password</button>
-          </div>
-        </form>
+        <h2 className="panel-title">{profile.passwordSet ? 'Change password' : 'Set a password'}</h2>
+        {!profile.passwordSet && (
+          <p className="muted small hint">You sign in with Google or GitHub. Set a password to also sign in with your username.</p>
+        )}
+        <PasswordForm hasPassword={profile.passwordSet} onDone={reload} />
       </section>
+      <TwoFactorPanel profile={profile} onChange={reload} />
+      <ConnectedAccounts linked={profile.identities} passwordSet={profile.passwordSet} onChange={reload} />
+      <SessionsPanel />
+      <DataPanel profile={profile} />
 
       <section className="panel danger-zone">
         <div>

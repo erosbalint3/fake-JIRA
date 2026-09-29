@@ -86,9 +86,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export interface AuthResponse {
   token: string | null;
-  user: User;
+  /** Null while the two-factor step is pending. */
+  user: User | null;
   pending: boolean;
   admin: boolean;
+  /** Set when an authenticator code is needed: send it with the code to loginSecondStep. */
+  challenge: string | null;
 }
 
 export interface TaskFilters {
@@ -117,7 +120,23 @@ export const api = {
     request<AuthResponse>('POST', '/auth/login', { login, password }),
   register: (username: string, email: string, password: string, inviteCode?: string) =>
     request<AuthResponse>('POST', '/auth/register', { username, email, password, inviteCode }),
-  me: () => request<{ user: User; admin: boolean }>('GET', '/auth/me'),
+  me: () => request<{ user: User; admin: boolean; mustChangePassword: boolean }>('GET', '/auth/me'),
+  loginSecondStep: (challenge: string, code: string) => request<AuthResponse>('POST', '/auth/login/2fa', { challenge, code }),
+  logout: () => request<void>('POST', '/auth/logout'),
+  passwordPolicy: () => request<PasswordRules>('GET', '/auth/password-policy'),
+  providers: () => request<{ id: string; label: string }[]>('GET', '/auth/providers'),
+  oauthUrl: (provider: string, invite?: string) =>
+    request<{ url: string }>('POST', `/auth/oauth/${provider}/url`, { invite: invite || null }),
+  unlinkIdentity: (provider: string) => request<void>('DELETE', `/profile/identities/${provider}`),
+  sessions: () => request<SessionInfo[]>('GET', '/profile/sessions'),
+  revokeSession: (id: string) => request<void>('DELETE', `/profile/sessions/${encodeURIComponent(id)}`),
+  signOutOthers: () => request<{ signedOut: number }>('POST', '/profile/sessions/sign-out-others'),
+  twoFactorSetup: () => request<{ secret: string; otpauthUrl: string }>('POST', '/profile/2fa/setup'),
+  twoFactorEnable: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/profile/2fa/enable', { code }),
+  twoFactorDisable: (password: string, code: string) => request<void>('POST', '/profile/2fa/disable', { password, code }),
+  recoveryCodes: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/profile/2fa/recovery-codes', { code }),
+  exportData: async () => (await send('GET', '/profile/export')).blob(),
+  deleteAccount: (password: string, code: string) => request<void>('DELETE', '/profile', { password, code }),
   inviteInfo: (code: string) => request<{ valid: boolean; email: string | null; projectName: string | null;
     registrationMode: RegistrationMode }>('GET', `/auth/invite${query({ code })}`),
   forgotPassword: (email: string) => request<void>('POST', '/auth/forgot-password', { email }),
@@ -133,6 +152,13 @@ export const api = {
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
   addMember: (key: string, login: string, role: Role = 'MEMBER') =>
     request<Project>('POST', `/projects/${key}/members`, { login, role }),
+  transferOwnership: (key: string, userId: number) => request<Project>('PUT', `/projects/${key}/owner`, { userId }),
+  chatHooks: (key: string) => request<ChatHook[]>('GET', `/projects/${key}/chat-hooks`),
+  addChatHook: (key: string, kind: ChatHook['kind'], url: string, events: ChatEvent[]) =>
+    request<ChatHook>('POST', `/projects/${key}/chat-hooks`, { kind, url, events }),
+  updateChatHook: (id: number, events: ChatEvent[]) => request<ChatHook>('PUT', `/chat-hooks/${id}`, { events }),
+  deleteChatHook: (id: number) => request<void>('DELETE', `/chat-hooks/${id}`),
+  testChatHook: (id: number) => request<{ delivered: boolean; error: string | null }>('POST', `/chat-hooks/${id}/test`),
   setRole: (key: string, userId: number, role: Role) =>
     request<Project>('PUT', `/projects/${key}/members/${userId}/role`, { role }),
   removeMember: (key: string, userId: number) => request<void>('DELETE', `/projects/${key}/members/${userId}`),
@@ -198,6 +224,9 @@ export const api = {
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
   addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
+  editComment: (id: number, commentId: number, body: string) =>
+    request<Comment>('PUT', `/tasks/${id}/comments/${commentId}`, { body }),
+  deleteComment: (id: number, commentId: number) => request<void>('DELETE', `/tasks/${id}/comments/${commentId}`),
   activity: (id: number) => request<Activity[]>('GET', `/tasks/${id}/activity`),
   links: (id: number) => request<TaskLink[]>('GET', `/tasks/${id}/links`),
   addLink: (id: number, type: LinkType, targetKey: string) =>
@@ -260,6 +289,14 @@ export const api = {
   approveUser: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/approve`),
   rejectUser: (id: number) => request<void>('DELETE', `/admin/users/${id}`),
   setAdmin: (id: number, admin: boolean) => request<AdminUser>('PUT', `/admin/users/${id}/admin`, { admin }),
+  audit: (params: { action?: string; q?: string; page?: number }) =>
+    request<AuditPage>('GET', `/admin/audit${query(params)}`),
+  resetTwoFactor: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/reset-2fa`),
+  requirePasswordChange: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/require-password-change`),
+  signOutUser: (id: number) => request<{ signedOut: number }>('POST', `/admin/users/${id}/sign-out`),
+  deleteUserAccount: (id: number) => request<void>('DELETE', `/admin/users/${id}/account`),
+  adminPasswordPolicy: () => request<PasswordRules>('GET', '/admin/password-policy'),
+  setPasswordPolicy: (rules: PasswordRules) => request<PasswordRules>('PUT', '/admin/password-policy', rules),
   backups: () => request<Backup[]>('GET', '/admin/backups'),
   backupNow: () => request<Backup>('POST', '/admin/backups'),
   backupBlob: async (name: string) => (await send('GET', `/admin/backups/${encodeURIComponent(name)}`)).blob(),
@@ -273,6 +310,52 @@ export interface AdminOverview {
   /** Public URL used in email links; learned from admin visits unless APP_BASE_URL is set. */
   siteUrl: string;
   siteUrlConfigured: boolean;
+}
+
+export interface PasswordRules {
+  minLength: number;
+  upper: boolean;
+  digit: boolean;
+  special: boolean;
+}
+
+export interface SessionInfo {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+  ip: string | null;
+  device: string | null;
+  method: string;
+}
+
+export type ChatEvent = 'TASK_CREATED' | 'TASK_DONE' | 'STATUS_CHANGED' | 'COMMENT_ADDED' | 'SPRINT';
+
+export interface ChatHook {
+  id: number;
+  kind: 'SLACK' | 'DISCORD';
+  url: string;
+  events: ChatEvent[];
+  lastDeliveryAt: string | null;
+  lastError: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  createdAt: string;
+  actor: string | null;
+  action: string;
+  target: string | null;
+  details: string | null;
+  ip: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  total: number;
+  page: number;
+  pages: number;
+  actions: string[];
 }
 
 export interface EpicInput {

@@ -4,13 +4,8 @@ import { CheckCircle2, MailCheck } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useToast } from '../toast';
 import { Logo } from '../components/Logo';
+import { usePasswordRules } from '../passwordRules';
 
-const RULES: [RegExp, string][] = [
-  [/.{8,}/, 'At least 8 characters'],
-  [/[A-Z]/, 'An uppercase letter'],
-  [/\d/, 'A number'],
-  [/[^A-Za-z0-9]/, 'A special character'],
-];
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -74,6 +69,7 @@ export function ResetPasswordPage() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const navigate = useNavigate();
+  const rules = usePasswordRules();
   const toast = useToast();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -123,8 +119,8 @@ export function ResetPasswordPage() {
           <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <ul className="rules">
-          {RULES.map(([rule, text]) => (
-            <li key={text} className={rule.test(password) ? 'ok' : ''}><CheckCircle2 size={14} /> {text}</li>
+          {rules.map((rule) => (
+            <li key={rule.label} className={rule.test(password) ? 'ok' : ''}><CheckCircle2 size={14} /> {rule.label}</li>
           ))}
         </ul>
         <label className="field">

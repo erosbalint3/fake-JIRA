@@ -13,6 +13,7 @@ import { Avatar } from '../components/Avatar';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
 import { DevPanel } from '../components/task/DevPanel';
+import { CommentItem } from '../components/task/CommentItem';
 import { LinksPanel } from '../components/task/LinksPanel';
 import { SubtasksPanel } from '../components/task/SubtasksPanel';
 import { TimePanel } from '../components/task/TimePanel';
@@ -370,16 +371,10 @@ export function TaskDetailPage() {
               <>
                 <ul className="comments">
                   {comments.map((c) => (
-                    <li key={c.id} className="comment">
-                      <Avatar user={c.author} size={32} />
-                      <div className="comment-body">
-                        <div className="comment-head">
-                          <strong>{c.author.displayName}</strong>
-                          <span className="muted small" title={new Date(c.createdAt).toLocaleString()}>{timeAgo(c.createdAt)}</span>
-                        </div>
-                        <Markdown>{c.body}</Markdown>
-                      </div>
-                    </li>
+                    <CommentItem key={c.id} taskId={task.id} comment={c} me={user} canEdit={canEdit} isOwner={isOwner}
+                      members={members}
+                      onChanged={(updated) => setComments((list) => list.map((x) => (x.id === updated.id ? updated : x)))}
+                      onDeleted={(id) => setComments((list) => list.filter((x) => x.id !== id))} />
                   ))}
                 </ul>
                 {canEdit && <form className="comment-form" onSubmit={postComment}>

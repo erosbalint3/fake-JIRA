@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Archive, Check, Copy, Download, Link2, Plus, Shield, ShieldOff, Trash2, X } from 'lucide-react';
+import { Archive, Check, Copy, Download, Link2, Plus, Shield, Trash2, X } from 'lucide-react';
 import { api, ApiError, inviteLink, saveBlob } from '../api';
 import { useAuth } from '../auth';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
+import { ActionMenu } from '../components/ActionMenu';
+import { ConfirmDialog } from '../components/Modal';
+import { AuditLogPanel } from '../components/admin/AuditLogPanel';
+import { PasswordPolicyPanel } from '../components/admin/PasswordPolicyPanel';
+import type { User } from '../types';
 import { fileSize, formatDate, timeAgo } from '../format';
 import type { AdminUser, Backup, Invite, RegistrationMode } from '../types';
 
@@ -27,6 +32,8 @@ export function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'people' | 'security' | 'backups'>('people');
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reset2fa'; user: User } | null>(null);
 
   const load = useCallback(() => {
     api.admin().then((overview) => {
@@ -105,6 +112,14 @@ export function AdminPage() {
                 : ' Reload this page to update it, or set APP_BASE_URL in your .env.'}
             </div>
           )}
+          <nav className="tabs" role="tablist" aria-label="Admin sections">
+            {([['people', 'People & sign-up'], ['security', 'Security'], ['backups', 'Backups']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={`tab ${tab === id ? 'active' : ''}`}
+                onClick={() => setTab(id)}>{label}</button>
+            ))}
+          </nav>
+          {tab === 'people' && (
+          <>
           <section className="panel">
             <h2 className="panel-title">Sign-up</h2>
             <div className="mode-options" role="radiogroup" aria-label="Who can sign up">
@@ -173,25 +188,42 @@ export function AdminPage() {
           <section className="panel">
             <h2 className="panel-title">Users <span className="count">{active.length}</span></h2>
             <ul className="member-list">
-              {active.map(({ user: u, admin: isAdmin, createdAt }) => (
+              {active.map(({ user: u, admin: isAdmin, createdAt, twoFactor, mustChangePassword }) => (
                 <li key={u.id}>
                   <Avatar user={u} size={32} />
                   <div className="member-text">
                     <strong>{u.displayName}{u.id === user?.id && <span className="muted"> (you)</span>}</strong>
                     <span className="muted small">@{u.username} · {u.email} · joined {formatDate(createdAt)}</span>
                   </div>
+                  {twoFactor && <span className="tag-2fa" title="Two-step verification is on">2FA</span>}
+                  {mustChangePassword && <span className="tag-warn">Must change password</span>}
                   {isAdmin && <span className="owner-badge"><Shield size={13} /> Admin</span>}
-                  <button className="icon-button" disabled={busy}
-                    aria-label={isAdmin ? `Remove admin rights from ${u.username}` : `Make ${u.username} an admin`}
-                    title={isAdmin ? 'Remove admin rights' : 'Make admin'}
-                    onClick={() => act(() => api.setAdmin(u.id, !isAdmin), isAdmin ? `${u.username} is no longer an admin` : `${u.username} is now an admin`)}>
-                    {isAdmin ? <ShieldOff size={17} /> : <Shield size={17} />}
-                  </button>
+                  <ActionMenu label={`Actions for ${u.username}`} actions={[
+                    { label: isAdmin ? 'Remove admin rights' : 'Make admin',
+                      onSelect: () => act(() => api.setAdmin(u.id, !isAdmin), isAdmin ? `${u.username} is no longer an admin` : `${u.username} is now an admin`) },
+                    { label: 'Require password change', hidden: mustChangePassword,
+                      onSelect: () => act(() => api.requirePasswordChange(u.id), `${u.username} must choose a new password`) },
+                    { label: 'Turn off two-step verification', hidden: !twoFactor,
+                      onSelect: () => setConfirm({ kind: 'reset2fa', user: u }) },
+                    { label: 'Sign out everywhere',
+                      onSelect: () => act(() => api.signOutUser(u.id), `${u.username} was signed out everywhere`) },
+                    { label: 'Delete account…', danger: true, hidden: u.id === user?.id,
+                      onSelect: () => setConfirm({ kind: 'delete', user: u }) },
+                  ]} />
                 </li>
               ))}
             </ul>
           </section>
 
+          </>
+          )}
+          {tab === 'security' && (
+          <>
+            <PasswordPolicyPanel />
+            <AuditLogPanel />
+          </>
+          )}
+          {tab === 'backups' && (
           <section className="panel">
             <div className="panel-head">
               <h2 className="panel-title"><Archive size={16} /> Backups</h2>
@@ -223,7 +255,26 @@ export function AdminPage() {
               </ul>
             )}
           </section>
+          )}
         </>
+      )}
+      {confirm?.kind === 'delete' && (
+        <ConfirmDialog title={`Delete ${confirm.user.username}'s account?`} confirmLabel="Delete account" danger busy={busy}
+          message="Projects they own alone are deleted, they leave other projects, and their personal data is erased. Comments and history stay as “Deleted user”. This cannot be undone."
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            await act(() => api.deleteUserAccount(confirm.user.id), `${confirm.user.username}'s account was deleted`);
+            setConfirm(null);
+          }} />
+      )}
+      {confirm?.kind === 'reset2fa' && (
+        <ConfirmDialog title={`Turn off two-step verification for ${confirm.user.username}?`} confirmLabel="Turn off" busy={busy}
+          message="Use this when they lost their phone and recovery codes. They can sign in with their password alone and set it up again."
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            await act(() => api.resetTwoFactor(confirm.user.id), 'Two-step verification turned off');
+            setConfirm(null);
+          }} />
       )}
     </div>
   );

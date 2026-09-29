@@ -10,6 +10,7 @@ import { useToast } from '../toast';
 import { useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import { ConfirmDialog } from '../components/Modal';
+import { ChatHooksSection } from '../components/ChatHooksSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -38,7 +39,7 @@ export function ProjectSettingsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<{ kind: 'remove'; member: Member } | { kind: 'leave' } | { kind: 'delete' } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'remove' | 'transfer'; member: Member } | { kind: 'leave' } | { kind: 'delete' } | null>(null);
   const [deleteText, setDeleteText] = useState('');
 
   useEffect(() => {
@@ -100,10 +101,12 @@ export function ProjectSettingsPage() {
       </section>
 
       <MembersSection project={project} isOwner={isOwner} busy={busy} run={run}
-        onRemove={(member) => setConfirm({ kind: 'remove', member })} />
+        onRemove={(member) => setConfirm({ kind: 'remove', member })}
+        onTransfer={(member) => setConfirm({ kind: 'transfer', member })} />
       {isOwner && <InvitesSection project={project} />}
       <ColumnsSection project={project} canEdit={canEdit} />
       {isOwner && <GithubSection project={project} onChange={refresh} />}
+      {isOwner && <ChatHooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />
 
       <section className="panel danger-zone">
@@ -124,6 +127,15 @@ export function ProjectSettingsPage() {
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
             await run(() => api.removeMember(key, confirm.member.id), `${confirm.member.displayName} removed`);
+            setConfirm(null);
+          }} />
+      )}
+      {confirm?.kind === 'transfer' && (
+        <ConfirmDialog title={`Make ${confirm.member.displayName} the owner?`} confirmLabel="Hand over" busy={busy}
+          message="They get full control of the project and its settings. You stay a member."
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            await run(() => api.transferOwnership(key, confirm.member.id), `${confirm.member.displayName} now owns ${project.name}`);
             setConfirm(null);
           }} />
       )}
@@ -159,9 +171,10 @@ interface MembersProps {
   busy: boolean;
   run: (action: () => Promise<unknown>, message: string) => Promise<boolean>;
   onRemove: (member: Member) => void;
+  onTransfer: (member: Member) => void;
 }
 
-function MembersSection({ project, isOwner, busy, run, onRemove }: MembersProps) {
+function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: MembersProps) {
   const { user } = useAuth();
   const [login, setLogin] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
@@ -194,7 +207,7 @@ function MembersSection({ project, isOwner, busy, run, onRemove }: MembersProps)
   return (
     <section className="panel">
       <h2 className="panel-title">Members <span className="count">{project.members.length}</span></h2>
-      <p className="muted small hint">Members plan and work on tasks. Viewers can see everything and comment, but not change tasks.</p>
+      <p className="muted small hint">Members plan and work on tasks. Viewers can see everything and watch tasks, but not change them or comment.</p>
       {isOwner && (
         <form className="add-member" onSubmit={add}>
           <div className="add-member-input">
@@ -234,6 +247,10 @@ function MembersSection({ project, isOwner, busy, run, onRemove }: MembersProps)
                   <option value="MEMBER">Member</option>
                   <option value="VIEWER">Viewer</option>
                 </select>
+                <button className="icon-button" aria-label={`Make ${member.displayName} the owner`} title="Hand over ownership"
+                  onClick={() => onTransfer(member)}>
+                  <Crown size={17} />
+                </button>
                 <button className="icon-button" aria-label={`Remove ${member.displayName}`} title="Remove from project"
                   onClick={() => onRemove(member)}>
                   <UserMinus size={17} />

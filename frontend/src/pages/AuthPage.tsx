@@ -1,24 +1,25 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, KanbanSquare, Bell, Users } from 'lucide-react';
+import { CheckCircle2, Clock, KanbanSquare, Bell, ShieldCheck, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { RegistrationMode } from '../types';
 import { useAuth } from '../auth';
 import { Logo } from '../components/Logo';
+import { ProviderButtons } from '../components/ProviderButtons';
+import { usePasswordRules } from '../passwordRules';
 
 type Mode = 'login' | 'register';
 
-const PASSWORD_RULES: [RegExp, string][] = [
-  [/.{8,}/, 'At least 8 characters'],
-  [/[A-Z]/, 'An uppercase letter'],
-  [/\d/, 'A number'],
-  [/[^A-Za-z0-9]/, 'A special character'],
-];
 
 export function AuthPage({ mode }: { mode: Mode }) {
-  const { login, register } = useAuth();
-  const navigate = useNavigate();
+  const { login, register, verifyCode } = useAuth();
   const location = useLocation();
+  const passwordRules = usePasswordRules();
+  // Google/GitHub sign-in hands over the 2FA step here.
+  const [challenge, setChallenge] = useState<string | null>(
+    () => (location.state as { challenge?: string } | null)?.challenge ?? null);
+  const [code, setCode] = useState('');
+  const navigate = useNavigate();
   const [fields, setFields] = useState({ login: '', username: '', email: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
@@ -50,7 +51,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
     }
     if (fields.username.trim().length < 4) found.username = 'Username must be at least 4 characters long';
     if (!/^\S+@\S+\.\S+$/.test(fields.email.trim())) found.email = 'Enter a valid email address';
-    if (PASSWORD_RULES.some(([rule]) => !rule.test(fields.password))) found.password = 'Password does not meet the requirements';
+    if (passwordRules.some((rule) => !rule.test(fields.password))) found.password = 'Password does not meet the requirements';
     if (fields.confirm !== fields.password) found.confirm = 'Passwords do not match';
     return found;
   };
@@ -64,7 +65,12 @@ export function AuthPage({ mode }: { mode: Mode }) {
     setBusy(true);
     try {
       if (mode === 'login') {
-        await login(fields.login.trim(), fields.password);
+        const result = await login(fields.login.trim(), fields.password);
+        if (result.kind === 'code') {
+          setChallenge(result.challenge);
+          setBusy(false);
+          return;
+        }
       } else if (await register(fields.username.trim(), fields.email.trim(), fields.password, inviteCode || undefined)) {
         setPending(true);
         setBusy(false);
@@ -76,6 +82,25 @@ export function AuthPage({ mode }: { mode: Mode }) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors);
         setFormError(error.message);
+      }
+      setBusy(false);
+    }
+  };
+
+  const submitCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!challenge || !code.trim()) return;
+    setBusy(true);
+    setFormError('');
+    try {
+      await verifyCode(challenge, code.trim());
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from && from !== '/login' ? from : '/', { replace: true });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setFormError(error.fieldErrors.code ?? error.message);
+        // An expired or exhausted step means starting over.
+        if (error.status === 401) setChallenge(null);
       }
       setBusy(false);
     }
@@ -109,7 +134,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <li><Bell size={18} /> Live updates, @mentions and email notifications</li>
           </ul>
         </div>
-        <span className="auth-foot">FakeJIRA 3.0</span>
+        <span className="auth-foot">FakeJIRA 4.0</span>
       </section>
 
       <section className="auth-panel">
@@ -122,6 +147,28 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </p>
             <Link to="/login" className="btn btn-primary btn-block">Back to sign in</Link>
           </div>
+        ) : challenge ? (
+          <form className="auth-card form" onSubmit={submitCode} noValidate>
+            <ShieldCheck size={32} className="auth-icon" />
+            <div>
+              <h2>Two-step verification</h2>
+              <p className="muted">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+            </div>
+            {formError && <div className="alert">{formError}</div>}
+            <label className="field">
+              <span>Code</span>
+              <input value={code} onChange={(e) => setCode(e.target.value)} autoFocus inputMode="text"
+                autoComplete="one-time-code" placeholder="123 456" className="code-input" maxLength={12} />
+            </label>
+            <button className="btn btn-primary btn-block" disabled={busy || !code.trim()}>
+              {busy ? 'Checking…' : 'Verify'}
+            </button>
+            <button type="button" className="link small center" onClick={() => {
+              setChallenge(null);
+              setCode('');
+              setFormError('');
+            }}>Back to sign in</button>
+          </form>
         ) : mode === 'register' && inviteOnly ? (
           <div className="auth-card form">
             <h2>Sign-up is invite-only</h2>
@@ -163,9 +210,9 @@ export function AuthPage({ mode }: { mode: Mode }) {
               {field('email', 'Email', 'email', 'email')}
               {field('password', 'Password', 'password', 'new-password')}
               <ul className="rules">
-                {PASSWORD_RULES.map(([rule, text]) => (
-                  <li key={text} className={rule.test(fields.password) ? 'ok' : ''}>
-                    <CheckCircle2 size={14} /> {text}
+                {passwordRules.map((rule) => (
+                  <li key={rule.label} className={rule.test(fields.password) ? 'ok' : ''}>
+                    <CheckCircle2 size={14} /> {rule.label}
                   </li>
                 ))}
               </ul>
@@ -176,6 +223,8 @@ export function AuthPage({ mode }: { mode: Mode }) {
           <button className="btn btn-primary btn-block" disabled={busy}>
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
+          <ProviderButtons invite={inviteCode} onError={setFormError}
+            verb={mode === 'login' ? 'Continue' : 'Sign up'} />
 
           <p className="muted center">
             {mode === 'login' ? (

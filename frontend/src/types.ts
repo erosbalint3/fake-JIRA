@@ -211,6 +211,8 @@ export interface AdminUser {
   admin: boolean;
   status: 'ACTIVE' | 'PENDING';
   createdAt: string;
+  twoFactor: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface Backup {
@@ -237,6 +239,7 @@ export interface Comment {
   author: User;
   body: string;
   createdAt: string;
+  editedAt: string | null;
 }
 
 export interface ChecklistItem {
@@ -277,6 +280,13 @@ export interface Profile {
   emailFrequency: EmailFrequency;
   emailAvailable: boolean;
   pushDevices: number;
+  twoFactorEnabled: boolean;
+  recoveryCodesLeft: number;
+  /** False for accounts created with Google/GitHub that never set a password. */
+  passwordSet: boolean;
+  mustChangePassword: boolean;
+  /** Connected sign-in providers, e.g. ["github"]. */
+  identities: string[];
 }
 
 export interface BurndownPoint {

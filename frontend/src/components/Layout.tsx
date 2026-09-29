@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
@@ -15,7 +15,9 @@ import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { CommandPalette } from './CommandPalette';
 import { Modal } from './Modal';
+import { Spinner } from './States';
 import { TaskFormModal } from './TaskFormModal';
+import { PasswordForm } from './profile/PasswordForm';
 import { useProjectAccess } from '../useProject';
 import type { SavedFilter } from '../types';
 
@@ -32,7 +34,7 @@ const CreateTaskContext = createContext<(defaults?: CreateDefaults) => void>(() 
 export const useCreateTask = () => useContext(CreateTaskContext);
 
 export function Layout() {
-  const { user, admin, logout } = useAuth();
+  const { user, admin, logout, mustChangePassword } = useAuth();
   const { theme, toggle } = useTheme();
   const { connected } = useLive();
   const { projects, byKey, lastKey, remember } = useProjects();
@@ -254,7 +256,9 @@ export function Layout() {
         <div className="scrim" onClick={() => setMenuOpen(false)} />
 
         <main className="main">
-          <Outlet />
+          <Suspense fallback={<div className="page"><Spinner /></div>}>
+            <Outlet />
+          </Suspense>
         </main>
 
         {creating && (
@@ -275,6 +279,13 @@ export function Layout() {
             }}
             onClose={() => setCreating(null)}
           />
+        )}
+        {mustChangePassword && (
+          <Modal title="Choose a new password" onClose={() => {}} dismissible={false}>
+            <p className="muted small hint">An administrator asked you to change your password before continuing.</p>
+            <PasswordForm hasPassword />
+            <button className="link small" onClick={logout}>Sign out instead</button>
+          </Modal>
         )}
         {paletteOpen && (
           <CommandPalette projectKey={currentProject?.key} onClose={() => setPaletteOpen(false)}

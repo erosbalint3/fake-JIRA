@@ -2,16 +2,26 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, setUnauthorizedHandler, tokenStore, type AuthResponse } from './api';
 import type { User } from './types';
 
+/** What a sign-in attempt led to. */
+export type SignInResult = { kind: 'signed-in' } | { kind: 'code'; challenge: string };
+
 interface AuthState {
   user: User | null;
   admin: boolean;
+  /** An admin requires a new password before anything else. */
+  mustChangePassword: boolean;
   loading: boolean;
-  login: (login: string, password: string) => Promise<void>;
+  login: (login: string, password: string) => Promise<SignInResult>;
+  /** Second step with an authenticator or recovery code. */
+  verifyCode: (challenge: string, code: string) => Promise<void>;
+  /** Signs in with a token from Google/GitHub sign-in. */
+  acceptToken: (token: string) => Promise<void>;
   /** Resolves to true when the account was created but waits for admin approval. */
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<boolean>;
   logout: () => void;
   /** Replaces the cached user after profile changes (name, avatar). */
   updateUser: (user: User) => void;
+  passwordChanged: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -19,48 +29,72 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [admin, setAdmin] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loading, setLoading] = useState(() => tokenStore.get() !== null);
 
-  const logout = useCallback(() => {
+  const clear = useCallback(() => {
     tokenStore.set(null);
     setUser(null);
     setAdmin(false);
+    setMustChangePassword(false);
+  }, []);
+
+  const logout = useCallback(() => {
+    // End the session on the server too, so the token stops working everywhere.
+    if (tokenStore.get()) api.logout().catch(() => {});
+    clear();
+  }, [clear]);
+
+  const loadMe = useCallback(async () => {
+    const me = await api.me();
+    setUser(me.user);
+    setAdmin(me.admin);
+    setMustChangePassword(me.mustChangePassword);
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(logout);
+    setUnauthorizedHandler(clear);
     if (!tokenStore.get()) return;
-    api.me()
-      .then((me) => {
-        setUser(me.user);
-        setAdmin(me.admin);
-      })
-      .catch(() => logout())
-      .finally(() => setLoading(false));
-  }, [logout]);
+    loadMe().catch(() => clear()).finally(() => setLoading(false));
+  }, [clear, loadMe]);
 
   const value = useMemo<AuthState>(() => {
-    const signIn = (response: AuthResponse) => {
-      if (!response.token) return;
+    const signIn = async (response: AuthResponse): Promise<SignInResult> => {
+      if (response.challenge) return { kind: 'code', challenge: response.challenge };
+      if (!response.token) return { kind: 'signed-in' };
       tokenStore.set(response.token);
-      setUser(response.user);
-      setAdmin(response.admin);
+      await loadMe();
+      return { kind: 'signed-in' };
     };
     return {
       user,
       admin,
+      mustChangePassword,
       loading,
       logout,
       updateUser: setUser,
+      passwordChanged: () => setMustChangePassword(false),
       login: async (login, password) => signIn(await api.login(login, password)),
+      verifyCode: async (challenge, code) => {
+        await signIn(await api.loginSecondStep(challenge, code));
+      },
+      acceptToken: async (token) => {
+        tokenStore.set(token);
+        try {
+          await loadMe();
+        } catch (e) {
+          clear();
+          throw e;
+        }
+      },
       register: async (username, email, password, inviteCode) => {
         const response = await api.register(username, email, password, inviteCode);
         if (response.pending) return true;
-        signIn(response);
+        await signIn(response);
         return false;
       },
     };
-  }, [user, admin, loading, logout]);
+  }, [user, admin, mustChangePassword, loading, logout, loadMe, clear]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -102,7 +102,7 @@ You can bundle the React app into the Spring Boot jar and serve everything from 
 ```bash
 cd frontend && npm install && npm run build:backend
 cd ../backend && mvn package
-java -jar target/fake-jira-3.0.0.jar      # http://localhost:8080
+java -jar target/fake-jira-4.0.0.jar      # http://localhost:8080
 ```
 
 ## Running with Docker
