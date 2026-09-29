@@ -44,6 +44,9 @@ public class SecurityConfig {
                                 "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**").permitAll()
+                        // Secret-token URLs: the personal calendar feed and the inbound email webhook.
+                        .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))

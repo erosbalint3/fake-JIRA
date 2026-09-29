@@ -43,6 +43,20 @@ app:
   base-url: ${APP_BASE_URL:}
   mail:
     from: ${APP_MAIL_FROM:FakeJIRA <no-reply@localhost>}
+    inbound:
+      # Reply-by-email and email-to-task: the mailbox that receives mail, e.g. jira@example.com.
+      # Plus-addressing must deliver jira+anything@example.com to it. Off when empty.
+      address: ${APP_MAIL_INBOUND_ADDRESS:}
+      # Shared secret for POST /api/inbound/email (header X-Inbound-Secret), for inbound-mail services.
+      secret: ${APP_MAIL_INBOUND_SECRET:}
+      # Or poll a mailbox over IMAP(S).
+      imap:
+        host: ${APP_MAIL_INBOUND_IMAP_HOST:}
+        port: ${APP_MAIL_INBOUND_IMAP_PORT:993}
+        username: ${APP_MAIL_INBOUND_IMAP_USERNAME:}
+        password: ${APP_MAIL_INBOUND_IMAP_PASSWORD:}
+        folder: ${APP_MAIL_INBOUND_IMAP_FOLDER:INBOX}
+        poll-ms: ${APP_MAIL_INBOUND_IMAP_POLL_MS:60000}
   storage:
     dir: ${APP_STORAGE_DIR:./data/attachments}
   registration:

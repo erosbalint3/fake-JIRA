@@ -61,7 +61,7 @@ public final class ProjectDtos {
     }
 
     public record MemberResponse(Long id, String username, String email, String displayName, String avatarUrl,
-                                 Role role) {
+                                 Role role, java.time.LocalDate awayUntil) {
     }
 
     public record ProjectResponse(
@@ -90,7 +90,7 @@ public final class ProjectDtos {
                                 Role role = project.isOwner(member) ? Role.OWNER
                                         : project.isViewer(member) ? Role.VIEWER : Role.MEMBER;
                                 return new MemberResponse(summary.id(), summary.username(), summary.email(),
-                                        summary.displayName(), summary.avatarUrl(), role);
+                                        summary.displayName(), summary.avatarUrl(), role, summary.awayUntil());
                             })
                             .sorted(Comparator.comparing(MemberResponse::username, String.CASE_INSENSITIVE_ORDER))
                             .toList(),

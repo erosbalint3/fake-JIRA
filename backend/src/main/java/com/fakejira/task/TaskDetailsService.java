@@ -47,11 +47,14 @@ public class TaskDetailsService {
     private final ChatNotifier chat;
     private final CommentReactionRepository reactions;
 
+    private final com.fakejira.team.TeamRepository teams;
+
     public TaskDetailsService(TaskSupport support, TaskService taskService, CommentRepository comments,
                               ChecklistItemRepository checklist, TaskActivityRepository activity,
                               TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks,
                               NotificationService notifications, LiveEvents live, ChatNotifier chat,
-                              CommentReactionRepository reactions) {
+                              CommentReactionRepository reactions, com.fakejira.team.TeamRepository teams) {
+        this.teams = teams;
         this.reactions = reactions;
         this.support = support;
         this.taskService = taskService;
@@ -190,13 +193,21 @@ public class TaskDetailsService {
         return comment;
     }
 
-    /** Project members @mentioned in the body, except usernames in {@code alreadyMentioned}. */
+    /**
+     * Project members @mentioned in the body, directly or through a team (@design), except names in
+     * {@code alreadyMentioned}.
+     */
     private Map<Long, User> mentionedMembers(Task task, String body, Set<String> alreadyMentioned) {
         Map<Long, User> mentioned = new HashMap<>();
-        Set<String> names = MentionParser.usernames(body);
+        Set<String> names = new java.util.HashSet<>(MentionParser.usernames(body));
+        names.removeAll(alreadyMentioned);
+        Set<Long> viaTeams = new java.util.HashSet<>();
+        if (!names.isEmpty()) {
+            teams.findByHandles(names).forEach(team -> team.getMembers().forEach(m -> viaTeams.add(m.getId())));
+        }
         for (User member : task.getProject().getMembers()) {
             String name = member.getUsername().toLowerCase(Locale.ROOT);
-            if (names.contains(name) && !alreadyMentioned.contains(name)) {
+            if (names.contains(name) || viaTeams.contains(member.getId())) {
                 mentioned.put(member.getId(), member);
             }
         }

@@ -67,7 +67,12 @@ public class ProfileController {
     public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats, boolean admin,
                                   EmailFrequency emailFrequency, boolean emailAvailable, int pushDevices,
                                   boolean twoFactorEnabled, int recoveryCodesLeft, boolean passwordSet,
-                                  boolean mustChangePassword, java.util.List<String> identities) {
+                                  boolean mustChangePassword, java.util.List<String> identities, Away away,
+                                  boolean calendarFeed) {
+    }
+
+    /** Out-of-office settings; all null when none are set. */
+    public record Away(java.time.LocalDate from, java.time.LocalDate until, String message) {
     }
 
     /** Only non-null fields change. An empty display name removes it. */
@@ -89,7 +94,8 @@ public class ProfileController {
         return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats, user.isAdmin(),
                 user.getEmailFrequency(), mail.isEnabled(), (int) push.countByUserId(user.getId()),
                 user.isTotpEnabled(), twoFactor.remainingRecoveryCodes(user), user.isPasswordSet(),
-                user.isMustChangePassword(), identities.providersFor(user.getId()));
+                user.isMustChangePassword(), identities.providersFor(user.getId()),
+                new Away(user.getAwayFrom(), user.getAwayUntil(), user.getAwayMessage()), user.getCalendarToken() != null);
     }
 
     @PutMapping("/settings")

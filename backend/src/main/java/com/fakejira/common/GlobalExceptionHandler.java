@@ -18,6 +18,13 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /** Query-language errors carry the character position so the editor can point at it. */
+    @ExceptionHandler(com.fakejira.search.Fql.FqlException.class)
+    public ResponseEntity<ErrorResponse> handleFql(com.fakejira.search.Fql.FqlException ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponse(ex.getMessage(),
+                Map.of("q", ex.getMessage(), "position", String.valueOf(ex.position()))));
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException ex) {
         if (!ex.getFieldErrors().isEmpty()) {

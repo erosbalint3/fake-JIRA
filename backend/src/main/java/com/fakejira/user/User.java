@@ -86,6 +86,18 @@ public class User {
 
     private Instant deletedAt;
 
+    /** Out of office: first and last day away (inclusive), with an optional note. */
+    private java.time.LocalDate awayFrom;
+
+    private java.time.LocalDate awayUntil;
+
+    @Column(length = 200)
+    private String awayMessage;
+
+    /** Secret for the personal iCal feed URL; null when the feed is off. */
+    @Column(length = 48, unique = true)
+    private String calendarToken;
+
     protected User() {
     }
 
@@ -260,6 +272,41 @@ public class User {
         this.emailFrequency = EmailFrequency.OFF;
         this.emailNotifications = false;
         this.deletedAt = Instant.now();
+        this.calendarToken = null;
+        this.awayFrom = null;
+        this.awayUntil = null;
+        this.awayMessage = null;
         disableTotp();
+    }
+
+    public java.time.LocalDate getAwayFrom() {
+        return awayFrom;
+    }
+
+    public java.time.LocalDate getAwayUntil() {
+        return awayUntil;
+    }
+
+    public String getAwayMessage() {
+        return awayMessage;
+    }
+
+    public void setAway(java.time.LocalDate from, java.time.LocalDate until, String message) {
+        this.awayFrom = from;
+        this.awayUntil = until;
+        this.awayMessage = message;
+    }
+
+    /** True when {@code day} falls in the out-of-office period. */
+    public boolean isAwayOn(java.time.LocalDate day) {
+        return awayUntil != null && !day.isAfter(awayUntil) && (awayFrom == null || !day.isBefore(awayFrom));
+    }
+
+    public String getCalendarToken() {
+        return calendarToken;
+    }
+
+    public void setCalendarToken(String calendarToken) {
+        this.calendarToken = calendarToken;
     }
 }

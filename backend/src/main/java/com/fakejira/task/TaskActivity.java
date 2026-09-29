@@ -70,6 +70,10 @@ public class TaskActivity {
         return id;
     }
 
+    public Task getTask() {
+        return task;
+    }
+
     public User getActor() {
         return actor;
     }
