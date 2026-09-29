@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { BellRing, Camera, CheckCircle2, Clock, ListChecks, Mail, PenSquare, Trash2 } from 'lucide-react';
+import { BellRing, Camera, Languages, CheckCircle2, Clock, ListChecks, Mail, PenSquare, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '../push';
@@ -16,6 +16,7 @@ import { TwoFactorPanel, useLinkedToast } from '../components/profile/TwoFactorP
 import { useLocation } from 'react-router-dom';
 import { formatDate } from '../format';
 import { EMAIL_FREQUENCY_LABEL, type EmailFrequency, type Profile } from '../types';
+import { language, setLanguage, t } from '../i18n';
 
 export function ProfilePage() {
   const { logout, updateUser } = useAuth();
@@ -50,7 +51,7 @@ export function ProfilePage() {
     event.preventDefault();
     try {
       apply(await api.updateSettings({ displayName }));
-      toast('Display name saved');
+      toast(t("Display name saved"));
     } catch (e) {
       toast((e as ApiError).message, 'error');
     }
@@ -59,14 +60,14 @@ export function ProfilePage() {
   const uploadAvatar = async (file: File | undefined) => {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      toast('Choose an image up to 2 MB', 'error');
+      toast(t("Choose an image up to 2 MB"), 'error');
       return;
     }
     try {
       const user = await api.uploadAvatar(file);
       updateUser(user);
       setProfile((p) => (p ? { ...p, user } : p));
-      toast('Profile picture updated');
+      toast(t("Profile picture updated"));
     } catch (e) {
       toast((e as ApiError).message, 'error');
     }
@@ -84,7 +85,7 @@ export function ProfilePage() {
       if (pushOn) {
         await disablePush();
         setPushOn(false);
-        toast('Push notifications turned off for this device');
+        toast(t("Push notifications turned off for this device"));
       } else {
         await enablePush();
         setPushOn(true);
@@ -114,8 +115,8 @@ export function ProfilePage() {
       <section className="profile-hero panel">
         <div className="avatar-edit">
           <Avatar user={profile.user} size={80} />
-          <button className="avatar-edit-button" onClick={() => fileRef.current?.click()} aria-label="Change profile picture"
-            title="Change profile picture">
+          <button className="avatar-edit-button" onClick={() => fileRef.current?.click()} aria-label={t("Change profile picture")}
+            title={t("Change profile picture")}>
             <Camera size={15} />
           </button>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden
@@ -129,7 +130,7 @@ export function ProfilePage() {
           <p className="muted">@{profile.user.username} · {profile.user.email}</p>
           <p className="muted small">Member since {formatDate(profile.memberSince)}{profile.admin ? ' · Admin' : ''}</p>
           {profile.user.avatarUrl && (
-            <button className="link small" onClick={removeAvatar}><Trash2 size={13} /> Remove photo</button>
+            <button className="link small" onClick={removeAvatar}><Trash2 size={13} /> {t("Remove photo")}</button>
           )}
         </div>
       </section>
@@ -145,23 +146,40 @@ export function ProfilePage() {
       </div>
 
       <section className="panel">
-        <h2 className="panel-title">Display name</h2>
+        <h2 className="panel-title">{t("Display name")}</h2>
         <form className="inline-form" onSubmit={saveName}>
-          <input value={displayName} maxLength={60} placeholder={profile.user.username} aria-label="Display name"
+          <input value={displayName} maxLength={60} placeholder={profile.user.username} aria-label={t("Display name")}
             onChange={(e) => setDisplayName(e.target.value)} />
-          <button className="btn btn-soft">Save</button>
+          <button className="btn btn-soft">{t("Save")}</button>
         </form>
         <p className="muted small hint">Shown instead of your username. Mentions still use @{profile.user.username}.</p>
       </section>
 
       <section className="panel">
-        <h2 className="panel-title"><Mail size={16} /> Email notifications</h2>
+        <h2 className="panel-title"><Languages size={16} /> {t("Language")}</h2>
+        <select value={language()} aria-label={t("Language")} onChange={async (e) => {
+          const next = e.target.value;
+          try {
+            await api.updateSettings({ language: next });
+          } catch (err) {
+            toast((err as ApiError).message, 'error');
+            return;
+          }
+          setLanguage(next);
+        }}>
+          <option value="en">English</option>
+          <option value="hu">Magyar</option>
+        </select>
+      </section>
+
+      <section className="panel">
+        <h2 className="panel-title"><Mail size={16} /> {t("Email notifications")}</h2>
         <div className="inline-form">
-          <select value={profile.emailFrequency} disabled={!profile.emailAvailable} aria-label="Email frequency"
+          <select value={profile.emailFrequency} disabled={!profile.emailAvailable} aria-label={t("Email frequency")}
             onChange={async (e) => {
               try {
                 apply(await api.updateSettings({ emailFrequency: e.target.value as EmailFrequency }));
-                toast('Email preference saved');
+                toast(t("Email preference saved"));
               } catch (err) {
                 toast((err as ApiError).message, 'error');
               }
@@ -179,7 +197,7 @@ export function ProfilePage() {
       </section>
 
       <section className="panel">
-        <h2 className="panel-title"><BellRing size={16} /> Push notifications</h2>
+        <h2 className="panel-title"><BellRing size={16} /> {t("Push notifications")}</h2>
         {pushSupported() ? (
           <>
             <label className="toggle">
@@ -192,15 +210,15 @@ export function ProfilePage() {
             </p>
           </>
         ) : (
-          <p className="muted">This browser does not support push notifications.</p>
+          <p className="muted">{t("This browser does not support push notifications.")}</p>
         )}
       </section>
 
-      <h2 className="section-heading" id="security">Security</h2>
+      <h2 className="section-heading" id="security">{t("Security")}</h2>
       <section className="panel">
         <h2 className="panel-title">{profile.passwordSet ? 'Change password' : 'Set a password'}</h2>
         {!profile.passwordSet && (
-          <p className="muted small hint">You sign in with Google or GitHub. Set a password to also sign in with your username.</p>
+          <p className="muted small hint">{t("You sign in with Google or GitHub. Set a password to also sign in with your username.")}</p>
         )}
         <PasswordForm hasPassword={profile.passwordSet} onDone={reload} />
       </section>
@@ -213,10 +231,10 @@ export function ProfilePage() {
 
       <section className="panel danger-zone">
         <div>
-          <h2 className="panel-title">Sign out</h2>
-          <p className="muted">End your session on this device.</p>
+          <h2 className="panel-title">{t("Sign out")}</h2>
+          <p className="muted">{t("End your session on this device.")}</p>
         </div>
-        <button className="btn btn-ghost danger" onClick={logout}>Log out</button>
+        <button className="btn btn-ghost danger" onClick={logout}>{t("Log out")}</button>
       </section>
     </div>
   );

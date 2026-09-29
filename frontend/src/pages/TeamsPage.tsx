@@ -7,6 +7,7 @@ import { Avatar } from '../components/Avatar';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import type { Team } from '../types';
+import { t } from '../i18n';
 
 /** Teams group people across projects; @handle mentions everyone and membersOf(handle) works in search. */
 export function TeamsPage() {
@@ -37,19 +38,19 @@ export function TeamsPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Workspace</span>
-          <h1>Teams</h1>
-          <p className="muted">Mention a whole team with <code>@handle</code> in comments, or search with <code>assignee in membersOf(handle)</code>.</p>
+          <span className="eyebrow">{t("Workspace")}</span>
+          <h1>{t("Teams")}</h1>
+          <p className="muted">{t("Mention a whole team with")} <code>@handle</code> {t("in comments, or search with")} <code>assignee in membersOf(handle)</code>.</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={17} /> New team</button>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={17} /> {t("New team")}</button>
         </div>
       </header>
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!teams && !error && <Spinner />}
       {teams && teams.length === 0 && (
-        <EmptyState icon={<Users size={28} />} title="No teams yet">
-          <button className="link" onClick={() => setEditing('new')}>Create the first team</button>
+        <EmptyState icon={<Users size={28} />} title={t("No teams yet")}>
+          <button className="link" onClick={() => setEditing('new')}>{t("Create the first team")}</button>
         </EmptyState>
       )}
       <div className="team-grid">
@@ -62,7 +63,7 @@ export function TeamsPage() {
               </div>
               {team.canEdit && (
                 <span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setEditing(team)}>Edit</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditing(team)}>{t("Edit")}</button>
                   <button className="icon-button" aria-label={`Delete ${team.name}`} onClick={() => setDeleting(team)}><Trash2 size={16} /></button>
                 </span>
               )}
@@ -72,7 +73,7 @@ export function TeamsPage() {
               {team.members.map((m) => (
                 <li key={m.id}>
                   <Avatar user={m} size={24} />
-                  <span>{m.displayName}{m.awayUntil && <span className="away-badge" title={`Away until ${m.awayUntil}`}>away</span>}</span>
+                  <span>{m.displayName}{m.awayUntil && <span className="away-badge" title={`Away until ${m.awayUntil}`}>{t("away")}</span>}</span>
                   <span className="spacer" />
                   {(team.canEdit || m.id === user?.id) && (
                     <button className="link small" onClick={() => run(() => api.removeTeamMember(team.id, m.id),
@@ -91,9 +92,9 @@ export function TeamsPage() {
                 setAdding({ ...adding, [team.id]: '' });
                 run(() => api.addTeamMember(team.id, login), `${login} added to @${team.handle}`);
               }}>
-                <input placeholder="Username or email" value={adding[team.id] ?? ''} aria-label={`Add someone to ${team.name}`}
+                <input placeholder={t("Username or email")} value={adding[team.id] ?? ''} aria-label={`Add someone to ${team.name}`}
                   onChange={(e) => setAdding({ ...adding, [team.id]: e.target.value })} />
-                <button className="btn btn-soft btn-sm"><UserPlus size={15} /> Add</button>
+                <button className="btn btn-soft btn-sm"><UserPlus size={15} /> {t("Add")}</button>
               </form>
             )}
           </section>
@@ -106,7 +107,7 @@ export function TeamsPage() {
       }} />}
       {deleting && (
         <ConfirmDialog title={`Delete ${deleting.name}?`} message={`@${deleting.handle} will stop working in mentions and searches.`}
-          confirmLabel="Delete team" danger onClose={() => setDeleting(null)}
+          confirmLabel={t("Delete team")} danger onClose={() => setDeleting(null)}
           onConfirm={() => {
             const t = deleting;
             setDeleting(null);
@@ -137,22 +138,22 @@ function TeamModal({ team, onClose, onSaved }: { team: Team | null; onClose: () 
   return (
     <Modal title={team ? `Edit ${team.name}` : 'New team'} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="team-form" disabled={!name.trim() || !handle.trim()}>{team ? 'Save' : 'Create'}</button>
       </>
     }>
       <form id="team-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Name</span>
-          <input value={name} maxLength={60} autoFocus placeholder="Design" onChange={(e) => {
+          <span>{t("Name")}</span>
+          <input value={name} maxLength={60} autoFocus placeholder={t("Design")} onChange={(e) => {
             setName(e.target.value);
             if (!touched) setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40));
           }} />
         </label>
         <label className="field">
-          <span>Handle</span>
-          <input value={handle} maxLength={40} placeholder="design" aria-invalid={!!errors.handle}
+          <span>{t("Handle")}</span>
+          <input value={handle} maxLength={40} placeholder={t("design")} aria-invalid={!!errors.handle}
             onChange={(e) => {
               setTouched(true);
               setHandle(e.target.value);
@@ -160,7 +161,7 @@ function TeamModal({ team, onClose, onSaved }: { team: Team | null; onClose: () 
           {errors.handle ? <span className="field-error">{errors.handle}</span> : <span className="muted small">Mention with @{handle || 'handle'}</span>}
         </label>
         <label className="field">
-          <span>Description <span className="muted">(optional)</span></span>
+          <span>{t("Description")} <span className="muted">{t("(optional)")}</span></span>
           <textarea rows={2} maxLength={300} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
       </form>

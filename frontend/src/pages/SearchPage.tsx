@@ -11,6 +11,7 @@ import { FILTERS_CHANGED } from '../components/Layout';
 import { Modal } from '../components/Modal';
 import { EmptyState, Spinner } from '../components/States';
 import { PRIORITY_ORDER, STATUSES, type SearchResult, type Task } from '../types';
+import { t } from '../i18n';
 
 const EXAMPLES = [
   { label: 'My open work', q: 'assignee = me AND status != done ORDER BY priority DESC' },
@@ -111,9 +112,9 @@ export function SearchPage() {
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/search?q=${encodeURIComponent(text)}`);
-      toast('Link copied');
+      toast(t("Link copied"));
     } catch {
-      toast('Could not copy the link', 'error');
+      toast(t("Could not copy the link"), 'error');
     }
   };
 
@@ -121,14 +122,14 @@ export function SearchPage() {
     <div className="page page-wide">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Search</span>
-          <h1>Find tasks</h1>
-          <p className="muted">Query across all your projects. Press Tab to complete a field or value, Enter to search.</p>
+          <span className="eyebrow">{t("Search")}</span>
+          <h1>{t("Find tasks")}</h1>
+          <p className="muted">{t("Query across all your projects. Press Tab to complete a field or value, Enter to search.")}</p>
         </div>
       </header>
       <form className="fql-form" onSubmit={submit}>
         <FqlInput value={text} onChange={setText} onSubmit={() => submit()} errorAt={error?.position ?? null} />
-        <button className="btn btn-primary" disabled={loading}><SearchIcon size={16} /> Search</button>
+        <button className="btn btn-primary" disabled={loading}><SearchIcon size={16} /> {t("Search")}</button>
       </form>
       {error && <div className="alert fql-error" role="alert">{error.message}</div>}
       <div className="chip-row fql-examples">
@@ -136,11 +137,11 @@ export function SearchPage() {
           <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{e.label}</button>
         ))}
         <details className="fql-help">
-          <summary className="link small">Syntax help</summary>
+          <summary className="link small">{t("Syntax help")}</summary>
           <div className="fql-help-body small">
-            <p><code>field operator value</code> joined with <code>AND</code>, <code>OR</code>, <code>NOT</code> and parentheses,
+            <p><code>field operator value</code> {t("joined with")} <code>AND</code>, <code>OR</code>, <code>NOT</code> and parentheses,
               then optionally <code>ORDER BY field [ASC|DESC]</code>.</p>
-            <p>Operators: <code>=</code> <code>!=</code> <code>~</code> (contains) <code>&gt;</code> <code>&lt;</code>
+            <p>Operators: <code>=</code> <code>!=</code> <code>~</code> {t("(contains)")} <code>&gt;</code> <code>&lt;</code>
               <code>in (a, b)</code> <code>not in (…)</code> <code>is empty</code>.</p>
             <p>Dates: <code>2026-10-01</code>, <code>today</code>, <code>-7d</code>, <code>+2w</code>, <code>startOfWeek</code>,
               <code>endOfMonth</code>. People: <code>me</code>, a username, <code>membersOf(team)</code>.</p>
@@ -158,13 +159,13 @@ export function SearchPage() {
               {result.truncated && <span className="muted small"> · showing the first {result.tasks.length}</span>}
             </h2>
             <div className="header-actions">
-              <button className="btn btn-ghost btn-sm" onClick={copyLink}><Link2 size={15} /> Copy link</button>
-              <button className="btn btn-ghost btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={15} /> CSV</button>
-              <button className="btn btn-soft btn-sm" onClick={() => setSaving(true)}><Bookmark size={15} /> Save filter</button>
+              <button className="btn btn-ghost btn-sm" onClick={copyLink}><Link2 size={15} /> {t("Copy link")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={15} /> {t("CSV")}</button>
+              <button className="btn btn-soft btn-sm" onClick={() => setSaving(true)}><Bookmark size={15} /> {t("Save filter")}</button>
             </div>
           </div>
           {rows.length === 0 ? (
-            <EmptyState icon={<SearchIcon size={28} />} title="No tasks match">Try a broader query.</EmptyState>
+            <EmptyState icon={<SearchIcon size={28} />} title={t("No tasks match")}>{t("Try a broader query.")}</EmptyState>
           ) : (
             <div className="table-wrap">
               <table className="data-table">
@@ -224,20 +225,20 @@ function SaveSearchModal({ query, onClose, onSaved }: { query: string; onClose: 
     }
   };
   return (
-    <Modal title="Save filter" onClose={onClose} footer={
+    <Modal title={t("Save filter")} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" form="save-search" disabled={!name.trim() || !project}>Save</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" form="save-search" disabled={!name.trim() || !project}>{t("Save")}</button>
       </>
     }>
       <form id="save-search" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Name</span>
-          <input value={name} maxLength={60} autoFocus placeholder="Overdue bugs" onChange={(e) => setName(e.target.value)} />
+          <span>{t("Name")}</span>
+          <input value={name} maxLength={60} autoFocus placeholder={t("Overdue bugs")} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="field">
-          <span>Show in project</span>
+          <span>{t("Show in project")}</span>
           <select value={project} onChange={(e) => setProject(e.target.value)}>
             {(projects ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} · {p.name}</option>)}
           </select>
@@ -245,7 +246,7 @@ function SaveSearchModal({ query, onClose, onSaved }: { query: string; onClose: 
         <label className="toggle">
           <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} /> Share with the project
         </label>
-        <p className="muted small">Saved filters appear in the sidebar and the command palette.</p>
+        <p className="muted small">{t("Saved filters appear in the sidebar and the command palette.")}</p>
       </form>
     </Modal>
   );

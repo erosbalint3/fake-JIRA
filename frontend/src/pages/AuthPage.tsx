@@ -7,6 +7,7 @@ import { useAuth } from '../auth';
 import { Logo } from '../components/Logo';
 import { ProviderButtons } from '../components/ProviderButtons';
 import { usePasswordRules } from '../passwordRules';
+import { t } from '../i18n';
 
 type Mode = 'login' | 'register';
 
@@ -125,38 +126,38 @@ export function AuthPage({ mode }: { mode: Mode }) {
       <section className="auth-hero">
         <Logo />
         <div>
-          <h1>Plan, pick up and ship work — together.</h1>
-          <p>A lightweight task tracker for small teams. Post tasks, grab what you want to work on and move it across your board.</p>
+          <h1>{t("Plan, pick up and ship work — together.")}</h1>
+          <p>{t("A lightweight task tracker for small teams. Post tasks, grab what you want to work on and move it across your board.")}</p>
           <ul className="auth-features">
-            <li><Users size={18} /> Projects with their own members and task keys</li>
-            <li><KanbanSquare size={18} /> Sprints, drag-and-drop boards and burndown charts</li>
-            <li><CheckCircle2 size={18} /> Checklists, labels, due dates and attachments</li>
-            <li><Bell size={18} /> Live updates, @mentions and email notifications</li>
+            <li><Users size={18} /> {t("Projects with their own members and task keys")}</li>
+            <li><KanbanSquare size={18} /> {t("Sprints, drag-and-drop boards and burndown charts")}</li>
+            <li><CheckCircle2 size={18} /> {t("Checklists, labels, due dates and attachments")}</li>
+            <li><Bell size={18} /> {t("Live updates, @mentions and email notifications")}</li>
           </ul>
         </div>
-        <span className="auth-foot">FakeJIRA 4.0</span>
+        <span className="auth-foot">{t("FakeJIRA 4.0")}</span>
       </section>
 
       <section className="auth-panel">
         {pending ? (
           <div className="auth-card form">
             <Clock size={32} className="auth-icon" />
-            <h2>Almost there</h2>
+            <h2>{t("Almost there")}</h2>
             <p className="muted">
               Your account was created and is waiting for an administrator to approve it. You can sign in as soon as it's approved.
             </p>
-            <Link to="/login" className="btn btn-primary btn-block">Back to sign in</Link>
+            <Link to="/login" className="btn btn-primary btn-block">{t("Back to sign in")}</Link>
           </div>
         ) : challenge ? (
           <form className="auth-card form" onSubmit={submitCode} noValidate>
             <ShieldCheck size={32} className="auth-icon" />
             <div>
-              <h2>Two-step verification</h2>
-              <p className="muted">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+              <h2>{t("Two-step verification")}</h2>
+              <p className="muted">{t("Enter the 6-digit code from your authenticator app, or one of your recovery codes.")}</p>
             </div>
             {formError && <div className="alert">{formError}</div>}
             <label className="field">
-              <span>Code</span>
+              <span>{t("Code")}</span>
               <input value={code} onChange={(e) => setCode(e.target.value)} autoFocus inputMode="text"
                 autoComplete="one-time-code" placeholder="123 456" className="code-input" maxLength={12} />
             </label>
@@ -167,17 +168,17 @@ export function AuthPage({ mode }: { mode: Mode }) {
               setChallenge(null);
               setCode('');
               setFormError('');
-            }}>Back to sign in</button>
+            }}>{t("Back to sign in")}</button>
           </form>
         ) : mode === 'register' && inviteOnly ? (
           <div className="auth-card form">
-            <h2>Sign-up is invite-only</h2>
+            <h2>{t("Sign-up is invite-only")}</h2>
             <p className="muted">
               {inviteCode
                 ? 'This invite link is invalid, already used or expired. Ask for a new one.'
                 : 'Ask an administrator or a project owner to send you an invite link.'}
             </p>
-            <p className="muted center">Already have an account? <Link to="/login">Sign in</Link></p>
+            <p className="muted center">{t("Already have an account?")} <Link to="/login">{t("Sign in")}</Link></p>
           </div>
         ) : (
         <form className="auth-card form" onSubmit={submit} noValidate>
@@ -194,7 +195,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </div>
           )}
           {mode === 'register' && !info?.valid && info?.registrationMode === 'APPROVAL' && (
-            <div className="notice">New accounts are reviewed by an administrator before they can sign in.</div>
+            <div className="notice">{t("New accounts are reviewed by an administrator before they can sign in.")}</div>
           )}
           {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
 
@@ -202,7 +203,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <>
               {field('login', 'Username or email', 'text', 'username')}
               {field('password', 'Password', 'password', 'current-password')}
-              <Link to="/forgot-password" className="small forgot-link">Forgot password?</Link>
+              <Link to="/forgot-password" className="small forgot-link">{t("Forgot password?")}</Link>
             </>
           ) : (
             <>
@@ -230,9 +231,9 @@ export function AuthPage({ mode }: { mode: Mode }) {
             {mode === 'login' ? (
               info?.registrationMode === 'INVITE'
                 ? <>New here? Ask for an invite link to join.</>
-                : <>New here? <Link to="/register">Create an account</Link></>
+                : <>New here? <Link to="/register">{t("Create an account")}</Link></>
             ) : (
-              <>Already have an account? <Link to="/login">Sign in</Link></>
+              <>Already have an account? <Link to="/login">{t("Sign in")}</Link></>
             )}
           </p>
         </form>

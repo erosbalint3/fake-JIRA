@@ -154,6 +154,7 @@ export function FqlInput({ value, onChange, onSubmit, errorAt }: Props) {
         value={value}
         spellCheck={false}
         autoComplete="off"
+        role="combobox"
         aria-label="Query"
         aria-autocomplete="list"
         aria-expanded={open && suggestions.length > 0}

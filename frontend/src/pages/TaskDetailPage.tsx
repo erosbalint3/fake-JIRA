@@ -12,6 +12,7 @@ import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { PokerPanel } from '../components/task/PokerPanel';
 import { ShareModal } from '../components/task/ShareModal';
+import { CustomFieldsPanel } from '../components/task/CustomFieldsPanel';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
@@ -36,6 +37,7 @@ import {
   type DevLink, type Epic, type Release, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
   type User,
 } from '../types';
+import { t } from '../i18n';
 
 const MAX_UPLOAD = 10 * 1024 * 1024;
 
@@ -127,7 +129,7 @@ export function TaskDetailPage() {
     return (
       <div className="page">
         <EmptyState icon={<FileQuestion size={28} />} title={deleted ? 'This task was deleted' : 'Task not found'}>
-          It may have been deleted, or you are not a member of its project. <Link to="/my-work">Go to my work</Link>
+          It may have been deleted, or you are not a member of its project. <Link to="/my-work">{t("Go to my work")}</Link>
         </EmptyState>
       </div>
     );
@@ -275,7 +277,7 @@ export function TaskDetailPage() {
           <Link to={`/p/${task.projectKey}/board`}>{task.projectName}</Link>
           {task.parent && <> / <Link to={`/tasks/${task.parent.id}`}>{task.parent.key}</Link></>} / {task.key}
         </span>
-        {!canEdit && <span className="readonly-badge"><Eye size={13} /> Read-only</span>}
+        {!canEdit && <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
       </div>
 
       <div className="detail">
@@ -332,7 +334,7 @@ export function TaskDetailPage() {
                 <Trash2 size={16} /> Delete
               </button>
             )}
-            <ActionMenu label="More actions" actions={[
+            <ActionMenu label={t("More actions")} actions={[
               { label: 'Copy branch name', onSelect: () => copyText(branchName(task), 'Branch name') },
               { label: 'Copy git checkout command', onSelect: () => copyText(`git checkout -b ${branchName(task)}`, 'Command') },
               { label: 'Copy commit message', onSelect: () => copyText(`${task.key}: ${task.title}`, 'Commit message') },
@@ -352,10 +354,10 @@ export function TaskDetailPage() {
           </div>
 
           <section className="panel">
-            <h2 className="panel-title"><FileText size={16} /> Description</h2>
+            <h2 className="panel-title"><FileText size={16} /> {t("Description")}</h2>
             {task.description
               ? <Markdown>{task.description}</Markdown>
-              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={() => setEditing(true)}>Add one</button></>}</p>}
+              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={() => setEditing(true)}>{t("Add one")}</button></>}</p>}
           </section>
 
           {!task.parent && (
@@ -370,7 +372,7 @@ export function TaskDetailPage() {
             </h2>
             {checklist.length > 0 && (
               <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={checklist.length} aria-valuenow={doneCount}
-                aria-label="Checklist progress">
+                aria-label={t("Checklist progress")}>
                 <span style={{ width: `${(doneCount / checklist.length) * 100}%` }} />
               </div>
             )}
@@ -391,12 +393,12 @@ export function TaskDetailPage() {
             </ul>
             {canEdit && (
               <form className="inline-add" onSubmit={addItem}>
-                <input value={newItem} maxLength={200} placeholder="Add an item…" onChange={(e) => setNewItem(e.target.value)}
-                  aria-label="New checklist item" />
-                <button className="btn btn-soft btn-sm" disabled={!newItem.trim()}>Add</button>
+                <input value={newItem} maxLength={200} placeholder={t("Add an item…")} onChange={(e) => setNewItem(e.target.value)}
+                  aria-label={t("New checklist item")} />
+                <button className="btn btn-soft btn-sm" disabled={!newItem.trim()}>{t("Add")}</button>
               </form>
             )}
-            {!canEdit && checklist.length === 0 && <p className="muted">No checklist.</p>}
+            {!canEdit && checklist.length === 0 && <p className="muted">{t("No checklist.")}</p>}
           </section>
 
           <LinksPanel taskId={task.id} projectKey={task.projectKey} links={links} canEdit={canEdit} onChange={load} />
@@ -419,7 +421,7 @@ export function TaskDetailPage() {
             <div className="tabs compact" role="tablist">
               <button role="tab" aria-selected={tab === 'comments'} className={`tab ${tab === 'comments' ? 'active' : ''}`}
                 onClick={() => setTab('comments')}>
-                <MessageSquare size={15} /> Comments <span className="count">{comments.length}</span>
+                <MessageSquare size={15} /> {t("Comments")} <span className="count">{comments.length}</span>
               </button>
               <button role="tab" aria-selected={tab === 'activity'} className={`tab ${tab === 'activity' ? 'active' : ''}`}
                 onClick={() => setTab('activity')}>
@@ -442,9 +444,9 @@ export function TaskDetailPage() {
                   <Avatar user={user} size={32} />
                   <div className="comment-input">
                     <MarkdownEditor value={comment} onChange={setComment} members={members} rows={3} maxLength={2000}
-                      label="Comment" placeholder="Add a comment… Type @ to mention someone. Ctrl+Enter to send."
+                      label={t("Comment")} placeholder={t("Add a comment… Type @ to mention someone. Ctrl+Enter to send.")}
                       onSubmitShortcut={() => postComment()} onUploadImage={uploadImage} />
-                    <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>Comment</button>
+                    <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>{t("Comment")}</button>
                   </div>
                 </form>}
               </>
@@ -455,13 +457,13 @@ export function TaskDetailPage() {
                     <Avatar user={a.actor} size={24} />
                     <span><strong>{a.actor.displayName}</strong> {a.message}
                       {a.before !== null && a.after !== null && (
-                        <> · <button className="link small" onClick={() => setDiff(a)}>Show changes</button></>
+                        <> · <button className="link small" onClick={() => setDiff(a)}>{t("Show changes")}</button></>
                       )}
                     </span>
                     <span className="muted small" title={new Date(a.createdAt).toLocaleString()}>{timeAgo(a.createdAt)}</span>
                   </li>
                 ))}
-                {activity.length === 0 && <li className="muted">No activity yet.</li>}
+                {activity.length === 0 && <li className="muted">{t("No activity yet.")}</li>}
               </ul>
             )}
           </section>
@@ -469,9 +471,9 @@ export function TaskDetailPage() {
 
         <aside className="detail-side panel">
           <dl className="props">
-            <dt>Status</dt>
+            <dt>{t("Status")}</dt>
             <dd>
-              <select value={task.status} disabled={busy || !canEdit} aria-label="Status"
+              <select value={task.status} disabled={busy || !canEdit} aria-label={t("Status")}
                 onChange={(e) => {
                   const previous = task.status;
                   run(() => api.setStatus(task.id, e.target.value as Status),
@@ -480,9 +482,9 @@ export function TaskDetailPage() {
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </dd>
-            <dt>Assignee</dt>
+            <dt>{t("Assignee")}</dt>
             <dd>
-              <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label="Assignee"
+              <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Assignee")}
                 onChange={(e) => {
                   const previous = task.assignee?.id ?? null;
                   const next = assignable.find((m) => m.id === Number(e.target.value));
@@ -490,7 +492,7 @@ export function TaskDetailPage() {
                     !e.target.value ? 'Unassigned' : next?.awayUntil ? `Assigned — note: ${next.displayName} is away until ${formatDay(next.awayUntil)}`
                       : 'Assignee updated', () => api.assign(task.id, previous));
                 }}>
-                <option value="">Unassigned</option>
+                <option value="">{t("Unassigned")}</option>
                 {assignable.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.displayName}{m.id === user.id ? ' (me)' : ''}{m.awayUntil ? ` — away until ${formatDay(m.awayUntil)}` : ''}
@@ -501,60 +503,60 @@ export function TaskDetailPage() {
                 <span className="away-note small">Away until {formatDay(task.assignee.awayUntil)}</span>
               )}
             </dd>
-            <dt>Priority</dt>
+            <dt>{t("Priority")}</dt>
             <dd>
               <div className="with-icon">
                 <PriorityBadge priority={task.priority} compact />
-                <select value={task.priority} disabled={busy || !canEdit} aria-label="Priority"
+                <select value={task.priority} disabled={busy || !canEdit} aria-label={t("Priority")}
                   onChange={(e) => update({ priority: e.target.value as Priority }, 'Priority updated')}>
                   {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
                 </select>
               </div>
             </dd>
-            <dt>Sprint</dt>
+            <dt>{t("Sprint")}</dt>
             <dd>
-              <select value={task.sprint?.id ?? ''} disabled={busy || !canEdit} aria-label="Sprint"
+              <select value={task.sprint?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Sprint")}
                 onChange={(e) => {
                   const previous = task.sprint?.state === 'COMPLETED' ? null : task.sprint?.id ?? null;
                   run(() => api.moveToSprint(task.id, e.target.value ? Number(e.target.value) : null),
                     e.target.value ? 'Moved to sprint' : 'Moved to backlog', () => api.moveToSprint(task.id, previous));
                 }}>
-                <option value="">Backlog</option>
+                <option value="">{t("Backlog")}</option>
                 {task.sprint?.state === 'COMPLETED' && <option value={task.sprint.id}>{task.sprint.name} (completed)</option>}
                 {sprints.map((s) => <option key={s.id} value={s.id}>{s.name}{s.state === 'ACTIVE' ? ' (active)' : ''}</option>)}
               </select>
             </dd>
-            <dt>Due date</dt>
+            <dt>{t("Due date")}</dt>
             <dd>
-              <input type="date" value={task.dueDate ?? ''} disabled={busy || !canEdit} aria-label="Due date"
+              <input type="date" value={task.dueDate ?? ''} disabled={busy || !canEdit} aria-label={t("Due date")}
                 onChange={(e) => update({ dueDate: e.target.value || null }, e.target.value ? 'Due date set' : 'Due date removed')} />
             </dd>
-            <dt>Points</dt>
+            <dt>{t("Points")}</dt>
             <dd>
               <input type="number" min={0} max={100} key={`sp-${task.storyPoints}`} defaultValue={task.storyPoints ?? ''}
-                disabled={busy || !canEdit} aria-label="Story points" placeholder="–"
+                disabled={busy || !canEdit} aria-label={t("Story points")} placeholder="–"
                 onBlur={(e) => {
                   const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value)));
                   if (value !== task.storyPoints) update({ storyPoints: value }, 'Estimate updated');
                 }} />
             </dd>
-            <dt>Epic</dt>
+            <dt>{t("Epic")}</dt>
             <dd>
-              <select value={task.epic?.id ?? ''} disabled={busy || !canEdit} aria-label="Epic"
+              <select value={task.epic?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Epic")}
                 onChange={(e) => update({ epicId: e.target.value ? Number(e.target.value) : null }, 'Epic updated')}>
-                <option value="">No epic</option>
+                <option value="">{t("No epic")}</option>
                 {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
               </select>
             </dd>
-            <dt>Release</dt>
+            <dt>{t("Release")}</dt>
             <dd>
-              <select value={task.release?.id ?? ''} disabled={busy || !canEdit} aria-label="Release"
+              <select value={task.release?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Release")}
                 onChange={(e) => {
                   const previous = task.release?.id ?? null;
                   run(() => api.setTaskRelease(task.id, e.target.value ? Number(e.target.value) : null),
                     e.target.value ? 'Release updated' : 'Removed from release', () => api.setTaskRelease(task.id, previous));
                 }}>
-                <option value="">No release</option>
+                <option value="">{t("No release")}</option>
                 {task.release && !releases.some((r) => r.id === task.release!.id) && (
                   <option value={task.release.id}>{task.release.name}</option>
                 )}
@@ -563,21 +565,22 @@ export function TaskDetailPage() {
                 ))}
               </select>
             </dd>
-            <dt>Labels</dt>
+            <dt>{t("Labels")}</dt>
             <dd>
-              <button className="labels-button" disabled={!canEdit} onClick={() => setEditingLabels(task.labels)} aria-label="Edit labels">
-                {task.labels.length ? <Labels labels={task.labels} /> : <span className="muted">None</span>}
+              <button className="labels-button" disabled={!canEdit} onClick={() => setEditingLabels(task.labels)} aria-label={t("Edit labels")}>
+                {task.labels.length ? <Labels labels={task.labels} /> : <span className="muted">{t("None")}</span>}
               </button>
             </dd>
-            <dt>Time spent</dt>
-            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">None</span>}</dd>
-            <dt>Reporter</dt>
+            <dt>{t("Time spent")}</dt>
+            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">{t("None")}</span>}</dd>
+            <dt>{t("Reporter")}</dt>
             <dd><span className="person"><Avatar user={task.reporter} size={24} /> {task.reporter.displayName}</span></dd>
-            <dt>Created</dt>
+            <dt>{t("Created")}</dt>
             <dd>{formatDate(task.createdAt)}</dd>
-            <dt>Updated</dt>
+            <dt>{t("Updated")}</dt>
             <dd>{timeAgo(task.updatedAt)}</dd>
           </dl>
+          <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
           {!task.parent && <PokerPanel task={task} canEdit={canEdit} onAccepted={load} />}
         </aside>
       </div>
@@ -593,7 +596,7 @@ export function TaskDetailPage() {
             onSubmit: async (input) => {
               setTask(await api.updateTask(task.id, input));
               setEditing(false);
-              toast('Changes saved');
+              toast(t("Changes saved"));
               api.activity(taskId).then(setActivity).catch(() => {});
             },
           }}
@@ -621,8 +624,8 @@ export function TaskDetailPage() {
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${task.key}?`}
-          message="This removes the task with its subtasks, comments, checklist and files. You can undo for a few seconds."
-          confirmLabel="Delete task"
+          message={t("This removes the task with its subtasks, comments, checklist and files. You can undo for a few seconds.")}
+          confirmLabel={t("Delete task")}
           danger
           busy={busy}
           onConfirm={remove}
@@ -644,9 +647,9 @@ function branchName(task: Task) {
 function DiffModal({ activity, onClose }: { activity: Activity; onClose: () => void }) {
   const lines = diffLines(activity.before ?? '', activity.after ?? '');
   return (
-    <Modal title="Description changes" onClose={onClose} wide>
+    <Modal title={t("Description changes")} onClose={onClose} wide>
       <p className="muted small">{activity.actor.displayName} · {new Date(activity.createdAt).toLocaleString()}</p>
-      <pre className="diff" aria-label="Changes">
+      <pre className="diff" aria-label={t("Changes")}>
         {lines.map((line, i) => (
           <div key={i} className={`diff-${line.kind}`}>
             <span className="diff-sign" aria-hidden>{line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' '}</span>
@@ -699,7 +702,7 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
 
   return (
     <Modal title={`Move ${task.key}`} onClose={onClose} footer={<>
-      <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+      <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
       <button className="btn btn-primary" disabled={busy || !target} onClick={async () => {
         setBusy(true);
         try {
@@ -712,9 +715,9 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
     </>}>
       <div className="form">
         {error && <div className="alert">{error}</div>}
-        {targets.length === 0 ? <p className="muted">You can't edit any other project.</p> : (
+        {targets.length === 0 ? <p className="muted">{t("You can't edit any other project.")}</p> : (
           <label className="field">
-            <span>Project</span>
+            <span>{t("Project")}</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
               {targets.map((p) => <option key={p.key} value={p.key}>{p.name} ({p.key})</option>)}
             </select>
@@ -738,10 +741,10 @@ function LabelsModal({ projectKey, value, onSave, onClose }: {
     api.labels(projectKey).then(setSuggestions).catch(() => {});
   }, [projectKey]);
   return (
-    <Modal title="Labels" onClose={onClose} footer={
+    <Modal title={t("Labels")} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={() => onSave(labels)}>Save</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" onClick={() => onSave(labels)}>{t("Save")}</button>
       </>
     }>
       <LabelInput value={labels} onChange={setLabels} suggestions={suggestions} />

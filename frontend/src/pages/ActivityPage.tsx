@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { formatDate, timeAgo } from '../format';
 import type { FeedItem } from '../types';
+import { t } from '../i18n';
 
 const PAGE = 40;
 
@@ -53,23 +54,23 @@ export function ActivityPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Activity</span>
-          <h1>What's happening</h1>
+          <span className="eyebrow">{t("Activity")}</span>
+          <h1>{t("What's happening")}</h1>
         </div>
         <div className="header-actions">
-          <select value={project} onChange={(e) => setProject(e.target.value)} aria-label="Project">
-            <option value="">All projects</option>
+          <select value={project} onChange={(e) => setProject(e.target.value)} aria-label={t("Project")}>
+            <option value="">{t("All projects")}</option>
             {(projects ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} · {p.name}</option>)}
           </select>
-          <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Person">
-            <option value="">Everyone</option>
+          <select value={person} onChange={(e) => setPerson(e.target.value)} aria-label={t("Person")}>
+            <option value="">{t("Everyone")}</option>
             {[...people.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([u, name]) => <option key={u} value={u}>{name}</option>)}
           </select>
         </div>
       </header>
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!items && !error && <Spinner />}
-      {items && items.length === 0 && <EmptyState icon={<ActivityIcon size={28} />} title="No activity yet">Changes and comments show up here.</EmptyState>}
+      {items && items.length === 0 && <EmptyState icon={<ActivityIcon size={28} />} title={t("No activity yet")}>{t("Changes and comments show up here.")}</EmptyState>}
       {items && items.length > 0 && (
         <ol className="feed panel">
           {items.map((item) => {
@@ -95,7 +96,7 @@ export function ActivityPage() {
           })}
         </ol>
       )}
-      {more && <div className="load-more"><button className="btn btn-ghost" onClick={loadMore}>Load older activity</button></div>}
+      {more && <div className="load-more"><button className="btn btn-ghost" onClick={loadMore}>{t("Load older activity")}</button></div>}
     </div>
   );
 }

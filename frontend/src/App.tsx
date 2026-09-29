@@ -1,3 +1,4 @@
+import { useLanguage } from './i18n';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth';
@@ -66,8 +67,10 @@ function ProjectIndex() {
 }
 
 export function App() {
+  // Switching language re-renders every page with the new strings.
+  const lang = useLanguage();
   return (
-    <Suspense fallback={<div className="page"><Spinner /></div>}>
+    <Suspense key={lang} fallback={<div className="page"><Spinner /></div>}>
     <Routes>
       <Route path="/login" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
       <Route path="/register" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />

@@ -14,6 +14,7 @@ import {
   PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type AutomationRule, type Member, type RuleAction,
   type RuleActionType, type RuleRun, type RuleTrigger,
 } from '../types';
+import { t } from '../i18n';
 
 const TRIGGERS: { value: RuleTrigger; label: string }[] = [
   { value: 'CREATED', label: 'A task is created' },
@@ -142,21 +143,21 @@ export function AutomationPage() {
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
-          <h1>Automation</h1>
-          <p className="muted">Rules do the busywork: triage, escalate, clean up. Each rule acts with the permissions of the person who created it.</p>
+          <h1>{t("Automation")}</h1>
+          <p className="muted">{t("Rules do the busywork: triage, escalate, clean up. Each rule acts with the permissions of the person who created it.")}</p>
         </div>
         {canEdit && (
           <div className="header-actions">
-            <button className="btn btn-ghost" onClick={() => setRecipes(true)}><Sparkles size={16} /> From a recipe</button>
-            <button className="btn btn-primary" onClick={() => setEditing({ rule: null, initial: blank })}><Plus size={17} /> New rule</button>
+            <button className="btn btn-ghost" onClick={() => setRecipes(true)}><Sparkles size={16} /> {t("From a recipe")}</button>
+            <button className="btn btn-primary" onClick={() => setEditing({ rule: null, initial: blank })}><Plus size={17} /> {t("New rule")}</button>
           </div>
         )}
       </header>
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!rules && !error && <Spinner />}
       {rules && rules.length === 0 && (
-        <EmptyState icon={<Bot size={28} />} title="No rules yet">
-          {canEdit ? <button className="link" onClick={() => setRecipes(true)}>Start from a recipe</button> : 'Editors can add rules.'}
+        <EmptyState icon={<Bot size={28} />} title={t("No rules yet")}>
+          {canEdit ? <button className="link" onClick={() => setRecipes(true)}>{t("Start from a recipe")}</button> : 'Editors can add rules.'}
         </EmptyState>
       )}
       <ul className="rule-list">
@@ -170,10 +171,10 @@ export function AutomationPage() {
               </label>
               <h2>{rule.name}</h2>
               <span className="spacer" />
-              <button className="icon-button" aria-label={`Log of ${rule.name}`} title="Recent runs" onClick={() => setLogFor(rule)}>
+              <button className="icon-button" aria-label={`Log of ${rule.name}`} title={t("Recent runs")} onClick={() => setLogFor(rule)}>
                 <History size={16} /></button>
               {canEdit && rule.trigger === 'SCHEDULED' && (
-                <button className="icon-button" aria-label={`Run ${rule.name} now`} title="Run now" onClick={async () => {
+                <button className="icon-button" aria-label={`Run ${rule.name} now`} title={t("Run now")} onClick={async () => {
                   try {
                     const r = await api.runAutomation(rule.id);
                     toast(r.tasks ? `Acted on ${r.tasks} task${r.tasks === 1 ? '' : 's'}` : 'Nothing new matched');
@@ -193,10 +194,10 @@ export function AutomationPage() {
               )}
             </div>
             <p className="rule-sentence">
-              <strong>When</strong> {TRIGGERS.find((t) => t.value === rule.trigger)?.label.toLowerCase()}
+              <strong>{t("When")}</strong> {TRIGGERS.find((t) => t.value === rule.trigger)?.label.toLowerCase()}
               {rule.triggerStatus && <> to <em>{STATUS_LABEL[rule.triggerStatus]}</em></>}
-              {rule.condition && <> <strong>and</strong> <code>{rule.condition}</code></>}
-              {' '}<strong>then</strong> {rule.actions.map(describeAction).join(', ')}.
+              {rule.condition && <> <strong>{t("and")}</strong> <code>{rule.condition}</code></>}
+              {' '}<strong>{t("then")}</strong> {rule.actions.map(describeAction).join(', ')}.
             </p>
             <p className="muted small rule-meta">
               <Avatar user={rule.owner} size={16} /> by {rule.owner.displayName}
@@ -208,7 +209,7 @@ export function AutomationPage() {
       </ul>
 
       {recipes && (
-        <Modal title="Start from a recipe" onClose={() => setRecipes(false)} footer={<button className="btn btn-ghost" onClick={() => setRecipes(false)}>Close</button>}>
+        <Modal title={t("Start from a recipe")} onClose={() => setRecipes(false)} footer={<button className="btn btn-ghost" onClick={() => setRecipes(false)}>{t("Close")}</button>}>
           <ul className="recipe-list">
             {RECIPES.map((r) => (
               <li key={r.title}>
@@ -233,8 +234,8 @@ export function AutomationPage() {
           }} />
       )}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} message="The rule stops running. Changes it already made stay."
-          confirmLabel="Delete rule" danger onClose={() => setDeleting(null)}
+        <ConfirmDialog title={`Delete ${deleting.name}?`} message={t("The rule stops running. Changes it already made stay.")}
+          confirmLabel={t("Delete rule")} danger onClose={() => setDeleting(null)}
           onConfirm={async () => {
             const r = deleting;
             setDeleting(null);
@@ -254,8 +255,8 @@ function RuleLog({ rule, onClose }: { rule: AutomationRule; onClose: () => void 
     api.automationLog(rule.id).then(setRuns).catch(() => setRuns([]));
   }, [rule.id]);
   return (
-    <Modal title={`Recent runs · ${rule.name}`} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}>
-      {!runs ? <Spinner /> : runs.length === 0 ? <p className="muted">This rule has not run yet.</p> : (
+    <Modal title={`Recent runs · ${rule.name}`} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}>
+      {!runs ? <Spinner /> : runs.length === 0 ? <p className="muted">{t("This rule has not run yet.")}</p> : (
         <ul className="run-list">
           {runs.map((r) => (
             <li key={r.id} className={r.success ? '' : 'failed'}>
@@ -316,28 +317,28 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
   return (
     <Modal title={rule ? `Edit ${rule.name}` : 'New rule'} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" form="rule-form" disabled={busy || !form.name.trim() || form.actions.length === 0}>Save rule</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" form="rule-form" disabled={busy || !form.name.trim() || form.actions.length === 0}>{t("Save rule")}</button>
       </>
     }>
       <form id="rule-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Name</span>
-          <input value={form.name} maxLength={80} autoFocus placeholder="Triage new bugs" onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <span>{t("Name")}</span>
+          <input value={form.name} maxLength={80} autoFocus placeholder={t("Triage new bugs")} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </label>
         <div className="form-grid two">
           <label className="field">
-            <span>When</span>
+            <span>{t("When")}</span>
             <select value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value as RuleTrigger })}>
               {TRIGGERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </label>
           {form.trigger === 'STATUS_CHANGED' && (
             <label className="field">
-              <span>To status</span>
+              <span>{t("To status")}</span>
               <select value={form.triggerStatus ?? ''} onChange={(e) => setForm({ ...form, triggerStatus: (e.target.value || null) as RuleInput['triggerStatus'] })}>
-                <option value="">Any status</option>
+                <option value="">{t("Any status")}</option>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </label>
@@ -348,13 +349,13 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
             {form.trigger === 'SCHEDULED' ? '(required)' : '(optional)'}</span></span>
           <FqlInput value={form.condition} onChange={(condition) => setForm({ ...form, condition })} onSubmit={() => {}} />
           {errors.condition ? <span className="field-error">{errors.condition}</span> : (
-            <span className="muted small">Same language as Search, e.g. <code>type = bug AND priority &gt;= high</code>
+            <span className="muted small">{t("Same language as Search, e.g.")} <code>type = bug AND priority &gt;= high</code>
               {form.trigger === 'SCHEDULED' && <> or <code>status = todo AND updated &lt; -4h</code>. Each task is handled once while it keeps matching.</>}
             </span>
           )}
         </div>
         <fieldset className="field rule-actions">
-          <legend>Then</legend>
+          <legend>{t("Then")}</legend>
           {form.actions.map((action, index) => (
             <div key={index} className="rule-action">
               <select aria-label={`Action ${index + 1}`} value={action.type}
@@ -408,11 +409,11 @@ function ActionValue({ action, editors, onChange, index }: {
       return <textarea aria-label={label} rows={2} maxLength={2000} value={action.value ?? ''} placeholder="Use {{key}}, {{title}}, {{assignee}}, {{reporter}}"
         onChange={(e) => onChange(e.target.value)} />;
     case 'notify':
-      return <input aria-label={label} value={action.value ?? ''} placeholder="assignee, reporter, watchers, owner or usernames"
+      return <input aria-label={label} value={action.value ?? ''} placeholder={t("assignee, reporter, watchers, owner or usernames")}
         onChange={(e) => onChange(e.target.value)} />;
     case 'move_to_active_sprint':
-      return <span className="muted small">No settings</span>;
+      return <span className="muted small">{t("No settings")}</span>;
     default:
-      return <input aria-label={label} value={action.value ?? ''} maxLength={30} placeholder="label" onChange={(e) => onChange(e.target.value)} />;
+      return <input aria-label={label} value={action.value ?? ''} maxLength={30} placeholder={t("label")} onChange={(e) => onChange(e.target.value)} />;
   }
 }

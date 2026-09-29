@@ -6,6 +6,8 @@ import { useProjects } from '../projects';
 import { useToast } from '../toast';
 import { Modal } from '../components/Modal';
 import { EmptyState, Spinner } from '../components/States';
+import type { ProjectTemplate } from '../types';
+import { t } from '../i18n';
 
 export function ProjectsPage() {
   const { projects, refresh } = useProjects();
@@ -23,8 +25,8 @@ export function ProjectsPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>Projects</h1>
-          <p className="muted">Each project has its own backlog, board, sprints and members.</p>
+          <h1>{t("Projects")}</h1>
+          <p className="muted">{t("Each project has its own backlog, board, sprints and members.")}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
           <FolderPlus size={18} /> New project
@@ -33,9 +35,9 @@ export function ProjectsPage() {
 
       {!projects && <Spinner />}
       {projects && projects.length === 0 && (
-        <EmptyState icon={<FolderPlus size={28} />} title="Create your first project">
-          Projects group tasks, sprints and people. Give it a short key like <b>WEB</b>; tasks will be numbered WEB-1, WEB-2…
-          <div><button className="btn btn-primary" onClick={() => setCreating(true)}>New project</button></div>
+        <EmptyState icon={<FolderPlus size={28} />} title={t("Create your first project")}>
+          Projects group tasks, sprints and people. Give it a short key like <b>{t("WEB")}</b>; tasks will be numbered WEB-1, WEB-2…
+          <div><button className="btn btn-primary" onClick={() => setCreating(true)}>{t("New project")}</button></div>
         </EmptyState>
       )}
       {projects && projects.length > 0 && (
@@ -68,9 +70,15 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [key, setKey] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
   const [description, setDescription] = useState('');
+  const [template, setTemplate] = useState('blank');
+  const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.projectTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
   const suggestKey = (value: string) => {
     const words = value.trim().split(/\s+/).filter(Boolean);
@@ -84,7 +92,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
     setErrors({});
     setError('');
     try {
-      const project = await api.createProject(key, name, description);
+      const project = await api.createProject(key, name, description, template);
       await onCreated();
       toast(`Project ${project.key} created`);
       navigate(`/p/${project.key}/board`);
@@ -98,25 +106,25 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   };
 
   return (
-    <Modal title="New project" onClose={onClose} footer={
+    <Modal title={t("New project")} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" form="project-form" disabled={busy || !name.trim() || !key}>Create project</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" form="project-form" disabled={busy || !name.trim() || !key}>{t("Create project")}</button>
       </>
     }>
       <form id="project-form" className="form" onSubmit={submit}>
         {error && !Object.keys(errors).length && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Name</span>
-          <input value={name} maxLength={80} placeholder="Website redesign" onChange={(e) => {
+          <span>{t("Name")}</span>
+          <input value={name} maxLength={80} placeholder={t("Website redesign")} onChange={(e) => {
             setName(e.target.value);
             if (!keyEdited) setKey(suggestKey(e.target.value));
           }} aria-invalid={!!errors.name} />
           {errors.name && <small className="field-error">{errors.name}</small>}
         </label>
         <label className="field">
-          <span>Key</span>
-          <input value={key} maxLength={10} placeholder="WEB" onChange={(e) => {
+          <span>{t("Key")}</span>
+          <input value={key} maxLength={10} placeholder={t("WEB")} onChange={(e) => {
             setKeyEdited(true);
             setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
           }} aria-invalid={!!errors.key} />
@@ -124,9 +132,21 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
           {errors.key && <small className="field-error">{errors.key}</small>}
         </label>
         <label className="field">
-          <span>Description <span className="muted">(optional)</span></span>
+          <span>{t("Description")} <span className="muted">{t("(optional)")}</span></span>
           <textarea rows={3} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
+        {templates.length > 0 && (
+          <fieldset className="field template-picks">
+            <legend>{t("Start from")}</legend>
+            {templates.map((t) => (
+              <label key={t.id} className={`template-pick ${template === t.id ? 'active' : ''}`}>
+                <input type="radio" name="template" value={t.id} checked={template === t.id} onChange={() => setTemplate(t.id)} />
+                <strong>{t.name}</strong>
+                <span className="muted small">{t.description}</span>
+              </label>
+            ))}
+          </fieldset>
+        )}
       </form>
     </Modal>
   );

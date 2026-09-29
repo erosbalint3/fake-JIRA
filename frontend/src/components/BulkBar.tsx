@@ -8,6 +8,7 @@ import {
   PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type BulkChange, type Epic, type Member,
   type Sprint, type Task,
 } from '../types';
+import { t } from '../i18n';
 
 interface Props {
   selected: number[];
@@ -69,7 +70,7 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
         action: { label: 'Undo', onClick: async () => {
           try {
             for (const [ids, back] of undo) await api.bulk(ids, back);
-            toast('Change undone');
+            toast(t("Change undone"));
           } catch (e) {
             toast((e as ApiError).message, 'error');
           }
@@ -109,7 +110,7 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
   );
 
   return (
-    <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
+    <div className="bulk-bar" role="toolbar" aria-label={t("Bulk edit")}>
       <strong>{selected.length} selected</strong>
       {select('Status', STATUSES.map((s) => [s, STATUS_LABEL[s]]),
         (v) => apply({ status: v as BulkChange['status'] }, `Moved to ${STATUS_LABEL[v as keyof typeof STATUS_LABEL]}`))}
@@ -127,19 +128,19 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
         e.preventDefault();
         if (label.trim()) apply({ addLabels: [label.trim()] }, `Label "${label.trim()}" added`).then(() => setLabel(''));
       }}>
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="+ label" aria-label="Add label" disabled={busy} />
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("+ label")} aria-label={t("Add label")} disabled={busy} />
       </form>
       <button className="icon-button danger-icon" onClick={() => (selected.length > 20 ? setConfirmDelete(true) : remove())}
-        aria-label="Delete selected" title="Delete selected (can be undone for a few seconds)">
+        aria-label={t("Delete selected")} title={t("Delete selected (can be undone for a few seconds)")}>
         <Trash2 size={17} />
       </button>
-      <button className="icon-button" onClick={onClear} aria-label="Clear selection" title="Clear selection (Esc)">
+      <button className="icon-button" onClick={onClear} aria-label={t("Clear selection")} title={t("Clear selection (Esc)")}>
         <X size={17} />
       </button>
       {confirmDelete && (
         <ConfirmDialog title={`Delete ${selected.length} tasks?`} danger busy={busy}
-          message="They are removed with their subtasks, comments and files. You can undo for a few seconds."
-          confirmLabel="Delete" onClose={() => setConfirmDelete(false)}
+          message={t("They are removed with their subtasks, comments and files. You can undo for a few seconds.")}
+          confirmLabel={t("Delete")} onClose={() => setConfirmDelete(false)}
           onConfirm={() => {
             setConfirmDelete(false);
             remove();

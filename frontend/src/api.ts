@@ -6,7 +6,7 @@ import type {
   Release, RetroItem, RetroKind, SprintReview, PokerState, FlowDay, CycleReport, Throughput,
   SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
   AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
-  PublicTask,
+  PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -39,6 +39,27 @@ export const tokenStore = {
   },
 };
 
+/** True while API reads are answered from the offline copy kept by the service worker. */
+let offline = false;
+export const OFFLINE_CHANGED = 'fakejira:offline';
+export function isOffline() {
+  return offline;
+}
+function setOffline(next: boolean) {
+  if (next === offline) return;
+  offline = next;
+  window.dispatchEvent(new Event(OFFLINE_CHANGED));
+}
+
+/** Forgets the offline copy of API reads (on logout, so the next person can't browse it). */
+export function clearOfflineCache() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage('clear-api-cache');
+  } catch {
+    /* no service worker */
+  }
+}
+
 /** Called when the server rejects our token so the app can return to the login screen. */
 let onUnauthorized: () => void = () => {};
 export function setUnauthorizedHandler(handler: () => void) {
@@ -59,8 +80,14 @@ async function send(method: string, path: string, init: RequestInit = {}): Promi
       headers: { Accept: 'application/json', ...authHeaders(), ...(init.headers as Record<string, string>) },
     });
   } catch {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOffline(true);
+      throw new ApiError(0, method === 'GET' ? "You're offline and this page hasn't been saved for offline use yet."
+        : "You're offline. Changes can't be saved until you reconnect.");
+    }
     throw new ApiError(0, 'Cannot reach the server. Is the backend running?');
   }
+  setOffline(response.headers.get('X-FakeJIRA-Offline') === '1');
   if (response.status === 401 && tokenStore.get()) {
     onUnauthorized();
   }
@@ -125,7 +152,7 @@ export const api = {
     request<AuthResponse>('POST', '/auth/login', { login, password }),
   register: (username: string, email: string, password: string, inviteCode?: string) =>
     request<AuthResponse>('POST', '/auth/register', { username, email, password, inviteCode }),
-  me: () => request<{ user: User; admin: boolean; mustChangePassword: boolean }>('GET', '/auth/me'),
+  me: () => request<{ user: User; admin: boolean; mustChangePassword: boolean; language?: string }>('GET', '/auth/me'),
   loginSecondStep: (challenge: string, code: string) => request<AuthResponse>('POST', '/auth/login/2fa', { challenge, code }),
   logout: () => request<void>('POST', '/auth/logout'),
   passwordPolicy: () => request<PasswordRules>('GET', '/auth/password-policy'),
@@ -150,8 +177,8 @@ export const api = {
 
   projects: () => request<Project[]>('GET', '/projects'),
   project: (key: string) => request<Project>('GET', `/projects/${key}`),
-  createProject: (key: string, name: string, description: string) =>
-    request<Project>('POST', '/projects', { key, name, description }),
+  createProject: (key: string, name: string, description: string, template?: string) =>
+    request<Project>('POST', '/projects', { key, name, description, template: template || undefined }),
   updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string } = {}) =>
     request<Project>('PUT', `/projects/${key}`, { name, description, ...extra }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
@@ -273,6 +300,22 @@ export const api = {
   disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
 
   exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
+  customFields: (key: string) => request<CustomFieldDef[]>('GET', `/projects/${key}/fields`),
+  createCustomField: (key: string, name: string, type: CustomFieldType, options: string[]) =>
+    request<CustomFieldDef>('POST', `/projects/${key}/fields`, { name, type, options }),
+  updateCustomField: (id: number, name: string, type: CustomFieldType, options: string[]) =>
+    request<CustomFieldDef>('PUT', `/fields/${id}`, { name, type, options }),
+  deleteCustomField: (id: number) => request<void>('DELETE', `/fields/${id}`),
+  taskFields: (taskId: number) => request<CustomFieldValue[]>('GET', `/tasks/${taskId}/fields`),
+  setTaskField: (taskId: number, fieldId: number, value: string | null) =>
+    request<CustomFieldValue>('PUT', `/tasks/${taskId}/fields/${fieldId}`, { value }),
+  projectTemplates: () => request<ProjectTemplate[]>('GET', '/project-templates'),
+  projectStorage: (key: string) => request<StorageUsage>('GET', `/projects/${key}/storage`),
+  system: () => request<SystemInfo>('GET', '/admin/system'),
+  setQuotas: (projectMb: number, totalMb: number) => request<{ projectMb: number; totalMb: number }>('PUT', '/admin/quotas', { projectMb, totalMb }),
+  uploadOffsite: () => request<OffsiteStatus>('POST', '/admin/offsite/upload'),
+  checkForUpdate: () => request<SystemInfo['update']>('POST', '/admin/update-check'),
+
   importJira: async (key: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -395,7 +438,7 @@ export const api = {
   markAllRead: () => request<void>('POST', '/notifications/read-all'),
 
   profile: () => request<Profile>('GET', '/profile'),
-  updateSettings: (settings: { emailFrequency?: EmailFrequency; displayName?: string }) =>
+  updateSettings: (settings: { emailFrequency?: EmailFrequency; displayName?: string; language?: string }) =>
     request<Profile>('PUT', '/profile/settings', settings),
   uploadAvatar: async (file: File) => {
     const form = new FormData();

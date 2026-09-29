@@ -18,6 +18,7 @@ import {
   PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, TASK_TYPES, TASK_TYPE_LABEL, type BoardColumn, type Sprint, type Task,
   type User,
 } from '../types';
+import { t } from '../i18n';
 
 /** The column a task shows in: its pinned column, or the first column of its status. */
 function columnOf(task: Task, columns: BoardColumn[]) {
@@ -261,7 +262,7 @@ export function BoardPage() {
         )}
         {task.assignee
           ? <Avatar user={task.assignee} size={24} />
-          : <span className="avatar-empty sm" title="Unassigned" />}
+          : <span className="avatar-empty sm" title={t("Unassigned")} />}
       </footer>
     </article>
   );
@@ -319,12 +320,12 @@ export function BoardPage() {
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
-          <h1>Board</h1>
+          <h1>{t("Board")}</h1>
           {kanban ? (
             <p className="sprint-banner">
-              <KanbanSquare size={15} /> <strong>Kanban</strong>
+              <KanbanSquare size={15} /> <strong>{t("Kanban")}</strong>
               <span className="muted">Continuous flow · finished tasks leave the board after {KANBAN_DONE_DAYS} days</span>
-              <Link to={`/p/${key}/reports`} className="small">Flow reports</Link>
+              <Link to={`/p/${key}/reports`} className="small">{t("Flow reports")}</Link>
             </p>
           ) : active ? (
             <p className="sprint-banner">
@@ -335,22 +336,22 @@ export function BoardPage() {
                   {daysLeft < 0 ? `${-daysLeft} day${daysLeft === -1 ? '' : 's'} over` : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}
                 </span>
               )}
-              <Link to={`/p/${key}/reports`} className="small">Burndown</Link>
+              <Link to={`/p/${key}/reports`} className="small">{t("Burndown")}</Link>
             </p>
           ) : (
-            <p className="muted">No active sprint — showing every task. <Link to={`/p/${key}/backlog`}>Plan a sprint</Link></p>
+            <p className="muted">{t("No active sprint — showing every task.")} <Link to={`/p/${key}/backlog`}>{t("Plan a sprint")}</Link></p>
           )}
         </div>
         <div className="header-actions">
-          {!canEdit && <span className="readonly-badge"><Eye size={13} /> Read-only</span>}
-          <select value={grouping} onChange={(e) => changeGrouping(e.target.value as Grouping)} aria-label="Swimlanes">
-              {GROUPINGS.map((g) => <option key={g.value} value={g.value}>{g.value === 'none' ? g.label : `Lanes: ${g.label}`}</option>)}
+          {!canEdit && <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
+          <select value={grouping} onChange={(e) => changeGrouping(e.target.value as Grouping)} aria-label={t("Swimlanes")}>
+              {GROUPINGS.map((g) => <option key={g.value} value={g.value}>{g.value === 'none' ? t(g.label) : t('Lanes: {x}', { x: t(g.label) })}</option>)}
           </select>
           <button className={`btn btn-ghost btn-sm ${showWorkload ? 'is-on' : ''}`} onClick={toggleWorkload} aria-pressed={showWorkload}>
-            <Users size={15} /> Workload
+            <Users size={15} /> {t('Workload')}
           </button>
           <label className="toggle">
-            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Only my tasks
+            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> {t('Only my tasks')}
           </label>
         </div>
       </header>
@@ -361,8 +362,8 @@ export function BoardPage() {
       {tasks && tasks.length === 0 && (
         <EmptyState icon={<KanbanSquare size={28} />} title={active ? 'This sprint has no tasks' : 'No tasks yet'}>
           {active
-            ? <>Move tasks into {active.name} from the <Link to={`/p/${key}/backlog`}>backlog</Link>.</>
-            : canEdit && <button className="link" onClick={() => openCreate({ projectKey: key })}>Create the first task</button>}
+            ? <>Move tasks into {active.name} from the <Link to={`/p/${key}/backlog`}>{t("backlog")}</Link>.</>
+            : canEdit && <button className="link" onClick={() => openCreate({ projectKey: key })}>{t("Create the first task")}</button>}
         </EmptyState>
       )}
       {tasks && tasks.length > 0 && grouping === 'none' && (
@@ -377,7 +378,7 @@ export function BoardPage() {
               <div key={column.id} className={`column-head column-${column.status.toLowerCase()}`}>{header(column)}</div>
             ))}
           </div>
-          {lanes.length === 0 && <p className="muted">Nothing to show.</p>}
+          {lanes.length === 0 && <p className="muted">{t("Nothing to show.")}</p>}
           {lanes.map((lane) => {
             const isCollapsed = collapsed.has(lane.id);
             const points = lane.tasks.reduce((sum, t) => sum + (t.storyPoints ?? 0), 0);
@@ -428,10 +429,10 @@ function Workload({ tasks }: { tasks: Task[] }) {
   const assigned = rows.filter((r) => r.user);
   const average = assigned.length ? assigned.reduce((s, r) => s + r.points, 0) / assigned.length : 0;
   const max = Math.max(1, ...rows.map((r) => r.points || r.tasks));
-  if (rows.length === 0) return <p className="muted workload-empty">No open work.</p>;
+  if (rows.length === 0) return <p className="muted workload-empty">{t("No open work.")}</p>;
   return (
-    <section className="workload" aria-label="Workload">
-      <h2 className="section-title"><BarChart3 size={15} /> Open work per person</h2>
+    <section className="workload" aria-label={t("Workload")}>
+      <h2 className="section-title"><BarChart3 size={15} /> {t("Open work per person")}</h2>
       <ul>
         {rows.map((row) => {
           const heavy = row.user && assigned.length > 1 && row.points > average * 1.5 && row.points > 0;
@@ -443,7 +444,7 @@ function Workload({ tasks }: { tasks: Task[] }) {
               <span className="workload-bar"><span style={{ width: `${((row.points || row.tasks) / max) * 100}%` }} /></span>
               <span className="workload-numbers">
                 {row.points} pts · {row.tasks} task{row.tasks === 1 ? '' : 's'}{row.inProgress ? ` · ${row.inProgress} started` : ''}
-                {heavy && <strong className="overdue-text"> · heavy</strong>}
+                {heavy && <strong className="overdue-text"> {t("· heavy")}</strong>}
               </span>
             </li>
           );

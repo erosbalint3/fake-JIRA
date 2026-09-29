@@ -8,11 +8,13 @@ import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ActionMenu } from '../components/ActionMenu';
 import { ConfirmDialog } from '../components/Modal';
+import { SystemPanel } from '../components/admin/SystemPanel';
 import { AuditLogPanel } from '../components/admin/AuditLogPanel';
 import { PasswordPolicyPanel } from '../components/admin/PasswordPolicyPanel';
 import type { User } from '../types';
 import { fileSize, formatDate, timeAgo } from '../format';
 import type { AdminUser, Backup, Invite, RegistrationMode } from '../types';
+import { t } from '../i18n';
 
 const MODES: { mode: RegistrationMode; title: string; text: string }[] = [
   { mode: 'OPEN', title: 'Open', text: 'Anyone can create an account.' },
@@ -32,7 +34,7 @@ export function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'people' | 'security' | 'backups'>('people');
+  const [tab, setTab] = useState<'people' | 'security' | 'backups' | 'system'>('people');
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reset2fa'; user: User } | null>(null);
 
   const load = useCallback(() => {
@@ -67,7 +69,7 @@ export function AdminPage() {
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast('Invite link copied');
+      toast(t("Invite link copied"));
     } catch {
       window.prompt('Copy the invite link:', text);
     }
@@ -96,8 +98,8 @@ export function AdminPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Workspace</span>
-          <h1>Admin</h1>
+          <span className="eyebrow">{t("Workspace")}</span>
+          <h1>{t("Admin")}</h1>
         </div>
       </header>
       {error && <ErrorBanner message={error} onRetry={load} />}
@@ -112,8 +114,8 @@ export function AdminPage() {
                 : ' Reload this page to update it, or set APP_BASE_URL in your .env.'}
             </div>
           )}
-          <nav className="tabs" role="tablist" aria-label="Admin sections">
-            {([['people', 'People & sign-up'], ['security', 'Security'], ['backups', 'Backups']] as const).map(([id, label]) => (
+          <nav className="tabs" role="tablist" aria-label={t("Admin sections")}>
+            {([['people', 'People & sign-up'], ['security', 'Security'], ['backups', 'Backups'], ['system', 'System']] as const).map(([id, label]) => (
               <button key={id} role="tab" aria-selected={tab === id} className={`tab ${tab === id ? 'active' : ''}`}
                 onClick={() => setTab(id)}>{label}</button>
             ))}
@@ -121,8 +123,8 @@ export function AdminPage() {
           {tab === 'people' && (
           <>
           <section className="panel">
-            <h2 className="panel-title">Sign-up</h2>
-            <div className="mode-options" role="radiogroup" aria-label="Who can sign up">
+            <h2 className="panel-title">{t("Sign-up")}</h2>
+            <div className="mode-options" role="radiogroup" aria-label={t("Who can sign up")}>
               {MODES.map((option) => (
                 <label key={option.mode} className={`mode-option ${mode === option.mode ? 'active' : ''}`}>
                   <input type="radio" name="registration" checked={mode === option.mode} disabled={busy}
@@ -136,7 +138,7 @@ export function AdminPage() {
 
           {pending.length > 0 && (
             <section className="panel">
-              <h2 className="panel-title">Waiting for approval <span className="count">{pending.length}</span></h2>
+              <h2 className="panel-title">{t("Waiting for approval")} <span className="count">{pending.length}</span></h2>
               <ul className="member-list">
                 {pending.map(({ user: u, createdAt }) => (
                   <li key={u.id}>
@@ -146,9 +148,9 @@ export function AdminPage() {
                       <span className="muted small">{u.email} · signed up {timeAgo(createdAt)}</span>
                     </div>
                     <button className="btn btn-soft sm" disabled={busy}
-                      onClick={() => act(() => api.approveUser(u.id), `${u.username} approved`)}><Check size={15} /> Approve</button>
+                      onClick={() => act(() => api.approveUser(u.id), `${u.username} approved`)}><Check size={15} /> {t("Approve")}</button>
                     <button className="btn btn-ghost sm danger" disabled={busy}
-                      onClick={() => act(() => api.rejectUser(u.id), `${u.username} rejected`)}><X size={15} /> Reject</button>
+                      onClick={() => act(() => api.rejectUser(u.id), `${u.username} rejected`)}><X size={15} /> {t("Reject")}</button>
                   </li>
                 ))}
               </ul>
@@ -156,13 +158,13 @@ export function AdminPage() {
           )}
 
           <section className="panel">
-            <h2 className="panel-title"><Link2 size={16} /> Invites</h2>
+            <h2 className="panel-title"><Link2 size={16} /> {t("Invites")}</h2>
             <p className="muted small hint">Invite links work in every sign-up mode and are valid for 7 days. Project owners can also invite people
               to their project from its settings.</p>
             <form className="inline-form" onSubmit={createInvite}>
-              <input type="email" value={inviteEmail} placeholder="Email (optional — binds the invite)" aria-label="Invite email"
+              <input type="email" value={inviteEmail} placeholder={t("Email (optional — binds the invite)")} aria-label={t("Invite email")}
                 onChange={(e) => setInviteEmail(e.target.value)} />
-              <button className="btn btn-soft" disabled={busy}><Plus size={16} /> Create invite</button>
+              <button className="btn btn-soft" disabled={busy}><Plus size={16} /> {t("Create invite")}</button>
             </form>
             {openInvites.length > 0 && (
               <ul className="mini-list invite-list">
@@ -172,10 +174,10 @@ export function AdminPage() {
                       <strong>{invite.email ?? 'Anyone with the link'}{invite.projectKey && <span className="muted"> → {invite.projectKey}</span>}</strong>
                       <span className="muted small">Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
                     </div>
-                    <button className="icon-button sm" aria-label="Copy invite link" title="Copy link" onClick={() => copy(inviteLink(invite.code))}>
+                    <button className="icon-button sm" aria-label={t("Copy invite link")} title={t("Copy link")} onClick={() => copy(inviteLink(invite.code))}>
                       <Copy size={15} />
                     </button>
-                    <button className="icon-button sm" aria-label="Revoke invite" title="Revoke"
+                    <button className="icon-button sm" aria-label={t("Revoke invite")} title={t("Revoke")}
                       onClick={() => act(() => api.revokeInvite(invite.id), 'Invite revoked')}>
                       <Trash2 size={15} />
                     </button>
@@ -186,18 +188,18 @@ export function AdminPage() {
           </section>
 
           <section className="panel">
-            <h2 className="panel-title">Users <span className="count">{active.length}</span></h2>
+            <h2 className="panel-title">{t("Users")} <span className="count">{active.length}</span></h2>
             <ul className="member-list">
               {active.map(({ user: u, admin: isAdmin, createdAt, twoFactor, mustChangePassword }) => (
                 <li key={u.id}>
                   <Avatar user={u} size={32} />
                   <div className="member-text">
-                    <strong>{u.displayName}{u.id === user?.id && <span className="muted"> (you)</span>}</strong>
+                    <strong>{u.displayName}{u.id === user?.id && <span className="muted"> {t("(you)")}</span>}</strong>
                     <span className="muted small">@{u.username} · {u.email} · joined {formatDate(createdAt)}</span>
                   </div>
-                  {twoFactor && <span className="tag-2fa" title="Two-step verification is on">2FA</span>}
-                  {mustChangePassword && <span className="tag-warn">Must change password</span>}
-                  {isAdmin && <span className="owner-badge"><Shield size={13} /> Admin</span>}
+                  {twoFactor && <span className="tag-2fa" title={t("Two-step verification is on")}>{t("2FA")}</span>}
+                  {mustChangePassword && <span className="tag-warn">{t("Must change password")}</span>}
+                  {isAdmin && <span className="owner-badge"><Shield size={13} /> {t("Admin")}</span>}
                   <ActionMenu label={`Actions for ${u.username}`} actions={[
                     { label: isAdmin ? 'Remove admin rights' : 'Make admin',
                       onSelect: () => act(() => api.setAdmin(u.id, !isAdmin), isAdmin ? `${u.username} is no longer an admin` : `${u.username} is now an admin`) },
@@ -217,6 +219,7 @@ export function AdminPage() {
 
           </>
           )}
+          {tab === 'system' && <SystemPanel />}
           {tab === 'security' && (
           <>
             <PasswordPolicyPanel />
@@ -226,13 +229,13 @@ export function AdminPage() {
           {tab === 'backups' && (
           <section className="panel">
             <div className="panel-head">
-              <h2 className="panel-title"><Archive size={16} /> Backups</h2>
+              <h2 className="panel-title"><Archive size={16} /> {t("Backups")}</h2>
               <button className="btn btn-soft sm" disabled={busy}
-                onClick={() => act(() => api.backupNow(), 'Backup created')}>Back up now</button>
+                onClick={() => act(() => api.backupNow(), 'Backup created')}>{t("Back up now")}</button>
             </div>
             <p className="muted small hint">A backup of the database and attachments is made every night; the last 14 are kept in the data
               volume. Download one to keep a copy off the server — the README explains how to restore it.</p>
-            {!backups ? <Spinner /> : backups.length === 0 ? <p className="muted">No backups yet.</p> : (
+            {!backups ? <Spinner /> : backups.length === 0 ? <p className="muted">{t("No backups yet.")}</p> : (
               <ul className="mini-list">
                 {backups.map((backup) => (
                   <li key={backup.name}>
@@ -240,7 +243,7 @@ export function AdminPage() {
                       <strong className="mono small">{backup.name}</strong>
                       <span className="muted small">{formatDate(backup.createdAt)} · {fileSize(backup.size)}</span>
                     </div>
-                    <button className="icon-button sm" aria-label={`Download ${backup.name}`} title="Download"
+                    <button className="icon-button sm" aria-label={`Download ${backup.name}`} title={t("Download")}
                       onClick={async () => {
                         try {
                           saveBlob(await api.backupBlob(backup.name), backup.name);
@@ -259,8 +262,8 @@ export function AdminPage() {
         </>
       )}
       {confirm?.kind === 'delete' && (
-        <ConfirmDialog title={`Delete ${confirm.user.username}'s account?`} confirmLabel="Delete account" danger busy={busy}
-          message="Projects they own alone are deleted, they leave other projects, and their personal data is erased. Comments and history stay as “Deleted user”. This cannot be undone."
+        <ConfirmDialog title={`Delete ${confirm.user.username}'s account?`} confirmLabel={t("Delete account")} danger busy={busy}
+          message={t("Projects they own alone are deleted, they leave other projects, and their personal data is erased. Comments and history stay as “Deleted user”. This cannot be undone.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
             await act(() => api.deleteUserAccount(confirm.user.id), `${confirm.user.username}'s account was deleted`);
@@ -268,8 +271,8 @@ export function AdminPage() {
           }} />
       )}
       {confirm?.kind === 'reset2fa' && (
-        <ConfirmDialog title={`Turn off two-step verification for ${confirm.user.username}?`} confirmLabel="Turn off" busy={busy}
-          message="Use this when they lost their phone and recovery codes. They can sign in with their password alone and set it up again."
+        <ConfirmDialog title={`Turn off two-step verification for ${confirm.user.username}?`} confirmLabel={t("Turn off")} busy={busy}
+          message={t("Use this when they lost their phone and recovery codes. They can sign in with their password alone and set it up again.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
             await act(() => api.resetTwoFactor(confirm.user.id), 'Two-step verification turned off');

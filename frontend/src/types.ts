@@ -349,6 +349,7 @@ export interface Profile {
   identities: string[];
   away: { from: string | null; until: string | null; message: string | null };
   calendarFeed: boolean;
+  language: string;
 }
 
 export interface BurndownPoint {
@@ -714,4 +715,60 @@ export interface PublicTask {
   comments: { author: string; body: string; createdAt: string }[];
   updatedAt: string;
   sharedUntil: string | null;
+}
+
+export type CustomFieldType = 'TEXT' | 'NUMBER' | 'SELECT' | 'DATE' | 'CHECKBOX' | 'URL';
+
+export interface CustomFieldDef {
+  id: number;
+  name: string;
+  type: CustomFieldType;
+  options: string[];
+  position: number;
+}
+
+export interface CustomFieldValue {
+  fieldId: number;
+  name: string;
+  type: CustomFieldType;
+  options: string[];
+  value: string | null;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface StorageUsage {
+  usedBytes: number;
+  files: number;
+  quotaBytes: number | null;
+}
+
+export interface SystemInfo {
+  version: string;
+  startedAt: string;
+  uptimeSeconds: number;
+  database: { product: string; version: string; url: string; sizeBytes: number | null; ok: boolean };
+  disk: { path: string; freeBytes: number; totalBytes: number };
+  counts: { users: number; projects: number; tasks: number; openTasks: number; comments: number; attachments: number; attachmentBytes: number };
+  jvm: { java: string; heapUsedBytes: number; heapMaxBytes: number; threads: number; processors: number };
+  features: { mail: boolean; inboundMail: boolean; offsiteBackups: boolean; metrics: boolean };
+  backups: { name: string; size: number; createdAt: string }[];
+  offsite: OffsiteStatus;
+  update: { enabled: boolean; current: string; latest: string | null; available: boolean; url: string | null; checkedAt: string | null; error: string | null };
+  quota: { projectMb: number; totalMb: number };
+  storageByProject: { key: string; name: string; bytes: number; files: number }[];
+}
+
+export interface OffsiteStatus {
+  s3: boolean;
+  s3Target: string | null;
+  webdav: boolean;
+  webdavTarget: string | null;
+  lastUploadAt: string | null;
+  lastFile: string | null;
+  lastError: string | null;
 }

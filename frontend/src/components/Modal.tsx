@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { t } from '../i18n';
 
 interface ModalProps {
   title: string;
@@ -35,7 +36,7 @@ export function Modal({ title, onClose, children, footer, wide, dismissible = tr
         <header className="modal-header">
           <h2>{title}</h2>
           {dismissible && (
-            <button className="icon-button" onClick={onClose} aria-label="Close">
+            <button className="icon-button" onClick={onClose} aria-label={t("Close")}>
               <X size={18} />
             </button>
           )}
@@ -65,7 +66,7 @@ export function ConfirmDialog({ title, message, confirmLabel, danger, busy, onCo
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm} disabled={busy}>
             {confirmLabel}
           </button>

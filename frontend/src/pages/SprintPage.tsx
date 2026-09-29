@@ -11,6 +11,7 @@ import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDay } from '../format';
 import type { RetroItem, RetroKind, ReviewTask, SprintReview } from '../types';
+import { t } from '../i18n';
 
 const COLUMNS: { kind: RetroKind; title: string; hint: string }[] = [
   { kind: 'WENT_WELL', title: 'Went well', hint: 'What should we keep doing?' },
@@ -41,7 +42,7 @@ export function SprintPage() {
 
   return (
     <div className="page page-wide">
-      <Link to={`/p/${key}/backlog`} className="back"><ArrowLeft size={16} /> Backlog</Link>
+      <Link to={`/p/${key}/backlog`} className="back"><ArrowLeft size={16} /> {t("Backlog")}</Link>
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
@@ -53,11 +54,11 @@ export function SprintPage() {
           </p>
         </div>
       </header>
-      <nav className="tabs" role="tablist" aria-label="Sprint">
+      <nav className="tabs" role="tablist" aria-label={t("Sprint")}>
         <button role="tab" aria-selected={tab === 'review'} className={`tab ${tab === 'review' ? 'active' : ''}`}
-          onClick={() => setParams({}, { replace: true })}><Presentation size={15} /> Review</button>
+          onClick={() => setParams({}, { replace: true })}><Presentation size={15} /> {t("Review")}</button>
         <button role="tab" aria-selected={tab === 'retro'} className={`tab ${tab === 'retro' ? 'active' : ''}`}
-          onClick={() => setParams({ tab: 'retro' }, { replace: true })}><MessageSquareHeart size={15} /> Retrospective</button>
+          onClick={() => setParams({ tab: 'retro' }, { replace: true })}><MessageSquareHeart size={15} /> {t("Retrospective")}</button>
       </nav>
       {tab === 'review' ? <ReviewView review={review} /> : <RetroBoard sprintId={sprintId} projectId={project.id}
         open={sprint.state !== 'PLANNED'} />}
@@ -71,35 +72,35 @@ function ReviewView({ review }: { review: SprintReview }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(review.markdown);
-      toast('Review copied as Markdown');
+      toast(t("Review copied as Markdown"));
     } catch {
-      toast('Could not copy — your browser blocked the clipboard', 'error');
+      toast(t("Could not copy — your browser blocked the clipboard"), 'error');
     }
   };
   return (
     <>
       <div className="stats">
-        <div className="stat panel"><span className="muted">Completed</span><strong>{review.completedTasks}</strong>
-          <span className="muted small">tasks</span></div>
-        <div className="stat panel"><span className="muted">Points</span><strong>{review.completedPoints}</strong>
+        <div className="stat panel"><span className="muted">{t("Completed")}</span><strong>{review.completedTasks}</strong>
+          <span className="muted small">{t("tasks")}</span></div>
+        <div className="stat panel"><span className="muted">{t("Points")}</span><strong>{review.completedPoints}</strong>
           <span className="muted small">of {review.committedPoints} committed{percent !== null ? ` (${percent}%)` : ''}</span></div>
-        <div className="stat panel"><span className="muted">Scope change</span>
+        <div className="stat panel"><span className="muted">{t("Scope change")}</span>
           <strong>+{review.added.length} / −{review.removed.length}</strong>
-          <span className="muted small">tasks added / removed after the start</span></div>
+          <span className="muted small">{t("tasks added / removed after the start")}</span></div>
       </div>
       <div className="review-actions">
-        <button className="btn btn-ghost btn-sm" onClick={copy}><ClipboardCopy size={15} /> Copy as Markdown</button>
+        <button className="btn btn-ghost btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy as Markdown")}</button>
       </div>
       <div className="report-grid">
-        <ReviewList title="Completed" tasks={review.completed} empty="Nothing was finished." />
-        <ReviewList title="Not finished" tasks={review.unfinished} empty="Everything was finished." />
-        {review.added.length > 0 && <ReviewList title="Added during the sprint" tasks={review.added} />}
-        {review.removed.length > 0 && <ReviewList title="Removed during the sprint" tasks={review.removed} />}
+        <ReviewList title={t("Completed")} tasks={review.completed} empty="Nothing was finished." />
+        <ReviewList title={t("Not finished")} tasks={review.unfinished} empty="Everything was finished." />
+        {review.added.length > 0 && <ReviewList title={t("Added during the sprint")} tasks={review.added} />}
+        {review.removed.length > 0 && <ReviewList title={t("Removed during the sprint")} tasks={review.removed} />}
         {review.people.length > 0 && (
           <section className="panel">
-            <h2 className="panel-title">Who finished what</h2>
+            <h2 className="panel-title">{t("Who finished what")}</h2>
             <table className="viz-table">
-              <thead><tr><th>Person</th><th className="num">Tasks</th><th className="num">Points</th></tr></thead>
+              <thead><tr><th>{t("Person")}</th><th className="num">{t("Tasks")}</th><th className="num">{t("Points")}</th></tr></thead>
               <tbody>
                 {review.people.map((p) => (
                   <tr key={p.user.id}>
@@ -175,7 +176,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
   if (!items) return <Spinner />;
   if (!open) {
     return (
-      <EmptyState icon={<MessageSquareHeart size={28} />} title="The retrospective opens when the sprint starts">
+      <EmptyState icon={<MessageSquareHeart size={28} />} title={t("The retrospective opens when the sprint starts")}>
         Come back once the sprint is running.
       </EmptyState>
     );
@@ -194,7 +195,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
             <p className="muted small">{column.hint}</p>
             {canEdit && (
               <form onSubmit={add(column.kind)} className="retro-add">
-                <textarea rows={2} maxLength={500} placeholder="Add a card…" value={drafts[column.kind]}
+                <textarea rows={2} maxLength={500} placeholder={t("Add a card…")} value={drafts[column.kind]}
                   aria-label={`Add to ${column.title}`}
                   onChange={(e) => setDrafts((d) => ({ ...d, [column.kind]: e.target.value }))}
                   onKeyDown={(e) => {
@@ -203,7 +204,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                       add(column.kind)(e);
                     }
                   }} />
-                <button className="btn btn-soft btn-sm" disabled={!drafts[column.kind].trim()}>Add</button>
+                <button className="btn btn-soft btn-sm" disabled={!drafts[column.kind].trim()}>{t("Add")}</button>
               </form>
             )}
             <ul className="retro-cards">
@@ -216,11 +217,11 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                       setEditing(null);
                       if (text && text !== item.text) run(() => api.editRetroItem(item.id, item.kind, text));
                     }}>
-                      <textarea rows={3} autoFocus maxLength={500} value={editing.text} aria-label="Edit card"
+                      <textarea rows={3} autoFocus maxLength={500} value={editing.text} aria-label={t("Edit card")}
                         onChange={(e) => setEditing({ id: item.id, text: e.target.value })} />
                       <div className="retro-card-actions">
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>Cancel</button>
-                        <button className="btn btn-primary btn-sm">Save</button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>{t("Cancel")}</button>
+                        <button className="btn btn-primary btn-sm">{t("Save")}</button>
                       </div>
                     </form>
                   ) : (
@@ -231,17 +232,17 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                         <span className="spacer" />
                         {item.taskKey && item.taskId && <Link className="small" to={`/tasks/${item.taskId}`}>{item.taskKey}</Link>}
                         {canEdit && item.kind === 'ACTION' && !item.taskId && (
-                          <button className="icon-button sm" title="Create a backlog task" aria-label="Create a backlog task"
+                          <button className="icon-button sm" title={t("Create a backlog task")} aria-label={t("Create a backlog task")}
                             onClick={() => run(() => api.retroToTask(item.id), 'Task created in the backlog')}>
                             <ListPlus size={15} />
                           </button>
                         )}
                         {item.mine && (
                           <>
-                            <button className="icon-button sm" aria-label="Edit card" onClick={() => setEditing({ id: item.id, text: item.text })}>
+                            <button className="icon-button sm" aria-label={t("Edit card")} onClick={() => setEditing({ id: item.id, text: item.text })}>
                               <Pencil size={14} />
                             </button>
-                            <button className="icon-button sm" aria-label="Delete card" onClick={() => run(() => api.deleteRetroItem(item.id))}>
+                            <button className="icon-button sm" aria-label={t("Delete card")} onClick={() => run(() => api.deleteRetroItem(item.id))}>
                               <Trash2 size={14} />
                             </button>
                           </>

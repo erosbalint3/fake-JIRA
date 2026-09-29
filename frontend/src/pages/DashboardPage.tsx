@@ -15,6 +15,7 @@ import { formatDay, timeAgo, todayIso } from '../format';
 import type {
   Burndown, CalendarEvent, Dashboard, FeedItem, RecentTask, SearchGroup, SearchResult, Widget, WidgetType,
 } from '../types';
+import { t } from '../i18n';
 
 const WIDGET_TYPES: { type: WidgetType; label: string; hint: string }[] = [
   { type: 'filter', label: 'Task list', hint: 'Tasks matching a query' },
@@ -83,27 +84,27 @@ export function DashboardPage() {
     <div className="page page-wide">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Dashboard</span>
+          <span className="eyebrow">{t("Dashboard")}</span>
           <h1>{dashboard.name}</h1>
         </div>
         <div className="header-actions">
           {dashboards.length > 1 && (
-            <select value={dashboard.id} onChange={(e) => setSelected(Number(e.target.value))} aria-label="Dashboard">
+            <select value={dashboard.id} onChange={(e) => setSelected(Number(e.target.value))} aria-label={t("Dashboard")}>
               {dashboards.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
           {editing ? (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={() => setNameDialog('rename')}><Pencil size={15} /> Rename</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setNameDialog('new')}><Plus size={15} /> New dashboard</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setNameDialog('rename')}><Pencil size={15} /> {t("Rename")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setNameDialog('new')}><Plus size={15} /> {t("New dashboard")}</button>
               {dashboards.length > 1 && (
-                <button className="btn btn-ghost btn-sm danger" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete</button>
+                <button className="btn btn-ghost btn-sm danger" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> {t("Delete")}</button>
               )}
-              <button className="btn btn-soft btn-sm" onClick={() => setWidgetDialog({ index: null })}><Plus size={15} /> Add widget</button>
-              <button className="btn btn-primary btn-sm" onClick={() => setEditing(false)}>Done</button>
+              <button className="btn btn-soft btn-sm" onClick={() => setWidgetDialog({ index: null })}><Plus size={15} /> {t("Add widget")}</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setEditing(false)}>{t("Done")}</button>
             </>
           ) : (
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={15} /> Edit dashboard</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={15} /> {t("Edit dashboard")}</button>
           )}
         </div>
       </header>
@@ -111,8 +112,8 @@ export function DashboardPage() {
       {dashboard.widgets.length === 0 && (
         <div className="panel dashboard-empty">
           <LayoutDashboard size={28} />
-          <p>This dashboard is empty.</p>
-          <button className="btn btn-primary" onClick={() => setWidgetDialog({ index: null })}><Plus size={16} /> Add a widget</button>
+          <p>{t("This dashboard is empty.")}</p>
+          <button className="btn btn-primary" onClick={() => setWidgetDialog({ index: null })}><Plus size={16} /> {t("Add a widget")}</button>
         </div>
       )}
       <div className="dashboard-grid">
@@ -168,8 +169,8 @@ export function DashboardPage() {
           }} />
       )}
       {confirmDelete && (
-        <ConfirmDialog title={`Delete ${dashboard.name}?`} message="Its widgets are removed. Your tasks are not affected."
-          confirmLabel="Delete dashboard" danger onClose={() => setConfirmDelete(false)}
+        <ConfirmDialog title={`Delete ${dashboard.name}?`} message={t("Its widgets are removed. Your tasks are not affected.")}
+          confirmLabel={t("Delete dashboard")} danger onClose={() => setConfirmDelete(false)}
           onConfirm={async () => {
             setConfirmDelete(false);
             await api.deleteDashboard(dashboard.id);
@@ -217,7 +218,7 @@ function FilterWidget({ query, limit, tick }: { query: string; limit: number; ti
   const { data, error } = useWidgetData<SearchResult>(() => api.search(query, limit), [query, limit, tick]);
   return (
     <WidgetState error={error} loading={!data}>
-      {data && (data.tasks.length === 0 ? <p className="muted">Nothing here. 🎉</p> : (
+      {data && (data.tasks.length === 0 ? <p className="muted">{t("Nothing here. 🎉")}</p> : (
         <>
           <ul className="widget-list">
             {data.tasks.map((t) => (
@@ -260,7 +261,7 @@ function ChartWidget({ query, groupBy, tick }: { query: string; groupBy: string;
   const total = (data ?? []).reduce((s, g) => s + g.count, 0);
   return (
     <WidgetState error={error} loading={!data}>
-      {data && (data.length === 0 ? <p className="muted">No tasks match.</p> : (
+      {data && (data.length === 0 ? <p className="muted">{t("No tasks match.")}</p> : (
         <table className="bar-table" aria-label={`Tasks by ${groupBy}`}>
           <tbody>
             {data.map((g, i) => (
@@ -303,7 +304,7 @@ function SprintWidget({ project, tick }: { project: string; tick: number }) {
           <div className="progress big"><span style={{ width: `${percent}%` }} /></div>
           <p className="muted small">{done} of {total} {usePoints ? 'points' : 'tasks'} done ({percent}%)
             {b.changes.length > 0 && ` · ${b.changes.length} scope change${b.changes.length === 1 ? '' : 's'}`}</p>
-          <Link className="small" to={`/p/${project}/board`}>Open board →</Link>
+          <Link className="small" to={`/p/${project}/board`}>{t("Open board →")}</Link>
         </div>
       )}
     </WidgetState>
@@ -315,7 +316,7 @@ function UpcomingWidget({ project, tick }: { project?: string; tick: number }) {
   const upcoming = (data ?? []).filter((e) => e.kind !== 'EPIC' && (e.kind !== 'TASK' || e.status !== 'DONE')).slice(0, 10);
   return (
     <WidgetState error={error} loading={!data}>
-      {upcoming.length === 0 ? <p className="muted">Nothing in the next two weeks.</p> : (
+      {upcoming.length === 0 ? <p className="muted">{t("Nothing in the next two weeks.")}</p> : (
         <ul className="widget-list">
           {upcoming.map((e) => (
             <li key={`${e.kind}-${e.id}`}>
@@ -327,7 +328,7 @@ function UpcomingWidget({ project, tick }: { project?: string; tick: number }) {
           ))}
         </ul>
       )}
-      <Link className="small widget-more" to="/calendar"><CalendarDays size={13} /> Calendar →</Link>
+      <Link className="small widget-more" to="/calendar"><CalendarDays size={13} /> {t("Calendar →")}</Link>
     </WidgetState>
   );
 }
@@ -336,7 +337,7 @@ function ActivityWidget({ project, tick }: { project?: string; tick: number }) {
   const { data, error } = useWidgetData<FeedItem[]>(() => api.feed({ project, limit: 8 }), [project, tick]);
   return (
     <WidgetState error={error} loading={!data}>
-      {data && (data.length === 0 ? <p className="muted">No activity yet.</p> : (
+      {data && (data.length === 0 ? <p className="muted">{t("No activity yet.")}</p> : (
         <ul className="widget-list feed-mini">
           {data.map((item) => (
             <li key={`${item.kind}-${item.id}`}>
@@ -350,7 +351,7 @@ function ActivityWidget({ project, tick }: { project?: string; tick: number }) {
           ))}
         </ul>
       ))}
-      <Link className="small widget-more" to="/activity">All activity →</Link>
+      <Link className="small widget-more" to="/activity">{t("All activity →")}</Link>
     </WidgetState>
   );
 }
@@ -359,7 +360,7 @@ function RecentWidget({ tick }: { tick: number }) {
   const { data, error } = useWidgetData<RecentTask[]>(() => api.recent(), [tick]);
   return (
     <WidgetState error={error} loading={!data}>
-      {data && (data.length === 0 ? <p className="muted">Tasks you open show up here.</p> : (
+      {data && (data.length === 0 ? <p className="muted">{t("Tasks you open show up here.")}</p> : (
         <ul className="widget-list">
           {data.slice(0, 8).map((t) => (
             <li key={t.id}>
@@ -413,13 +414,13 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
   return (
     <Modal title={widget ? 'Edit widget' : 'Add widget'} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="widget-form">{widget ? 'Save' : 'Add'}</button>
       </>
     }>
       <form id="widget-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
-        <div className="widget-types" role="radiogroup" aria-label="Widget type">
+        <div className="widget-types" role="radiogroup" aria-label={t("Widget type")}>
           {WIDGET_TYPES.map((w) => (
             <label key={w.type} className={`widget-type ${type === w.type ? 'active' : ''}`}>
               <input type="radio" name="widget-type" checked={type === w.type} onChange={() => setType(w.type)} />
@@ -429,20 +430,20 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
           ))}
         </div>
         <label className="field">
-          <span>Title</span>
+          <span>{t("Title")}</span>
           <input value={title} maxLength={60} placeholder={WIDGET_TYPES.find((w) => w.type === type)?.label}
             onChange={(e) => setTitle(e.target.value)} />
         </label>
         {needsQuery && (
           <label className="field">
-            <span>Query</span>
+            <span>{t("Query")}</span>
             <input className="mono" value={query} onChange={(e) => setQuery(e.target.value)} spellCheck={false} />
-            <span className="muted small">Same language as <Link to="/search" target="_blank">Search</Link>.</span>
+            <span className="muted small">{t("Same language as")} <Link to="/search" target="_blank">{t("Search")}</Link>.</span>
           </label>
         )}
         {type === 'chart' && (
           <label className="field">
-            <span>Group by</span>
+            <span>{t("Group by")}</span>
             <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
               {GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -450,7 +451,7 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
         )}
         {type === 'filter' && (
           <label className="field">
-            <span>Show</span>
+            <span>{t("Show")}</span>
             <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
               {[5, 8, 12, 20].map((n) => <option key={n} value={n}>{n} tasks</option>)}
             </select>
@@ -458,9 +459,9 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
         )}
         {(type === 'sprint' || type === 'activity' || type === 'calendar') && (
           <label className="field">
-            <span>Project</span>
+            <span>{t("Project")}</span>
             <select value={project} onChange={(e) => setProject(e.target.value)}>
-              {type !== 'sprint' && <option value="">All projects</option>}
+              {type !== 'sprint' && <option value="">{t("All projects")}</option>}
               {(projects ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} · {p.name}</option>)}
             </select>
           </label>
@@ -477,8 +478,8 @@ function NameModal({ initial, title, onClose, onSave }: {
   return (
     <Modal title={title} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" form="name-form" disabled={!name.trim()}>Save</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" form="name-form" disabled={!name.trim()}>{t("Save")}</button>
       </>
     }>
       <form id="name-form" className="form" onSubmit={(e) => {
@@ -486,7 +487,7 @@ function NameModal({ initial, title, onClose, onSave }: {
         onSave(name.trim());
       }}>
         <label className="field">
-          <span>Name</span>
+          <span>{t("Name")}</span>
           <input value={name} maxLength={60} autoFocus onChange={(e) => setName(e.target.value)} />
         </label>
       </form>

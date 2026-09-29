@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, setUnauthorizedHandler, tokenStore, type AuthResponse } from './api';
+import { setLanguage } from './i18n';
+import { api, ApiError, clearOfflineCache, setUnauthorizedHandler, tokenStore, type AuthResponse } from './api';
 import type { User } from './types';
 
 /** What a sign-in attempt led to. */
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => {
     tokenStore.set(null);
+    clearOfflineCache();
     setUser(null);
     setAdmin(false);
     setMustChangePassword(false);
@@ -50,12 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me.user);
     setAdmin(me.admin);
     setMustChangePassword(me.mustChangePassword);
+    setLanguage(me.language);
   }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(clear);
     if (!tokenStore.get()) return;
-    loadMe().catch(() => clear()).finally(() => setLoading(false));
+    // Only a rejected token signs you out; an unreachable server keeps it for the next try.
+    loadMe().catch((e) => (e instanceof ApiError && e.status === 0 ? undefined : clear())).finally(() => setLoading(false));
   }, [clear, loadMe]);
 
   const value = useMemo<AuthState>(() => {

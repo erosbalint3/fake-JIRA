@@ -9,6 +9,7 @@ import { Modal } from '../components/Modal';
 import { ErrorBanner, Spinner } from '../components/States';
 import { todayIso } from '../format';
 import type { CalendarEvent } from '../types';
+import { locale, t } from '../i18n';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -79,7 +80,7 @@ export function CalendarPage() {
     return map;
   }, [events, show, days]);
 
-  const title = new Date(month.year, month.month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const title = new Date(month.year, month.month, 1).toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
   const shift = (delta: number) => setMonth(({ year, month: m }) => {
     const d = new Date(year, m + delta, 1);
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -89,26 +90,26 @@ export function CalendarPage() {
     <div className="page page-wide">
       <header className="page-header">
         <div>
-          <span className="eyebrow">Calendar</span>
+          <span className="eyebrow">{t("Calendar")}</span>
           <h1>{title}</h1>
         </div>
         <div className="header-actions">
-          <select value={project} onChange={(e) => setProject(e.target.value)} aria-label="Project">
-            <option value="">All projects</option>
+          <select value={project} onChange={(e) => setProject(e.target.value)} aria-label={t("Project")}>
+            <option value="">{t("All projects")}</option>
             {(projects ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} · {p.name}</option>)}
           </select>
           <div className="btn-group">
-            <button className="icon-button" aria-label="Previous month" onClick={() => shift(-1)}><ChevronLeft size={18} /></button>
+            <button className="icon-button" aria-label={t("Previous month")} onClick={() => shift(-1)}><ChevronLeft size={18} /></button>
             <button className="btn btn-ghost btn-sm" onClick={() => {
               const d = new Date();
               setMonth({ year: d.getFullYear(), month: d.getMonth() });
             }}>Today</button>
-            <button className="icon-button" aria-label="Next month" onClick={() => shift(1)}><ChevronRight size={18} /></button>
+            <button className="icon-button" aria-label={t("Next month")} onClick={() => shift(1)}><ChevronRight size={18} /></button>
           </div>
-          <button className="btn btn-soft btn-sm" onClick={() => setSubscribing(true)}><CalendarPlus size={15} /> Subscribe</button>
+          <button className="btn btn-soft btn-sm" onClick={() => setSubscribing(true)}><CalendarPlus size={15} /> {t("Subscribe")}</button>
         </div>
       </header>
-      <div className="chip-row cal-legend" role="group" aria-label="Show">
+      <div className="chip-row cal-legend" role="group" aria-label={t("Show")}>
         {(['TASK', 'SPRINT', 'RELEASE', 'EPIC', 'AWAY'] as const).map((kind) => (
           <label key={kind} className={`chip ${show[kind] ? 'active' : ''}`}>
             <input type="checkbox" className="sr-only" checked={show[kind]} onChange={(e) => setShow({ ...show, [kind]: e.target.checked })} />
@@ -120,13 +121,13 @@ export function CalendarPage() {
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!events && !error && <Spinner />}
       {events && (
-        <div className="calendar" role="grid" aria-label={title}>
-          {WEEKDAYS.map((d) => <div key={d} className="cal-head" role="columnheader">{d}</div>)}
+        <div className="calendar" role="group" aria-label={title}>
+          {WEEKDAYS.map((d) => <div key={d} className="cal-head" aria-hidden>{t(d)}</div>)}
           {days.map((day) => {
             const list = byDay.get(day) ?? [];
             const inMonth = Number(day.slice(5, 7)) - 1 === month.month;
             return (
-              <div key={day} role="gridcell" className={`cal-day ${inMonth ? '' : 'other'} ${day === today ? 'today' : ''}`}
+              <div key={day} role="group" className={`cal-day ${inMonth ? '' : 'other'} ${day === today ? 'today' : ''}`}
                 aria-label={`${day}: ${list.length} item${list.length === 1 ? '' : 's'}`}>
                 <span className="cal-date">{Number(day.slice(8))}</span>
                 <ul>
@@ -168,21 +169,21 @@ export function SubscribeModal({ onClose }: { onClose: () => void }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url ?? '');
-      toast('Feed URL copied');
+      toast(t("Feed URL copied"));
     } catch {
-      toast('Could not copy', 'error');
+      toast(t("Could not copy"), 'error');
     }
   };
   return (
-    <Modal title="Subscribe in your calendar app" onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}>
+    <Modal title={t("Subscribe in your calendar app")} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}>
       <div className="form">
         <p className="muted">Add FakeJIRA to Google Calendar, Outlook or Apple Calendar: your tasks' due dates, sprints and releases.
           The link is private — anyone who has it can see these events.</p>
         {url === undefined ? <Spinner /> : url ? (
           <>
             <div className="copy-field">
-              <input readOnly value={url} aria-label="Feed URL" onFocus={(e) => e.target.select()} />
-              <button className="btn btn-primary btn-sm" onClick={copy}><ClipboardCopy size={15} /> Copy</button>
+              <input readOnly value={url} aria-label={t("Feed URL")} onFocus={(e) => e.target.select()} />
+              <button className="btn btn-primary btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy")}</button>
             </div>
             <div className="chip-row">
               <button className="btn btn-ghost btn-sm" onClick={() => run(api.resetCalendarFeed, 'New link created; the old one stopped working')}>
@@ -193,7 +194,7 @@ export function SubscribeModal({ onClose }: { onClose: () => void }) {
           </>
         ) : (
           <div><button className="btn btn-primary" onClick={() => run(api.resetCalendarFeed, 'Calendar feed created')}>
-            <CalendarPlus size={16} /> Create my feed link</button></div>
+            <CalendarPlus size={16} /> {t("Create my feed link")}</button></div>
         )}
       </div>
     </Modal>

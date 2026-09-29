@@ -6,7 +6,7 @@ import {
   Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users,
 } from 'lucide-react';
 import { filterPath } from '../filters';
-import { api } from '../api';
+import { api, isOffline, OFFLINE_CHANGED } from '../api';
 import { useAuth } from '../auth';
 import { useLive, useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
@@ -20,8 +20,10 @@ import { Modal } from './Modal';
 import { Spinner } from './States';
 import { TaskFormModal } from './TaskFormModal';
 import { PasswordForm } from './profile/PasswordForm';
+import { OnboardingTour, START_TOUR } from './OnboardingTour';
 import { useProjectAccess } from '../useProject';
 import type { SavedFilter } from '../types';
+import { t } from '../i18n';
 
 export const NOTIFICATIONS_CHANGED = 'fakejira:notifications-changed';
 export const FILTERS_CHANGED = 'fakejira:filters-changed';
@@ -54,8 +56,30 @@ export function Layout() {
   const [filters, setFilters] = useState<SavedFilter[]>([]);
   const switcherRef = useRef<HTMLDivElement>(null);
   const { canEdit } = useProjectAccess(currentProject);
+  const [offline, setOffline] = useState(() => isOffline() || !navigator.onLine);
+  useEffect(() => {
+    const update = () => setOffline(isOffline() || !navigator.onLine);
+    ['online', 'offline', OFFLINE_CHANGED].forEach((e) => window.addEventListener(e, update));
+    return () => ['online', 'offline', OFFLINE_CHANGED].forEach((e) => window.removeEventListener(e, update));
+  }, []);
 
   const currentKey = currentProject?.key;
+  // Admins hear about new releases once (per version, per browser).
+  const [update, setUpdate] = useState<{ latest: string; url: string | null } | null>(null);
+  useEffect(() => {
+    if (!admin) return;
+    api.system().then((info) => {
+      let dismissed: string | null = null;
+      try {
+        dismissed = localStorage.getItem('fakejira.update.dismissed');
+      } catch {
+        /* storage unavailable */
+      }
+      if (info.update.available && info.update.latest && info.update.latest !== dismissed) {
+        setUpdate({ latest: info.update.latest, url: info.update.url });
+      }
+    }).catch(() => {});
+  }, [admin]);
   // The project's accent colour applies while working inside it.
   const accent = match ? byKey(match.params.key)?.color ?? null : null;
   useEffect(() => {
@@ -131,7 +155,7 @@ export function Layout() {
 
   const openCreate = useCallback((defaults: CreateDefaults = {}) => {
     if (projects && projects.length === 0) {
-      toast('Create a project first', 'error');
+      toast(t("Create a project first"), 'error');
       navigate('/projects');
       return;
     }
@@ -164,12 +188,16 @@ export function Layout() {
   return (
     <CreateTaskContext.Provider value={openCreate}>
       <div className={`shell ${menuOpen ? 'menu-open' : ''}`}>
+        <a href="#main" className="skip-link" onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}>{t('Skip to content')}</a>
         <header className="mobile-bar">
-          <button className="icon-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu">
+          <button className="icon-button" onClick={() => setMenuOpen(!menuOpen)} aria-label={t("Toggle menu")}>
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <Logo />
-          <NavLink to="/notifications" className="icon-button bell" aria-label="Notifications">
+          <NavLink to="/notifications" className="icon-button bell" aria-label={t("Notifications")}>
             <Bell size={20} />
             {unread > 0 && <span className="dot" />}
           </NavLink>
@@ -190,7 +218,7 @@ export function Layout() {
                   </span>
                 </>
               ) : (
-                <span className="switcher-text"><strong>No project</strong><span className="muted">Create one to start</span></span>
+                <span className="switcher-text"><strong>{t("No project")}</strong><span className="muted">{t("Create one to start")}</span></span>
               )}
               <ChevronsUpDown size={16} className="muted" />
             </button>
@@ -204,17 +232,17 @@ export function Layout() {
                     {project.key === currentProject?.key && <Check size={15} />}
                   </Link>
                 ))}
-                <Link to="/projects?new=1" className="switcher-item create"><Plus size={15} /> New project</Link>
+                <Link to="/projects?new=1" className="switcher-item create"><Plus size={15} /> {t("New project")}</Link>
               </div>
             )}
           </div>
 
           <button className="search-button" onClick={() => setPaletteOpen(true)}>
-            <Search size={16} /> <span className="search-button-text">Search…</span> <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd>
+            <Search size={16} /> <span className="search-button-text">{t("Search…")}</span> <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd>
           </button>
           {(!currentProject || canEdit) && (
             <button className="btn btn-primary btn-block create-button" onClick={() => openCreate({ projectKey: currentProject?.key })}>
-              <Plus size={17} /> Create task <kbd>C</kbd>
+              <Plus size={17} /> {t("Create task")} <kbd>C</kbd>
             </button>
           )}
 
@@ -222,16 +250,16 @@ export function Layout() {
             {currentProject && (
               <>
                 <span className="nav-heading">{currentProject.key}</span>
-                <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> Board</NavLink>
-                <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> Backlog</NavLink>
-                <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> Roadmap</NavLink>
-                <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> Releases</NavLink>
-                <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> Reports</NavLink>
-                <NavLink to={`/p/${currentProject.key}/automation`} className="nav-link"><Bot size={18} /> Automation</NavLink>
-                <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> Settings</NavLink>
+                <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> {t("Board")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> {t("Backlog")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> {t("Roadmap")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> {t("Releases")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> {t("Reports")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/automation`} className="nav-link"><Bot size={18} /> {t("Automation")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> {t("Settings")}</NavLink>
                 {filters.length > 0 && (
                   <>
-                    <span className="nav-heading">Saved filters</span>
+                    <span className="nav-heading">{t("Saved filters")}</span>
                     {filters.map((f) => (
                       <Link key={f.id} to={filterPath(currentProject.key, f.query)} className="nav-link nav-filter"
                         title={f.shared ? `Shared by ${f.owner}` : 'Only visible to you'}>
@@ -242,20 +270,20 @@ export function Layout() {
                 )}
               </>
             )}
-            <span className="nav-heading">Workspace</span>
-            <NavLink to="/dashboard" className="nav-link"><LayoutDashboard size={18} /> Dashboard</NavLink>
-            <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> My work</NavLink>
-            <NavLink to="/search" className="nav-link"><SearchCode size={18} /> Search</NavLink>
-            <NavLink to="/calendar" className="nav-link"><CalendarDays size={18} /> Calendar</NavLink>
-            <NavLink to="/activity" className="nav-link"><Activity size={18} /> Activity</NavLink>
+            <span className="nav-heading">{t("Workspace")}</span>
+            <NavLink to="/dashboard" className="nav-link"><LayoutDashboard size={18} /> {t("Dashboard")}</NavLink>
+            <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> {t("My work")}</NavLink>
+            <NavLink to="/search" className="nav-link"><SearchCode size={18} /> {t("Search")}</NavLink>
+            <NavLink to="/calendar" className="nav-link"><CalendarDays size={18} /> {t("Calendar")}</NavLink>
+            <NavLink to="/activity" className="nav-link"><Activity size={18} /> {t("Activity")}</NavLink>
             <NavLink to="/notifications" className="nav-link">
-              <Bell size={18} /> Notifications
+              <Bell size={18} /> {t('Notifications')}
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
-            <NavLink to="/projects" end className="nav-link"><FolderKanban size={18} /> Projects</NavLink>
-            <NavLink to="/teams" className="nav-link"><Users size={18} /> Teams</NavLink>
-            <NavLink to="/profile" className="nav-link"><UserRound size={18} /> Profile</NavLink>
-            {admin && <NavLink to="/admin" className="nav-link"><Shield size={18} /> Admin</NavLink>}
+            <NavLink to="/projects" end className="nav-link"><FolderKanban size={18} /> {t("Projects")}</NavLink>
+            <NavLink to="/teams" className="nav-link"><Users size={18} /> {t("Teams")}</NavLink>
+            <NavLink to="/profile" className="nav-link"><UserRound size={18} /> {t("Profile")}</NavLink>
+            {admin && <NavLink to="/admin" className="nav-link"><Shield size={18} /> {t("Admin")}</NavLink>}
           </nav>
 
           <div className="sidebar-footer">
@@ -267,13 +295,13 @@ export function Layout() {
               </div>
             </div>
             <div className="sidebar-actions">
-              <button className="icon-button" onClick={toggle} aria-label="Toggle theme" title="Toggle theme">
+              <button className="icon-button" onClick={toggle} aria-label={t("Toggle theme")} title={t("Toggle theme")}>
                 {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button className="icon-button" onClick={() => setShowHelp(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+              <button className="icon-button" onClick={() => setShowHelp(true)} aria-label={t("Keyboard shortcuts")} title={t("Keyboard shortcuts (?)")}>
                 <Keyboard size={18} />
               </button>
-              <button className="icon-button" onClick={logout} aria-label="Log out" title="Log out">
+              <button className="icon-button" onClick={logout} aria-label={t("Log out")} title={t("Log out")}>
                 <LogOut size={18} />
               </button>
               <span className={`live-dot ${connected ? 'on' : ''}`} title={connected ? 'Live updates on' : 'Live updates reconnecting…'} />
@@ -282,7 +310,27 @@ export function Layout() {
         </aside>
         <div className="scrim" onClick={() => setMenuOpen(false)} />
 
-        <main className="main">
+        <main className="main" id="main" tabIndex={-1}>
+          {offline && (
+            <div className="offline-strip" role="status">
+              {t("You're offline — showing the last saved copy. Changes can't be saved until you reconnect.")}
+            </div>
+          )}
+          {update && (
+            <div className="update-strip" role="status">
+              FakeJIRA {update.latest} is available.{' '}
+              {update.url && <a href={update.url} target="_blank" rel="noreferrer noopener">{t("Release notes")}</a>}{' '}
+              <Link to="/admin">{t("Admin → System")}</Link>
+              <button className="icon-button sm" aria-label={t("Dismiss update notice")} onClick={() => {
+                try {
+                  localStorage.setItem('fakejira.update.dismissed', update.latest);
+                } catch {
+                  /* storage unavailable */
+                }
+                setUpdate(null);
+              }}><X size={14} /></button>
+            </div>
+          )}
           <Suspense fallback={<div className="page"><Spinner /></div>}>
             <Outlet />
           </Suspense>
@@ -308,28 +356,33 @@ export function Layout() {
           />
         )}
         {mustChangePassword && (
-          <Modal title="Choose a new password" onClose={() => {}} dismissible={false}>
-            <p className="muted small hint">An administrator asked you to change your password before continuing.</p>
+          <Modal title={t("Choose a new password")} onClose={() => {}} dismissible={false}>
+            <p className="muted small hint">{t("An administrator asked you to change your password before continuing.")}</p>
             <PasswordForm hasPassword />
-            <button className="link small" onClick={logout}>Sign out instead</button>
+            <button className="link small" onClick={logout}>{t("Sign out instead")}</button>
           </Modal>
         )}
         {paletteOpen && (
           <CommandPalette projectKey={currentProject?.key} onClose={() => setPaletteOpen(false)}
             onCreate={() => openCreate({ projectKey: currentProject?.key })} />
         )}
+        <OnboardingTour />
         {showHelp && (
-          <Modal title="Keyboard shortcuts" onClose={() => setShowHelp(false)}>
+          <Modal title={t("Keyboard shortcuts")} onClose={() => setShowHelp(false)}>
             <dl className="shortcuts">
               {SHORTCUTS.map(([keys, action]) => (
                 <div key={keys}>
                   <dt>{keys.split(' then ').map((k, i) => (
-                    <span key={k}>{i > 0 && <span className="muted"> then </span>}<kbd>{k}</kbd></span>
+                    <span key={k}>{i > 0 && <span className="muted"> {t("then")} </span>}<kbd>{k}</kbd></span>
                   ))}</dt>
                   <dd>{action}</dd>
                 </div>
               ))}
             </dl>
+            <button className="btn btn-soft btn-sm" onClick={() => {
+              setShowHelp(false);
+              window.dispatchEvent(new Event(START_TOUR));
+            }}>{t('Take the tour')}</button>
           </Modal>
         )}
       </div>

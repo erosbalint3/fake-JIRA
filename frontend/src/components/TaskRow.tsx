@@ -6,6 +6,7 @@ import {
   BlockedBadge, ChecklistProgress, DueBadge, EpicChip, Labels, PointsBadge, PriorityBadge, StatusBadge, SubtaskBadge, TypeIcon,
 } from './Badges';
 import type { Member, Task } from '../types';
+import { t } from '../i18n';
 
 /** Handlers that make the row editable in place (backlog). */
 export interface InlineEdit {
@@ -76,7 +77,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
       )}
       <div className="task-row-meta">
         {inline && !renaming && (
-          <button className="icon-button sm row-edit" aria-label={`Rename ${task.key}`} title="Rename"
+          <button className="icon-button sm row-edit" aria-label={`Rename ${task.key}`} title={t("Rename")}
             onClick={() => {
               setTitle(task.title);
               setRenaming(true);
@@ -89,7 +90,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
         {task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
         {inline ? (
           <input className="inline-points" type="number" min={0} max={100} placeholder="–" defaultValue={task.storyPoints ?? ''}
-            key={`${task.id}-${task.storyPoints}`} aria-label={`Story points of ${task.key}`} title="Story points"
+            key={`${task.id}-${task.storyPoints}`} aria-label={`Story points of ${task.key}`} title={t("Story points")}
             onBlur={(e) => {
               const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value)));
               if (value !== task.storyPoints) inline.onPoints(task, value);
@@ -105,7 +106,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
             {task.assignee ? <Avatar user={task.assignee} /> : <span className="avatar-empty" />}
             <select value={task.assignee?.id ?? ''} aria-label={`Assignee of ${task.key}`}
               onChange={(e) => inline.onAssign(task, e.target.value ? Number(e.target.value) : null)}>
-              <option value="">Unassigned</option>
+              <option value="">{t("Unassigned")}</option>
               {inline.members.filter((m) => m.role !== 'VIEWER').map((m) => (
                 <option key={m.id} value={m.id}>{m.displayName}</option>
               ))}
@@ -113,7 +114,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
           </label>
         ) : task.assignee
           ? <Avatar user={task.assignee} />
-          : <span className="avatar-empty" title="Unassigned" />}
+          : <span className="avatar-empty" title={t("Unassigned")} />}
       </div>
     </li>
   );

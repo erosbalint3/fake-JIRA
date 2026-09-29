@@ -12,6 +12,7 @@ import { useProjects } from '../projects';
 import { useTheme } from '../theme';
 import { StatusBadge } from './Badges';
 import type { RecentTask, SavedFilter, TextHit } from '../types';
+import { t } from '../i18n';
 
 interface Item {
   id: string;
@@ -102,7 +103,7 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
         icon: <span className="project-icon sm">{p.key.slice(0, 2)}</span>, run: go(`/p/${p.key}/board`),
       })),
       ...filters.map((f) => ({
-        id: `filter-${f.id}`, group: 'Saved filters', label: f.name, hint: f.shared ? <span className="muted">shared</span> : undefined,
+        id: `filter-${f.id}`, group: 'Saved filters', label: f.name, hint: f.shared ? <span className="muted">{t("shared")}</span> : undefined,
         icon: <Filter size={16} />, run: go(filterPath(key ?? '', f.query)),
       })),
     ];
@@ -155,11 +156,11 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
   let lastGroup = '';
   return (
     <div className="modal-backdrop palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKeyDown}>
+      <div className="modal palette" role="dialog" aria-modal="true" aria-label={t("Command palette")} onKeyDown={onKeyDown}>
         <label className="palette-search">
           <Search size={18} />
           <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tasks, projects, filters and pages…" aria-label="Command palette search"
+            placeholder={t("Search tasks, projects, filters and pages…")} aria-label={t("Command palette search")}
             role="combobox" aria-expanded="true" aria-controls="palette-list"
             aria-activedescendant={items[active] ? `palette-${items[active].id}` : undefined} />
           <kbd>Esc</kbd>

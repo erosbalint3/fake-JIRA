@@ -17,6 +17,7 @@ import { formatDay, todayIso } from '../format';
 import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, type Sprint, type Task, TASK_TYPES, TASK_TYPE_LABEL,
   type VelocityEntry,
 } from '../types';
+import { t } from '../i18n';
 
 type SprintDialog = { kind: 'edit' | 'start'; sprint: Sprint } | { kind: 'create' } | null;
 
@@ -144,7 +145,7 @@ export function BacklogPage() {
     if (!canEdit || !items.length) return null;
     const all = items.every((t) => selected.includes(t.id));
     return (
-      <input type="checkbox" className="row-check" checked={all} aria-label="Select all in section"
+      <input type="checkbox" className="row-check" checked={all} aria-label={t("Select all in section")}
         onChange={() => setSelected((current) => (all
           ? current.filter((id) => !items.some((t) => t.id === id))
           : [...new Set([...current, ...items.map((t) => t.id)])]))} />
@@ -231,7 +232,7 @@ export function BacklogPage() {
       actions={canEdit &&
         <select className="move-select" value={task.sprint?.id ?? ''} aria-label={`Move ${task.key}`}
           onChange={(e) => move(task, e.target.value ? Number(e.target.value) : null)}>
-          <option value="">Backlog</option>
+          <option value="">{t("Backlog")}</option>
           {openSprints.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       } />
@@ -252,7 +253,7 @@ export function BacklogPage() {
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
-          <h1>Backlog</h1>
+          <h1>{t("Backlog")}</h1>
           <p className="muted">{kanban
             ? 'Kanban: every open task is on the board. Order the queue by priority here.'
             : 'Plan sprints by dragging tasks between sections.'}</p>
@@ -269,37 +270,37 @@ export function BacklogPage() {
                 <Plus size={18} /> Create task
               </button>
             </>
-          ) : <span className="readonly-badge"><Eye size={13} /> Read-only</span>}
+          ) : <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
         </div>
       </header>
 
       <div className="toolbar">
         <label className="search">
           <Search size={16} />
-          <input ref={searchRef} placeholder="Search tasks  ( / )" value={query}
-            onChange={(e) => setFilter('q', e.target.value)} aria-label="Search tasks" />
+          <input ref={searchRef} placeholder={t("Search tasks  ( / )")} value={query}
+            onChange={(e) => setFilter('q', e.target.value)} aria-label={t("Search tasks")} />
         </label>
-        <select value={assignee} onChange={(e) => setFilter('assignee', e.target.value)} aria-label="Assignee">
-          <option value="">Anyone</option>
-          <option value="me">Assigned to me</option>
-          <option value="none">Unassigned</option>
+        <select value={assignee} onChange={(e) => setFilter('assignee', e.target.value)} aria-label={t("Assignee")}>
+          <option value="">{t("Anyone")}</option>
+          <option value="me">{t("Assigned to me")}</option>
+          <option value="none">{t("Unassigned")}</option>
           {project.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
         </select>
-        <select value={priority} onChange={(e) => setFilter('priority', e.target.value)} aria-label="Priority">
-          <option value="">Any priority</option>
+        <select value={priority} onChange={(e) => setFilter('priority', e.target.value)} aria-label={t("Priority")}>
+          <option value="">{t("Any priority")}</option>
           {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
         </select>
-        <select value={label} onChange={(e) => setFilter('label', e.target.value)} aria-label="Label">
-          <option value="">Any label</option>
+        <select value={label} onChange={(e) => setFilter('label', e.target.value)} aria-label={t("Label")}>
+          <option value="">{t("Any label")}</option>
           {labels.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
-        <select value={typeFilter} onChange={(e) => setFilter('type', e.target.value)} aria-label="Type">
-          <option value="">Any type</option>
+        <select value={typeFilter} onChange={(e) => setFilter('type', e.target.value)} aria-label={t("Type")}>
+          <option value="">{t("Any type")}</option>
           {TASK_TYPES.map((t) => <option key={t} value={t}>{TASK_TYPE_LABEL[t]}</option>)}
         </select>
-        <select value={epicFilter} onChange={(e) => setFilter('epic', e.target.value)} aria-label="Epic">
-          <option value="">Any epic</option>
-          <option value="none">No epic</option>
+        <select value={epicFilter} onChange={(e) => setFilter('epic', e.target.value)} aria-label={t("Epic")}>
+          <option value="">{t("Any epic")}</option>
+          <option value="none">{t("No epic")}</option>
           {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
         </select>
         {filtered && (
@@ -307,7 +308,7 @@ export function BacklogPage() {
             <button className="btn btn-ghost btn-sm filter-action" onClick={() => setSavingFilter(true)}>
               <Bookmark size={15} /> Save filter
             </button>
-            <button className="link small filter-action" onClick={() => setParams({}, { replace: true })}>Clear</button>
+            <button className="link small filter-action" onClick={() => setParams({}, { replace: true })}>{t("Clear")}</button>
           </>
         )}
       </div>
@@ -344,13 +345,13 @@ export function BacklogPage() {
                 {sprint.state === 'PLANNED' && (
                   <button className="btn btn-soft btn-sm" disabled={hasActive}
                     title={hasActive ? 'Complete the active sprint first' : undefined}
-                    onClick={() => setDialog({ kind: 'start', sprint })}>Start sprint</button>
+                    onClick={() => setDialog({ kind: 'start', sprint })}>{t("Start sprint")}</button>
                 )}
                 {sprint.state === 'ACTIVE' && (
-                  <button className="btn btn-soft btn-sm" onClick={() => setConfirm({ kind: 'complete', sprint })}>Complete sprint</button>
+                  <button className="btn btn-soft btn-sm" onClick={() => setConfirm({ kind: 'complete', sprint })}>{t("Complete sprint")}</button>
                 )}
                 {sprint.state === 'ACTIVE' && (
-                  <Link className="btn btn-ghost btn-sm" to={`/p/${key}/sprints/${sprint.id}`}>Review & retro</Link>
+                  <Link className="btn btn-ghost btn-sm" to={`/p/${key}/sprints/${sprint.id}`}>{t("Review & retro")}</Link>
                 )}
                 <SprintMenu
                   onEdit={() => setDialog({ kind: 'edit', sprint })}
@@ -361,11 +362,11 @@ export function BacklogPage() {
             </header>
             {sprint.goal && <p className="sprint-goal muted">{sprint.goal}</p>}
             {items.length > 0 && (
-              <div className={`capacity ${overCapacity ? 'over' : ''}`} aria-label="Sprint capacity">
+              <div className={`capacity ${overCapacity ? 'over' : ''}`} aria-label={t("Sprint capacity")}>
                 <strong>{planned} pts planned</strong>
                 {averageVelocity !== null
                   ? <span>· team average {averageVelocity} pts{overCapacity ? ' — more than the team usually finishes' : ''}</span>
-                  : <span className="muted">· complete a sprint to see the team's velocity</span>}
+                  : <span className="muted">{t("· complete a sprint to see the team's velocity")}</span>}
                 {unestimated > 0 && <span className="muted">· {unestimated} unestimated</span>}
                 <span className="capacity-people">
                   {[...perPerson.entries()].sort((a, b) => b[1] - a[1]).map(([name, pts]) => (
@@ -386,7 +387,7 @@ export function BacklogPage() {
           <header className="sprint-header">
             <div className="sprint-title">
               {sectionCheckbox(backlog)}
-              <h2>Backlog</h2>
+              <h2>{t("Backlog")}</h2>
               <span className="muted small">{backlog.length} task{backlog.length === 1 ? '' : 's'}</span>
             </div>
             <label className="toggle small">
@@ -395,7 +396,7 @@ export function BacklogPage() {
           </header>
           {backlog.length ? <ul className="task-list">{backlog.map(row)}</ul> : (
             <EmptyState icon={<Inbox size={28} />} title={filtered ? 'No matching tasks' : 'The backlog is empty'}>
-              {filtered ? 'Try a different filter.' : canEdit ? <>Everything is planned. <button className="link" onClick={() => openCreate({ projectKey: key })}>Create a task</button></> : null}
+              {filtered ? 'Try a different filter.' : canEdit ? <>Everything is planned. <button className="link" onClick={() => openCreate({ projectKey: key })}>{t("Create a task")}</button></> : null}
             </EmptyState>
           )}
         </section>
@@ -403,7 +404,7 @@ export function BacklogPage() {
 
       {tasks && completedSprints.length > 0 && (
         <section className="past-sprints">
-          <h2 className="section-title">Completed sprints</h2>
+          <h2 className="section-title">{t("Completed sprints")}</h2>
           <ul>
             {completedSprints.slice(0, 8).map((s) => (
               <li key={s.id}>
@@ -475,14 +476,14 @@ function SprintMenu({ onEdit, onDelete, onAddTask }: { onEdit: () => void; onDel
   };
   return (
     <div className="menu" ref={ref}>
-      <button className="icon-button" aria-label="Sprint actions" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button className="icon-button" aria-label={t("Sprint actions")} aria-expanded={open} onClick={() => setOpen(!open)}>
         <MoreHorizontal size={18} />
       </button>
       {open && (
         <div className="menu-list" role="menu">
-          <button role="menuitem" onClick={choose(onAddTask)}>Add task to sprint</button>
-          <button role="menuitem" onClick={choose(onEdit)}>Edit sprint</button>
-          {onDelete && <button role="menuitem" className="danger" onClick={choose(onDelete)}>Delete sprint</button>}
+          <button role="menuitem" onClick={choose(onAddTask)}>{t("Add task to sprint")}</button>
+          <button role="menuitem" onClick={choose(onEdit)}>{t("Edit sprint")}</button>
+          {onDelete && <button role="menuitem" className="danger" onClick={choose(onDelete)}>{t("Delete sprint")}</button>}
         </div>
       )}
     </div>
@@ -539,7 +540,7 @@ function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints,
   return (
     <Modal title={title} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="sprint-form" disabled={busy}>
           {dialog.kind === 'start' ? 'Start sprint' : dialog.kind === 'create' ? 'Create sprint' : 'Save'}
         </button>
@@ -556,24 +557,24 @@ function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints,
           </p>
         )}
         <label className="field">
-          <span>Name</span>
+          <span>{t("Name")}</span>
           <input value={name} maxLength={80} placeholder={dialog.kind === 'create' ? 'Leave empty for an automatic name' : ''}
             onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="field">
-          <span>Goal <span className="muted">(optional)</span></span>
+          <span>{t("Goal")} <span className="muted">{t("(optional)")}</span></span>
           <textarea rows={2} maxLength={500} value={goal} onChange={(e) => setGoal(e.target.value)} />
         </label>
         <div className="form-grid two">
           <label className="field">
-            <span>Start date</span>
+            <span>{t("Start date")}</span>
             <input type="date" value={startDate} required={dialog.kind === 'start'} onChange={(e) => {
               setStartDate(e.target.value);
               if (e.target.value && !endDate) setEndDate(addDays(e.target.value, 14));
             }} />
           </label>
           <label className="field">
-            <span>End date</span>
+            <span>{t("End date")}</span>
             <input type="date" value={endDate} min={startDate || undefined} required={dialog.kind === 'start'}
               onChange={(e) => setEndDate(e.target.value)} />
           </label>
@@ -599,23 +600,23 @@ function SaveFilterModal({ projectKey, query, onClose, onSaved }: {
     }
   };
   return (
-    <Modal title="Save filter" onClose={onClose} footer={
+    <Modal title={t("Save filter")} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" form="filter-form" disabled={!name.trim()}>Save</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
+        <button className="btn btn-primary" form="filter-form" disabled={!name.trim()}>{t("Save")}</button>
       </>
     }>
       <form id="filter-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Name</span>
-          <input value={name} maxLength={60} placeholder="My open bugs" onChange={(e) => setName(e.target.value)} />
+          <span>{t("Name")}</span>
+          <input value={name} maxLength={60} placeholder={t("My open bugs")} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="toggle">
           <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
           Share with everyone in the project
         </label>
-        <p className="muted small">It appears in the sidebar and in the command palette (Ctrl+K).</p>
+        <p className="muted small">{t("It appears in the sidebar and in the command palette (Ctrl+K).")}</p>
       </form>
     </Modal>
   );

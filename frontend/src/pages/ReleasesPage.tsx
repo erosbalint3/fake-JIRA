@@ -13,6 +13,7 @@ import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDay, todayIso } from '../format';
 import type { Release, Task } from '../types';
+import { t } from '../i18n';
 
 export function ReleasesPage() {
   const { key, project, loading, canEdit } = useRouteProject();
@@ -71,12 +72,12 @@ export function ReleasesPage() {
           <span className="muted small">{release.doneCount}/{release.taskCount} done{release.points ? ` · ${release.donePoints}/${release.points} pts` : ''}</span>
           <span className="spacer" />
           <button className="btn btn-ghost btn-sm" onClick={() => api.releaseNotes(release.id).then(setNotes)
-            .catch((e: ApiError) => toast(e.message, 'error'))}><FileText size={15} /> Notes</button>
+            .catch((e: ApiError) => toast(e.message, 'error'))}><FileText size={15} /> {t("Notes")}</button>
           {canEdit && !release.released && (
-            <button className="btn btn-soft btn-sm" onClick={() => setShipping(release)}><Rocket size={15} /> Release</button>
+            <button className="btn btn-soft btn-sm" onClick={() => setShipping(release)}><Rocket size={15} /> {t("Release")}</button>
           )}
           {canEdit && release.released && (
-            <button className="icon-button" aria-label={`Mark ${release.name} unreleased`} title="Mark unreleased"
+            <button className="icon-button" aria-label={`Mark ${release.name} unreleased`} title={t("Mark unreleased")}
               onClick={() => run(() => api.unshipRelease(release.id), `${release.name} marked unreleased`)}><Undo2 size={16} /></button>
           )}
           {canEdit && (
@@ -97,32 +98,32 @@ export function ReleasesPage() {
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
-          <h1>Releases</h1>
-          <p className="muted">Group work into versions, ship them and share release notes. Set a task's release on its page.</p>
+          <h1>{t("Releases")}</h1>
+          <p className="muted">{t("Group work into versions, ship them and share release notes. Set a task's release on its page.")}</p>
         </div>
         {canEdit && (
           <div className="header-actions">
-            <button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} /> New release</button>
+            <button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} /> {t("New release")}</button>
           </div>
         )}
       </header>
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!releases && !error && <Spinner />}
       {releases && releases.length === 0 && (
-        <EmptyState icon={<Package size={28} />} title="No releases yet">
-          {canEdit ? <button className="link" onClick={() => setEditing('new')}>Create the first release</button>
+        <EmptyState icon={<Package size={28} />} title={t("No releases yet")}>
+          {canEdit ? <button className="link" onClick={() => setEditing('new')}>{t("Create the first release")}</button>
             : 'The project owner has not planned any releases.'}
         </EmptyState>
       )}
       {upcoming.length > 0 && (
         <section>
-          <h2 className="section-title">Unreleased</h2>
+          <h2 className="section-title">{t("Unreleased")}</h2>
           <ul className="release-list">{upcoming.map(card)}</ul>
         </section>
       )}
       {shipped.length > 0 && (
         <section>
-          <h2 className="section-title">Released</h2>
+          <h2 className="section-title">{t("Released")}</h2>
           <ul className="release-list">{shipped.map(card)}</ul>
         </section>
       )}
@@ -144,8 +145,8 @@ export function ReleasesPage() {
           }} />
       )}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} message="Its tasks stay; they just no longer belong to a release."
-          confirmLabel="Delete release" danger onClose={() => setDeleting(null)}
+        <ConfirmDialog title={`Delete ${deleting.name}?`} message={t("Its tasks stay; they just no longer belong to a release.")}
+          confirmLabel={t("Delete release")} danger onClose={() => setDeleting(null)}
           onConfirm={() => {
             const r = deleting;
             setDeleting(null);
@@ -163,7 +164,7 @@ function ReleaseTasks({ id }: { id: number }) {
     api.releaseTasks(id).then(setTasks).catch(() => setTasks([]));
   }, [id]);
   if (!tasks) return <Spinner />;
-  if (tasks.length === 0) return <p className="muted release-tasks">No tasks yet. Open a task and pick this release.</p>;
+  if (tasks.length === 0) return <p className="muted release-tasks">{t("No tasks yet. Open a task and pick this release.")}</p>;
   return (
     <ul className="review-list release-tasks">
       {tasks.map((t) => (
@@ -204,22 +205,22 @@ function ReleaseModal({ projectKey, release, onClose, onSaved }: {
   return (
     <Modal title={release ? `Edit ${release.name}` : 'New release'} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="release-form" disabled={busy || !name.trim()}>{release ? 'Save' : 'Create'}</button>
       </>
     }>
       <form id="release-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Version</span>
+          <span>{t("Version")}</span>
           <input value={name} maxLength={40} placeholder="1.4.0" autoFocus onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="field">
-          <span>Release date <span className="muted">(optional)</span></span>
+          <span>{t("Release date")} <span className="muted">{t("(optional)")}</span></span>
           <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
         </label>
         <label className="field">
-          <span>Description <span className="muted">(shown in the release notes)</span></span>
+          <span>{t("Description")} <span className="muted">{t("(shown in the release notes)")}</span></span>
           <textarea rows={3} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
       </form>
@@ -235,7 +236,7 @@ function ShipModal({ release, others, onClose, onShip }: {
   return (
     <Modal title={`Release ${release.name}`} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" onClick={() => onShip(open && target ? Number(target) : null)}>
           <Rocket size={16} /> Release
         </button>
@@ -245,10 +246,10 @@ function ShipModal({ release, others, onClose, onShip }: {
         <>
           <p>{open} task{open === 1 ? ' is' : 's are'} not done yet.</p>
           <label className="field">
-            <span>Move unfinished tasks to</span>
+            <span>{t("Move unfinished tasks to")}</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
               {others.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              <option value="">No release</option>
+              <option value="">{t("No release")}</option>
             </select>
           </label>
         </>
@@ -262,16 +263,16 @@ function NotesModal({ notes, onClose }: { notes: { release: Release; markdown: s
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(notes.markdown);
-      toast('Release notes copied');
+      toast(t("Release notes copied"));
     } catch {
-      toast('Could not copy — your browser blocked the clipboard', 'error');
+      toast(t("Could not copy — your browser blocked the clipboard"), 'error');
     }
   };
   return (
     <Modal title={`Release notes · ${notes.release.name}`} onClose={onClose} footer={
       <>
-        <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        <button className="btn btn-primary" onClick={copy}><ClipboardCopy size={16} /> Copy Markdown</button>
+        <button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>
+        <button className="btn btn-primary" onClick={copy}><ClipboardCopy size={16} /> {t("Copy Markdown")}</button>
       </>
     }>
       <div className="release-notes"><Markdown>{notes.markdown}</Markdown></div>
