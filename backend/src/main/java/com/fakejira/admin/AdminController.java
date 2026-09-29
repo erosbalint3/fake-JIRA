@@ -3,6 +3,7 @@ package com.fakejira.admin;
 import com.fakejira.admin.BackupService.BackupFile;
 import com.fakejira.common.ApiException;
 import com.fakejira.common.CurrentUser;
+import com.fakejira.mail.MailService;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.user.AccountStatus;
 import com.fakejira.user.User;
@@ -43,9 +44,11 @@ public class AdminController {
     private final AppSettings settings;
     private final BackupService backups;
     private final NotificationService notifications;
+    private final MailService mail;
 
     public AdminController(CurrentUser currentUser, UserRepository users, AppSettings settings, BackupService backups,
-                           NotificationService notifications) {
+                           NotificationService notifications, MailService mail) {
+        this.mail = mail;
         this.currentUser = currentUser;
         this.users = users;
         this.settings = settings;
@@ -59,7 +62,9 @@ public class AdminController {
         }
     }
 
-    public record Overview(RegistrationMode registrationMode, List<AdminUser> users) {
+    /** siteUrl: the public URL used in emails and invite links; siteUrlConfigured: whether APP_BASE_URL set it. */
+    public record Overview(RegistrationMode registrationMode, List<AdminUser> users, String siteUrl,
+                           boolean siteUrlConfigured) {
     }
 
     public record ModeRequest(@NotNull RegistrationMode mode) {
@@ -73,7 +78,8 @@ public class AdminController {
     public Overview overview(@AuthenticationPrincipal Jwt jwt) {
         currentUser.admin(jwt);
         return new Overview(settings.registrationMode(),
-                users.findAllByOrderByCreatedAtAsc().stream().map(AdminUser::of).toList());
+                users.findAllByOrderByCreatedAtAsc().stream().map(AdminUser::of).toList(),
+                mail.siteUrl(), mail.isBaseUrlConfigured());
     }
 
     @PutMapping("/registration")

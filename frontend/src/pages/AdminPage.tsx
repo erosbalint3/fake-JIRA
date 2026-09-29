@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Archive, Check, Copy, Download, Link2, Plus, Shield, ShieldOff, Trash2, X } from 'lucide-react';
-import { api, ApiError, saveBlob } from '../api';
+import { api, ApiError, inviteLink, saveBlob } from '../api';
 import { useAuth } from '../auth';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
@@ -20,6 +20,7 @@ export function AdminPage() {
   const { admin, user } = useAuth();
   const toast = useToast();
   const [mode, setMode] = useState<RegistrationMode | null>(null);
+  const [site, setSite] = useState<{ url: string; configured: boolean } | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [backups, setBackups] = useState<Backup[] | null>(null);
@@ -31,6 +32,7 @@ export function AdminPage() {
     api.admin().then((overview) => {
       setMode(overview.registrationMode);
       setUsers(overview.users);
+      setSite({ url: overview.siteUrl, configured: overview.siteUrlConfigured });
     }).catch((e: ApiError) => setError(e.message));
     api.invites().then(setInvites).catch(() => setInvites([]));
     api.backups().then(setBackups).catch(() => setBackups([]));
@@ -71,7 +73,7 @@ export function AdminPage() {
       const invite = await api.createInvite(inviteEmail.trim() || null, null);
       setInviteEmail('');
       load();
-      await copy(invite.link);
+      await copy(inviteLink(invite.code));
     } catch (e) {
       toast((e as ApiError).message, 'error');
     } finally {
@@ -95,6 +97,14 @@ export function AdminPage() {
       {!mode && !error && <Spinner />}
       {mode && (
         <>
+          {site && site.url !== window.location.origin && (
+            <div className="alert">
+              Links in emails point to <b>{site.url}</b>, but you are using {window.location.origin}.
+              {site.configured
+                ? ' Update APP_BASE_URL in your .env and restart the app.'
+                : ' Reload this page to update it, or set APP_BASE_URL in your .env.'}
+            </div>
+          )}
           <section className="panel">
             <h2 className="panel-title">Sign-up</h2>
             <div className="mode-options" role="radiogroup" aria-label="Who can sign up">
@@ -147,7 +157,7 @@ export function AdminPage() {
                       <strong>{invite.email ?? 'Anyone with the link'}{invite.projectKey && <span className="muted"> → {invite.projectKey}</span>}</strong>
                       <span className="muted small">Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
                     </div>
-                    <button className="icon-button sm" aria-label="Copy invite link" title="Copy link" onClick={() => copy(invite.link)}>
+                    <button className="icon-button sm" aria-label="Copy invite link" title="Copy link" onClick={() => copy(inviteLink(invite.code))}>
                       <Copy size={15} />
                     </button>
                     <button className="icon-button sm" aria-label="Revoke invite" title="Revoke"

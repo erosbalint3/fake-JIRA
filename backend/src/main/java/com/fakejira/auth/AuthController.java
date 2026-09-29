@@ -7,8 +7,10 @@ import com.fakejira.auth.AuthDtos.LoginRequest;
 import com.fakejira.auth.AuthDtos.RegisterRequest;
 import com.fakejira.auth.AuthDtos.ResetPasswordRequest;
 import com.fakejira.common.CurrentUser;
+import com.fakejira.mail.MailService;
 import com.fakejira.user.User;
 import com.fakejira.user.UserSummary;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,11 +31,14 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordReset;
     private final CurrentUser currentUser;
+    private final MailService mail;
 
-    public AuthController(AuthService authService, PasswordResetService passwordReset, CurrentUser currentUser) {
+    public AuthController(AuthService authService, PasswordResetService passwordReset, CurrentUser currentUser,
+                          MailService mail) {
         this.authService = authService;
         this.passwordReset = passwordReset;
         this.currentUser = currentUser;
+        this.mail = mail;
     }
 
     public record MeResponse(UserSummary user, boolean admin) {
@@ -70,8 +75,12 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public MeResponse me(@AuthenticationPrincipal Jwt jwt) {
+    public MeResponse me(@AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
         User user = currentUser.from(jwt);
+        if (user.isAdmin()) {
+            // Without APP_BASE_URL, links in emails and invites use the address admins open the app at.
+            mail.rememberSiteUrl(request);
+        }
         return new MeResponse(UserSummary.of(user), user.isAdmin());
     }
 }

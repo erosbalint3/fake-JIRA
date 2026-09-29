@@ -254,9 +254,9 @@ export const api = {
     request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null }),
   revokeInvite: (id: number) => request<void>('DELETE', `/invites/${id}`),
 
-  admin: () => request<{ registrationMode: RegistrationMode; users: AdminUser[] }>('GET', '/admin'),
+  admin: () => request<AdminOverview>('GET', '/admin'),
   setRegistrationMode: (mode: RegistrationMode) =>
-    request<{ registrationMode: RegistrationMode; users: AdminUser[] }>('PUT', '/admin/registration', { mode }),
+    request<AdminOverview>('PUT', '/admin/registration', { mode }),
   approveUser: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/approve`),
   rejectUser: (id: number) => request<void>('DELETE', `/admin/users/${id}`),
   setAdmin: (id: number, admin: boolean) => request<AdminUser>('PUT', `/admin/users/${id}/admin`, { admin }),
@@ -266,6 +266,14 @@ export const api = {
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PUT', '/profile/password', { currentPassword, newPassword }),
 };
+
+export interface AdminOverview {
+  registrationMode: RegistrationMode;
+  users: AdminUser[];
+  /** Public URL used in email links; learned from admin visits unless APP_BASE_URL is set. */
+  siteUrl: string;
+  siteUrlConfigured: boolean;
+}
 
 export interface EpicInput {
   name: string;
@@ -330,4 +338,13 @@ export async function streamEvents(onMessage: (message: LiveMessage) => void, si
       }
     }
   }
+}
+
+/** Links people copy use the address this browser reached the app at, so they are right behind any proxy. */
+export function inviteLink(code: string) {
+  return `${window.location.origin}/register?invite=${encodeURIComponent(code)}`;
+}
+
+export function githubWebhookUrl(projectKey: string) {
+  return `${window.location.origin}/api/integrations/github/${projectKey}`;
 }

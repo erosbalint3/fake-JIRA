@@ -36,8 +36,9 @@ spring:
       mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:true}
 
 app:
-  # Public URL of the app, used in email links.
-  base-url: ${APP_BASE_URL:http://localhost:5173}
+  # Public URL of the app, used in email and invite links. When empty, the address admins open
+  # the app at is used (learned when an admin signs in).
+  base-url: ${APP_BASE_URL:}
   mail:
     from: ${APP_MAIL_FROM:FakeJIRA <no-reply@localhost>}
   storage:

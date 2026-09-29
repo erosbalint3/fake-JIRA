@@ -139,7 +139,7 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | --- | --- | --- |
 | `app.jwt.secret` | `APP_JWT_SECRET` | Random on each start. Set a value of 32+ characters so logins survive restarts. |
 | `app.jwt.validity` | `APP_JWT_VALIDITY` | `12h` |
-| `app.base-url` | `APP_BASE_URL` | `http://localhost:5173`. The public URL, used for links in emails. |
+| `app.base-url` | `APP_BASE_URL` | Empty. The public URL (e.g. `https://jira.example.com`) used for links in emails and invites. When empty, the address an admin opens the app at is used; set it anyway so links are right from the start. |
 | `app.storage.dir` | `APP_STORAGE_DIR` | `./data/attachments` (`/data/attachments` in Docker) |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:h2:file:./data/fakejira` |
 | `app.backup.dir` | `APP_BACKUP_DIR` | `./data/backups` (`/data/backups` in Docker) |
