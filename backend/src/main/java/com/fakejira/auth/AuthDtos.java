@@ -1,5 +1,6 @@
 package com.fakejira.auth;
 
+import com.fakejira.user.User;
 import com.fakejira.user.UserSummary;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -23,9 +24,7 @@ public final class AuthDtos {
             String email,
 
             @NotBlank(message = "Password is required")
-            @Size(min = 8, max = 100, message = "Password must be at least 8 characters long")
-            @Pattern(regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
-                    message = "Password needs an uppercase letter, a number and a special character")
+            @PolicyPassword
             String password,
 
             /** Required when sign-up is invite-only. */
@@ -37,13 +36,12 @@ public final class AuthDtos {
             @NotBlank(message = "Enter your password") String password) {
     }
 
+    /** {@code currentPassword} may be empty for accounts that never had one (Google/GitHub sign-in). */
     public record ChangePasswordRequest(
-            @NotBlank(message = "Enter your current password") String currentPassword,
+            String currentPassword,
 
             @NotBlank(message = "Password is required")
-            @Size(min = 8, max = 100, message = "Password must be at least 8 characters long")
-            @Pattern(regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
-                    message = "Password needs an uppercase letter, a number and a special character")
+            @PolicyPassword
             String newPassword) {
     }
 
@@ -55,14 +53,36 @@ public final class AuthDtos {
             @NotBlank(message = "The reset link is incomplete") String token,
 
             @NotBlank(message = "Password is required")
-            @Size(min = 8, max = 100, message = "Password must be at least 8 characters long")
-            @Pattern(regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
-                    message = "Password needs an uppercase letter, a number and a special character")
+            @PolicyPassword
             String newPassword) {
     }
 
-    /** {@code token} is null and {@code pending} true when the account awaits admin approval. */
-    public record AuthResponse(String token, UserSummary user, boolean pending, boolean admin) {
+    /**
+     * {@code token} is null and {@code pending} true when the account awaits admin approval. When two-factor
+     * authentication is on, {@code token} is null and {@code challenge} must be sent with a code to
+     * /api/auth/login/2fa.
+     */
+    public record AuthResponse(String token, UserSummary user, boolean pending, boolean admin, String challenge) {
+
+        public static AuthResponse signedIn(String token, User user) {
+            return new AuthResponse(token, UserSummary.of(user), false, user.isAdmin(), null);
+        }
+
+        public static AuthResponse pending(User user) {
+            return new AuthResponse(null, UserSummary.of(user), true, false, null);
+        }
+
+        public static AuthResponse secondStep(String challenge) {
+            return new AuthResponse(null, null, false, false, challenge);
+        }
+    }
+
+    public record TwoFactorLoginRequest(
+            @NotBlank(message = "The sign-in step expired, start again") String challenge,
+            @NotBlank(message = "Enter the code from your authenticator app") String code) {
+    }
+
+    public record PasswordRules(int minLength, boolean upper, boolean digit, boolean special) {
     }
 
     public record InviteInfo(boolean valid, String email, String projectName, String registrationMode) {

@@ -222,11 +222,11 @@ public final class TaskDtos {
         }
     }
 
-    public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt) {
+    public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt, Instant editedAt) {
 
         public static CommentResponse of(Comment comment) {
-            return new CommentResponse(
-                    comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(), comment.getCreatedAt());
+            return new CommentResponse(comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(),
+                    comment.getCreatedAt(), comment.getEditedAt());
         }
     }
 

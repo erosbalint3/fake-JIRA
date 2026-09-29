@@ -24,7 +24,21 @@ public class CurrentUser {
         if (user.getStatus() != com.fakejira.user.AccountStatus.ACTIVE) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Your account is not active.");
         }
+        if (user.isMustChangePassword() && blockedUntilPasswordChange()) {
+            throw ApiException.forbidden("Choose a new password before making changes.");
+        }
         return user;
+    }
+
+    /** While a new password is required, only reading and the profile/sign-in endpoints work. */
+    private static boolean blockedUntilPasswordChange() {
+        if (!(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+                instanceof org.springframework.web.context.request.ServletRequestAttributes attributes)) {
+            return false;
+        }
+        var request = attributes.getRequest();
+        String path = request.getRequestURI();
+        return !"GET".equals(request.getMethod()) && !path.startsWith("/api/auth/") && !path.startsWith("/api/profile");
     }
 
     public User admin(Jwt jwt) {

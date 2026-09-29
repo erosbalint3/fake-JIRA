@@ -46,6 +46,9 @@ public final class ProjectDtos {
     public record RoleRequest(Role role) {
     }
 
+    public record OwnerRequest(@jakarta.validation.constraints.NotNull Long userId) {
+    }
+
     public record MemberResponse(Long id, String username, String email, String displayName, String avatarUrl,
                                  Role role) {
     }

@@ -15,6 +15,8 @@ import com.fakejira.task.SavedFilterRepository;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.user.User;
 import com.fakejira.user.UserRepository;
+import com.fakejira.audit.AuditLog;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,11 +39,16 @@ public class ProjectService {
     private final BoardColumnRepository columns;
     private final SavedFilterRepository filters;
     private final InviteRepository invites;
+    private final ApplicationEventPublisher events;
+    private final AuditLog audit;
 
     public ProjectService(ProjectRepository projects, ProjectAccess access, UserRepository users,
                           TaskRepository tasks, SprintRepository sprints, TaskCleanup cleanup,
                           NotificationService notifications, LiveEvents live, EpicRepository epics,
-                          BoardColumnRepository columns, SavedFilterRepository filters, InviteRepository invites) {
+                          BoardColumnRepository columns, SavedFilterRepository filters, InviteRepository invites,
+                          ApplicationEventPublisher events, AuditLog audit) {
+        this.events = events;
+        this.audit = audit;
         this.epics = epics;
         this.columns = columns;
         this.filters = filters;
@@ -72,6 +79,7 @@ public class ProjectService {
             throw ApiException.conflict("A project with key " + key + " already exists.");
         }
         Project project = projects.save(new Project(key, request.name().trim(), trim(request.description()), user));
+        audit.record(user, "project.create", key, project.getName());
         return ProjectResponse.of(project);
     }
 
@@ -99,6 +107,7 @@ public class ProjectService {
         }
         notifications.notify(member, user,
                 user.getUsername() + " added you to project " + project.getKey() + " · " + project.getName(), null);
+        audit.record(user, "project.member_add", project.getKey(), member.getUsername() + " as " + (role == null ? "MEMBER" : role));
         live.projectChanged(project);
         return ProjectResponse.of(project);
     }
@@ -119,6 +128,20 @@ public class ProjectService {
         } else if (role == ProjectDtos.Role.MEMBER) {
             project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
         }
+        audit.record(user, "project.role", project.getKey(), member.getUsername() + " → " + role);
+        live.projectChanged(project);
+        return ProjectResponse.of(project);
+    }
+
+    /** The owner hands the project to another member (who gets full access); the old owner stays a member. */
+    public ProjectResponse transferOwnership(User user, String key, Long newOwnerId) {
+        Project project = access.memberProject(key, user);
+        access.requireOwner(project, user);
+        User next = project.getMembers().stream().filter(m -> m.getId().equals(newOwnerId)).findFirst()
+                .orElseThrow(() -> ApiException.notFound("That user is not a member of this project."));
+        project.getViewers().removeIf(viewer -> viewer.getId().equals(newOwnerId));
+        project.setOwner(next);
+        audit.record(user, "project.transfer", project.getKey(), "to " + next.getUsername());
         live.projectChanged(project);
         return ProjectResponse.of(project);
     }
@@ -139,6 +162,7 @@ public class ProjectService {
             throw ApiException.notFound("That user is not a member of this project.");
         }
         tasks.unassignInProject(project.getId(), memberId);
+        audit.record(user, leaving ? "project.leave" : "project.member_remove", project.getKey(), "user #" + memberId);
         live.projectChangedFor(project, Set.of(memberId));
     }
 
@@ -148,11 +172,13 @@ public class ProjectService {
         live.projectChanged(project);
         // Subtasks are deleted together with their parent.
         tasks.findByProjectId(project.getId()).stream().filter(task -> task.getParent() == null).forEach(cleanup::delete);
+        events.publishEvent(new ProjectDeleting(project.getId()));
         sprints.deleteAll(sprints.findByProjectIdOrderByCreatedAtAsc(project.getId()));
         epics.deleteAll(epics.findByProjectIdOrderByCreatedAtAsc(project.getId()));
         columns.deleteAll(columns.findByProjectIdOrderByPositionAscIdAsc(project.getId()));
         filters.deleteForProject(project.getId());
         invites.deleteForProject(project.getId());
+        audit.record(user, "project.delete", project.getKey(), project.getName());
         projects.delete(project);
     }
 

@@ -145,6 +145,18 @@ public class TaskController {
         return details.comments(currentUser.from(jwt), id);
     }
 
+    @PutMapping("/{id}/comments/{commentId}")
+    public CommentResponse editComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @PathVariable Long commentId,
+                                       @Valid @RequestBody CommentRequest request) {
+        return details.editComment(currentUser.from(jwt), id, commentId, request.body());
+    }
+
+    @DeleteMapping("/{id}/comments/{commentId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @PathVariable Long commentId) {
+        details.deleteComment(currentUser.from(jwt), id, commentId);
+    }
+
     @PostMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse addComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,

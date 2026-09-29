@@ -80,6 +80,12 @@ public class ProjectController {
         return projectService.setRole(currentUser.from(jwt), key, userId, request.role());
     }
 
+    @PutMapping("/{key}/owner")
+    public ProjectResponse transferOwnership(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
+                                             @jakarta.validation.Valid @RequestBody ProjectDtos.OwnerRequest request) {
+        return projectService.transferOwnership(currentUser.from(jwt), key, request.userId());
+    }
+
     @DeleteMapping("/{key}/members/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(@AuthenticationPrincipal Jwt jwt, @PathVariable String key, @PathVariable Long userId) {

@@ -6,6 +6,7 @@ import com.fakejira.common.ApiException;
 import com.fakejira.epic.Epic;
 import com.fakejira.epic.EpicRepository;
 import com.fakejira.events.LiveEvents;
+import com.fakejira.integration.ChatNotifier;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.project.Project;
 import com.fakejira.project.ProjectAccess;
@@ -47,10 +48,12 @@ public class TaskService {
     private final TaskSupport support;
     private final NotificationService notifications;
     private final LiveEvents live;
+    private final ChatNotifier chat;
 
     public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
                        EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
-                       NotificationService notifications, LiveEvents live) {
+                       NotificationService notifications, LiveEvents live, ChatNotifier chat) {
+        this.chat = chat;
         this.tasks = tasks;
         this.projects = projects;
         this.access = access;
@@ -149,6 +152,7 @@ public class TaskService {
             notifications.notify(task.getAssignee(), user, task, "assigned you to");
         }
         live.taskChanged(task);
+        chat.created(task, user);
         return support.response(task);
     }
 
@@ -232,6 +236,7 @@ public class TaskService {
             return;
         }
         support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
+        chat.statusChanged(task, user, task.getStatus().label(), status.label());
         task.setStatus(status);
         // A column pinned to another status no longer fits; fall back to the first column of the new status.
         if (task.getBoardColumn() != null && task.getBoardColumn().getStatus() != status) {

@@ -123,6 +123,10 @@ public class Project {
         this.description = description;
     }
 
+    public void setOwner(User owner) {
+        this.owner = owner;
+    }
+
     public User getOwner() {
         return owner;
     }

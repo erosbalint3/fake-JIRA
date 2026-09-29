@@ -2,6 +2,7 @@ package com.fakejira.task;
 
 import com.fakejira.common.ApiException;
 import com.fakejira.events.LiveEvents;
+import com.fakejira.integration.ChatNotifier;
 import com.fakejira.integration.DevLinkRepository;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.task.TaskDtos.ActivityResponse;
@@ -43,11 +44,12 @@ public class TaskDetailsService {
     private final DevLinkRepository devLinks;
     private final NotificationService notifications;
     private final LiveEvents live;
+    private final ChatNotifier chat;
 
     public TaskDetailsService(TaskSupport support, TaskService taskService, CommentRepository comments,
                               ChecklistItemRepository checklist, TaskActivityRepository activity,
                               TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks,
-                              NotificationService notifications, LiveEvents live) {
+                              NotificationService notifications, LiveEvents live, ChatNotifier chat) {
         this.support = support;
         this.taskService = taskService;
         this.comments = comments;
@@ -58,6 +60,7 @@ public class TaskDetailsService {
         this.devLinks = devLinks;
         this.notifications = notifications;
         this.live = live;
+        this.chat = chat;
     }
 
     // ---------------------------------------------------------------- comments
@@ -72,13 +75,7 @@ public class TaskDetailsService {
         Task task = support.editableTask(taskId, user);
         Comment comment = comments.save(new Comment(task, user, body.trim()));
 
-        Map<Long, User> mentioned = new HashMap<>();
-        Set<String> names = MentionParser.usernames(comment.getBody());
-        for (User member : task.getProject().getMembers()) {
-            if (names.contains(member.getUsername().toLowerCase(Locale.ROOT))) {
-                mentioned.put(member.getId(), member);
-            }
-        }
+        Map<Long, User> mentioned = mentionedMembers(task, comment.getBody(), Set.of());
         mentioned.values().forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
         for (User participant : support.participants(task)) {
             if (!mentioned.containsKey(participant.getId())) {
@@ -90,7 +87,59 @@ public class TaskDetailsService {
             task.getWatchers().add(user);
         }
         live.taskChanged(task);
+        chat.commented(task, user, comment.getBody());
         return CommentResponse.of(comment);
+    }
+
+    /** Authors edit their own comments; people @mentioned for the first time get notified. */
+    public CommentResponse editComment(User user, Long taskId, Long commentId, String body) {
+        Task task = support.editableTask(taskId, user);
+        Comment comment = commentOf(task, commentId);
+        if (!comment.getAuthor().getId().equals(user.getId())) {
+            throw ApiException.forbidden("You can only edit your own comments.");
+        }
+        Set<String> before = MentionParser.usernames(comment.getBody());
+        comment.edit(body.trim());
+        mentionedMembers(task, comment.getBody(), before).values()
+                .forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
+        live.taskChanged(task);
+        return CommentResponse.of(comment);
+    }
+
+    /** Authors delete their own comments; the project owner can delete any. */
+    public void deleteComment(User user, Long taskId, Long commentId) {
+        Task task = support.memberTask(taskId, user);
+        Comment comment = commentOf(task, commentId);
+        boolean author = comment.getAuthor().getId().equals(user.getId());
+        if (!author && !task.getProject().isOwner(user)) {
+            throw ApiException.forbidden("You can only delete your own comments.");
+        }
+        if (author && !task.getProject().canEdit(user)) {
+            throw ApiException.forbidden("Viewers cannot change this project.");
+        }
+        comments.delete(comment);
+        live.taskChanged(task);
+    }
+
+    private Comment commentOf(Task task, Long commentId) {
+        Comment comment = comments.findById(commentId).orElseThrow(() -> ApiException.notFound("Comment not found."));
+        if (!comment.getTask().getId().equals(task.getId())) {
+            throw ApiException.notFound("Comment not found.");
+        }
+        return comment;
+    }
+
+    /** Project members @mentioned in the body, except usernames in {@code alreadyMentioned}. */
+    private Map<Long, User> mentionedMembers(Task task, String body, Set<String> alreadyMentioned) {
+        Map<Long, User> mentioned = new HashMap<>();
+        Set<String> names = MentionParser.usernames(body);
+        for (User member : task.getProject().getMembers()) {
+            String name = member.getUsername().toLowerCase(Locale.ROOT);
+            if (names.contains(name) && !alreadyMentioned.contains(name)) {
+                mentioned.put(member.getId(), member);
+            }
+        }
+        return mentioned;
     }
 
     // ---------------------------------------------------------------- checklist

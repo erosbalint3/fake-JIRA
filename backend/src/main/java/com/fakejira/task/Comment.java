@@ -35,6 +35,8 @@ public class Comment {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    private Instant editedAt;
+
     protected Comment() {
     }
 
@@ -62,5 +64,14 @@ public class Comment {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getEditedAt() {
+        return editedAt;
+    }
+
+    public void edit(String body) {
+        this.body = body;
+        this.editedAt = Instant.now();
     }
 }

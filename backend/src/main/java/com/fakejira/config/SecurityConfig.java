@@ -5,6 +5,7 @@ import jakarta.servlet.DispatcherType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
+import com.fakejira.session.SessionService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
@@ -12,10 +13,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -38,9 +37,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Async dispatches carry on an already-authorized request (SSE streams).
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register",
-                                "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/auth/invite", "/api/avatars/**", "/api/push/key").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/login/2fa", "/api/auth/register",
+                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/oauth/*/url").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/invite", "/api/auth/password-policy",
+                                "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/avatars/**",
+                                "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
@@ -72,8 +73,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey jwtSecretKey) {
-        return NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
+    JwtDecoder jwtDecoder(SecretKey jwtSecretKey, SessionService sessions) {
+        return new AppJwtDecoder(jwtSecretKey, sessions);
     }
 
     @Bean

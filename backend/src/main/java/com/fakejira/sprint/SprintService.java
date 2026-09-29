@@ -2,6 +2,7 @@ package com.fakejira.sprint;
 
 import com.fakejira.common.ApiException;
 import com.fakejira.events.LiveEvents;
+import com.fakejira.integration.ChatNotifier;
 import com.fakejira.project.Project;
 import com.fakejira.project.ProjectAccess;
 import com.fakejira.sprint.SprintDtos.Burndown;
@@ -36,10 +37,12 @@ public class SprintService {
     private final TaskSupport taskSupport;
     private final ProjectAccess access;
     private final LiveEvents live;
+    private final ChatNotifier chat;
     private final Clock clock;
 
     public SprintService(SprintRepository sprints, TaskRepository tasks, TaskSupport taskSupport,
-                         ProjectAccess access, LiveEvents live) {
+                         ProjectAccess access, LiveEvents live, ChatNotifier chat) {
+        this.chat = chat;
         this.sprints = sprints;
         this.tasks = tasks;
         this.taskSupport = taskSupport;
@@ -97,6 +100,7 @@ public class SprintService {
         sprint.setEndDate(end);
         sprint.setState(SprintState.ACTIVE);
         live.projectChanged(sprint.getProject());
+        chat.sprint(sprint, user, "started", sprint.getGoal() == null || sprint.getGoal().isBlank() ? null : "Goal: " + sprint.getGoal());
         return SprintResponse.of(sprint);
     }
 
@@ -121,6 +125,8 @@ public class SprintService {
         sprint.setState(SprintState.COMPLETED);
         sprint.setCompletedAt(Instant.now());
         live.projectChanged(sprint.getProject());
+        chat.sprint(sprint, user, "completed", carried == 0 ? "Everything was finished." : carried + " unfinished task"
+                + (carried == 1 ? "" : "s") + " went back to the backlog.");
         return SprintResponse.of(sprint);
     }
 

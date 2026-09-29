@@ -20,6 +20,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> handleApi(ApiException ex) {
+        if (!ex.getFieldErrors().isEmpty()) {
+            return ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getMessage(), ex.getFieldErrors()));
+        }
         return ResponseEntity.status(ex.getStatus()).body(new ErrorResponse(ex.getMessage()));
     }
 
