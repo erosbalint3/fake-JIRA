@@ -34,6 +34,6 @@ VOLUME /data
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD wget -q -O /dev/null http://localhost:8080/ || exit 1
+    CMD wget -q -O /dev/null http://localhost:8080/api/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
