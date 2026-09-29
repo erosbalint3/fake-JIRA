@@ -11,6 +11,7 @@ import { useProjects } from '../projects';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { PokerPanel } from '../components/task/PokerPanel';
+import { ShareModal } from '../components/task/ShareModal';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
@@ -67,6 +68,7 @@ export function TaskDetailPage() {
   const [comment, setComment, clearComment] = useDraft(`comment:${taskId}`);
   const [diff, setDiff] = useState<Activity | null>(null);
   const [moving, setMoving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [newItem, setNewItem] = useState('');
   const [tab, setTab] = useState<'comments' | 'activity'>('comments');
   const [subtasks, setSubtasks] = useState<Task[]>([]);
@@ -345,6 +347,7 @@ export function TaskDetailPage() {
                 }
               } },
               { label: 'Move to another project…', hidden: !canEdit || !!task.parent, onSelect: () => setMoving(true) },
+              { label: 'Share publicly…', hidden: !canEdit, onSelect: () => setSharing(true) },
             ]} />
           </div>
 
@@ -599,6 +602,7 @@ export function TaskDetailPage() {
         />
       )}
       {diff && <DiffModal activity={diff} onClose={() => setDiff(null)} />}
+      {sharing && <ShareModal task={task} onClose={() => setSharing(false)} />}
       {moving && (
         <MoveModal task={task} onClose={() => setMoving(false)} onMoved={(moved) => {
           setMoving(false);

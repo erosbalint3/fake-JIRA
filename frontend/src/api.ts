@@ -5,6 +5,8 @@ import type {
   TaskLink, TimeEntry, TimeReport, User, VelocityEntry, TaskTemplate, RecurringTask, TaskType, Frequency,
   Release, RetroItem, RetroKind, SprintReview, PokerState, FlowDay, CycleReport, Throughput,
   SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
+  AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
+  PublicTask,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -271,6 +273,50 @@ export const api = {
   disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
 
   exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
+  importJira: async (key: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', `/projects/${key}/import/jira`, { body: form })).json() as Promise<ImportResult>;
+  },
+  importTrello: async (key: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', `/projects/${key}/import/trello`, { body: form })).json() as Promise<ImportResult>;
+  },
+
+  automations: (key: string) => request<AutomationRule[]>('GET', `/projects/${key}/automations`),
+  createAutomation: (key: string, input: RuleInput) => request<AutomationRule>('POST', `/projects/${key}/automations`, input),
+  updateAutomation: (id: number, input: RuleInput) => request<AutomationRule>('PUT', `/automations/${id}`, input),
+  deleteAutomation: (id: number) => request<void>('DELETE', `/automations/${id}`),
+  runAutomation: (id: number) => request<{ tasks: number }>('POST', `/automations/${id}/run`),
+  automationLog: (id: number) => request<RuleRun[]>('GET', `/automations/${id}/log`),
+
+  webhooks: (key: string) => request<OutgoingWebhook[]>('GET', `/projects/${key}/webhooks`),
+  createWebhook: (key: string, url: string, events: string[]) =>
+    request<OutgoingWebhook>('POST', `/projects/${key}/webhooks`, { url, events }),
+  updateWebhook: (id: number, url: string, events: string[], enabled: boolean) =>
+    request<OutgoingWebhook>('PUT', `/webhooks/${id}`, { url, events, enabled }),
+  rotateWebhookSecret: (id: number) => request<OutgoingWebhook>('POST', `/webhooks/${id}/secret`),
+  deleteWebhook: (id: number) => request<void>('DELETE', `/webhooks/${id}`),
+  testWebhook: (id: number) => request<WebhookDelivery>('POST', `/webhooks/${id}/test`),
+  webhookDeliveries: (id: number) => request<WebhookDelivery[]>('GET', `/webhooks/${id}/deliveries`),
+
+  apiTokens: () => request<ApiTokenInfo[]>('GET', '/profile/tokens'),
+  createApiToken: (name: string, scope: 'READ' | 'WRITE', expiresInDays: number | null) =>
+    request<ApiTokenInfo>('POST', '/profile/tokens', { name, scope, expiresInDays }),
+  revokeApiToken: (id: number) => request<void>('DELETE', `/profile/tokens/${id}`),
+
+  shares: (taskId: number) => request<ShareLinkInfo[]>('GET', `/tasks/${taskId}/shares`),
+  createShare: (taskId: number, includeComments: boolean, expiresInDays: number | null) =>
+    request<ShareLinkInfo>('POST', `/tasks/${taskId}/shares`, { includeComments, expiresInDays }),
+  revokeShare: (id: number) => request<void>('DELETE', `/shares/${id}`),
+  /** Public: no sign-in (and no token sent, so a stale session cannot get in the way). */
+  publicTask: async (token: string) => {
+    const response = await fetch(`/api/public/share/${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new ApiError(response.status, response.status === 404 ? 'This link does not exist or has expired.' : 'Could not load this task.');
+    return response.json() as Promise<PublicTask>;
+  },
+
   importCsv: async (key: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -458,6 +504,15 @@ export interface AuditPage {
   page: number;
   pages: number;
   actions: string[];
+}
+
+export interface RuleInput {
+  name: string;
+  trigger: RuleTrigger;
+  triggerStatus: Status | null;
+  condition: string;
+  actions: RuleAction[];
+  enabled?: boolean;
 }
 
 export interface ReleaseInput {

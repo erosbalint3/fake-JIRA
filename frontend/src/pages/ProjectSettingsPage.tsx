@@ -11,6 +11,7 @@ import { useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import { ConfirmDialog } from '../components/Modal';
 import { ChatHooksSection } from '../components/ChatHooksSection';
+import { WebhooksSection } from '../components/settings/WebhooksSection';
 import { RecurringSection } from '../components/settings/RecurringSection';
 import { TemplatesSection } from '../components/settings/TemplatesSection';
 import { Spinner } from '../components/States';
@@ -147,6 +148,7 @@ export function ProjectSettingsPage() {
       <RecurringSection projectKey={project.key} members={project.members} canEdit={canEdit} />
       {isOwner && <GithubSection project={project} onChange={refresh} />}
       {isOwner && <ChatHooksSection projectKey={project.key} />}
+      {isOwner && <WebhooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />
       {canEdit && <EmailInSection projectKey={project.key} />}
 
@@ -466,6 +468,8 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
   const toast = useToast();
   const [settings, setSettings] = useState<GithubSettings | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
+  const [host, setHost] = useState<'github' | 'gitlab' | 'gitea'>('github');
+  const hookUrl = host === 'github' ? githubWebhookUrl(project.key) : `${window.location.origin}/api/integrations/${host}/${project.key}`;
 
   useEffect(() => {
     api.github(project.key).then(setSettings).catch(() => setSettings(null));
@@ -484,7 +488,7 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><GitBranch size={16} /> GitHub</h2>
+      <h2 className="panel-title"><GitBranch size={16} /> Git hosting</h2>
       <p className="muted small hint">
         Mention task keys like <code>{project.key}-12</code> in commit messages, branch names or pull request titles and they show up on
         the task. Optionally move tasks to Done when their pull request is merged.
@@ -495,16 +499,40 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
         </button>
       ) : (
         <div className="github-setup">
-          <ol className="steps small">
-            <li>In your GitHub repository open <b>Settings → Webhooks → Add webhook</b>.</li>
-            <li>Paste the payload URL and secret below and choose content type <b>application/json</b>.</li>
-            <li>Select <b>Let me select individual events</b> → <b>Pushes</b> and <b>Pull requests</b>.</li>
-          </ol>
+          <div className="segmented small git-hosts" role="radiogroup" aria-label="Git host">
+            {(['github', 'gitlab', 'gitea'] as const).map((h) => (
+              <label key={h} className={host === h ? 'active' : ''}>
+                <input type="radio" name="git-host" checked={host === h} onChange={() => setHost(h)} />
+                {{ github: 'GitHub', gitlab: 'GitLab', gitea: 'Gitea / Forgejo' }[h]}
+              </label>
+            ))}
+          </div>
+          {host === 'github' && (
+            <ol className="steps small">
+              <li>In your GitHub repository open <b>Settings → Webhooks → Add webhook</b>.</li>
+              <li>Paste the payload URL and secret below and choose content type <b>application/json</b>.</li>
+              <li>Select <b>Let me select individual events</b> → <b>Pushes</b> and <b>Pull requests</b>.</li>
+            </ol>
+          )}
+          {host === 'gitlab' && (
+            <ol className="steps small">
+              <li>In your GitLab project open <b>Settings → Webhooks → Add new webhook</b>.</li>
+              <li>Paste the URL below and put the secret in <b>Secret token</b>.</li>
+              <li>Tick <b>Push events</b> and <b>Merge request events</b>.</li>
+            </ol>
+          )}
+          {host === 'gitea' && (
+            <ol className="steps small">
+              <li>In your repository open <b>Settings → Webhooks → Add webhook → Gitea</b> (or Forgejo).</li>
+              <li>Paste the target URL and secret below, content type <b>application/json</b>.</li>
+              <li>Choose <b>Custom events</b> → <b>Push</b> and <b>Pull request</b>.</li>
+            </ol>
+          )}
           <label className="field">
             <span>Payload URL</span>
             <div className="copy-field">
-              <input readOnly value={githubWebhookUrl(project.key)} onFocus={(e) => e.target.select()} />
-              <button type="button" className="icon-button" aria-label="Copy payload URL" onClick={() => copy(githubWebhookUrl(project.key), toast)}>
+              <input readOnly value={hookUrl} onFocus={(e) => e.target.select()} aria-label="Payload URL" />
+              <button type="button" className="icon-button" aria-label="Copy payload URL" onClick={() => copy(hookUrl, toast)}>
                 <Copy size={16} />
               </button>
             </div>
@@ -522,7 +550,7 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
             <input type="checkbox" checked={settings.autoDone}
               onChange={(e) => act(() => api.setGithubAutoDone(project.key, e.target.checked),
                 e.target.checked ? 'Merged pull requests now complete their tasks' : 'Automatic completion turned off')} />
-            Move tasks to Done when a pull request mentioning them is merged
+            Move tasks to Done when a pull/merge request mentioning them is merged
           </label>
           <div className="button-row">
             <button className="btn btn-ghost" onClick={() => act(() => api.enableGithub(project.key), 'New secret generated — update the webhook')}>
@@ -548,6 +576,8 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
 function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const jiraRef = useRef<HTMLInputElement>(null);
+  const trelloRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -559,12 +589,13 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
     }
   };
 
-  const importCsv = async (file: File | undefined) => {
+  const importCsv = async (file: File | undefined, kind: 'csv' | 'jira' | 'trello' = 'csv') => {
     if (!file) return;
     setBusy(true);
     setResult(null);
     try {
-      const outcome = await api.importCsv(project.key, file);
+      const outcome = kind === 'jira' ? await api.importJira(project.key, file)
+        : kind === 'trello' ? await api.importTrello(project.key, file) : await api.importCsv(project.key, file);
       setResult(outcome);
       toast(`${outcome.created} task${outcome.created === 1 ? '' : 's'} imported`);
     } catch (e) {
@@ -595,6 +626,28 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
           </>
         )}
       </div>
+      {canEdit && (
+        <>
+          <h3 className="subsection-title import-heading">Move from another tool</h3>
+          <p className="muted small hint">
+            <b>Jira:</b> Filters → Export → CSV (all fields). Epics, sub-tasks, statuses, priorities, labels and story points come along.
+            <br /><b>Trello:</b> Board menu → Print, export and share → Export as JSON. Lists become statuses (and labels), checklists and
+            comments are kept. People are matched to members by username, email or name.
+          </p>
+          <div className="button-row">
+            <button className="btn btn-ghost" disabled={busy} onClick={() => jiraRef.current?.click()}><Upload size={16} /> Import from Jira</button>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => trelloRef.current?.click()}><Upload size={16} /> Import from Trello</button>
+            <input ref={jiraRef} type="file" accept=".csv,text/csv" hidden aria-label="Jira CSV file" onChange={(e) => {
+              importCsv(e.target.files?.[0], 'jira');
+              e.target.value = '';
+            }} />
+            <input ref={trelloRef} type="file" accept=".json,application/json" hidden aria-label="Trello JSON file" onChange={(e) => {
+              importCsv(e.target.files?.[0], 'trello');
+              e.target.value = '';
+            }} />
+          </div>
+        </>
+      )}
       {result && (
         <div className="import-result">
           <p><b>{result.created}</b> task{result.created === 1 ? '' : 's'} created
@@ -603,7 +656,7 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
           {result.errors.length > 0 && (
             <ul className="import-errors">
               {result.errors.slice(0, 20).map((error) => (
-                <li key={`${error.row}-${error.message}`}>Row {error.row}: {error.message}</li>
+                <li key={`${error.row}-${error.message}`}>Item {error.row}: {error.message}</li>
               ))}
               {result.errors.length > 20 && <li className="muted">…and {result.errors.length - 20} more</li>}
             </ul>

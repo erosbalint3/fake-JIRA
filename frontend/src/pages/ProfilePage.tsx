@@ -7,6 +7,7 @@ import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ConnectedAccounts } from '../components/profile/ConnectedAccounts';
+import { ApiTokensPanel } from '../components/profile/ApiTokensPanel';
 import { AwayPanel } from '../components/profile/AwayPanel';
 import { DataPanel } from '../components/profile/DataPanel';
 import { PasswordForm } from '../components/profile/PasswordForm';
@@ -207,6 +208,7 @@ export function ProfilePage() {
       <TwoFactorPanel profile={profile} onChange={reload} />
       <ConnectedAccounts linked={profile.identities} passwordSet={profile.passwordSet} onChange={reload} />
       <SessionsPanel />
+      <ApiTokensPanel />
       <DataPanel profile={profile} />
 
       <section className="panel danger-zone">

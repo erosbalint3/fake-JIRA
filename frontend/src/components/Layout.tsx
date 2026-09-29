@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
   Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
-  Package, LayoutDashboard, SearchCode, CalendarDays, Activity, Users,
+  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users,
 } from 'lucide-react';
 import { filterPath } from '../filters';
 import { api } from '../api';
@@ -227,6 +227,7 @@ export function Layout() {
                 <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> Roadmap</NavLink>
                 <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> Releases</NavLink>
                 <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> Reports</NavLink>
+                <NavLink to={`/p/${currentProject.key}/automation`} className="nav-link"><Bot size={18} /> Automation</NavLink>
                 <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> Settings</NavLink>
                 {filters.length > 0 && (
                   <>

@@ -240,6 +240,8 @@ export interface GithubSettings {
   webhookUrl: string;
   secret: string | null;
   autoDone: boolean;
+  gitlabUrl: string;
+  giteaUrl: string;
 }
 
 export interface ImportResult {
@@ -612,4 +614,104 @@ export interface FeedItem {
   body: string | null;
   createdAt: string;
   task: { id: number; key: string; title: string; projectKey: string };
+}
+
+export type RuleTrigger = 'CREATED' | 'UPDATED' | 'STATUS_CHANGED' | 'ASSIGNED' | 'COMMENTED' | 'SCHEDULED';
+export type RuleActionType = 'set_status' | 'set_priority' | 'add_label' | 'remove_label' | 'set_due_in_days' | 'assign'
+  | 'comment' | 'notify' | 'move_to_active_sprint';
+
+export interface RuleAction {
+  type: RuleActionType;
+  value?: string;
+}
+
+export interface AutomationRule {
+  id: number;
+  name: string;
+  enabled: boolean;
+  trigger: RuleTrigger;
+  triggerStatus: Status | null;
+  condition: string;
+  actions: RuleAction[];
+  owner: User;
+  lastRunAt: string | null;
+  runCount: number;
+  lastError: string | null;
+  mine: boolean;
+}
+
+export interface RuleRun {
+  id: number;
+  taskId: number;
+  taskKey: string;
+  ranAt: string;
+  success: boolean;
+  message: string;
+}
+
+export interface OutgoingWebhook {
+  id: number;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  createdAt: string;
+  lastDeliveryAt: string | null;
+  lastStatus: number | null;
+  lastError: string | null;
+  /** Only right after creating it or rotating the secret. */
+  secret: string | null;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  event: string;
+  sentAt: string;
+  status: number | null;
+  attempts: number;
+  durationMs: number;
+  error: string | null;
+  payload: string;
+}
+
+export interface ApiTokenInfo {
+  id: number;
+  name: string;
+  prefix: string;
+  scope: 'READ' | 'WRITE';
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  expired: boolean;
+  /** The secret, only in the response to creating it. */
+  token: string | null;
+}
+
+export interface ShareLinkInfo {
+  id: number;
+  url: string;
+  includeComments: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+  expired: boolean;
+  views: number;
+  createdBy: string;
+}
+
+export interface PublicTask {
+  key: string;
+  title: string;
+  description: string;
+  status: Status;
+  priority: Priority;
+  type: TaskType;
+  projectName: string;
+  assignee: string | null;
+  dueDate: string | null;
+  labels: string[];
+  storyPoints: number | null;
+  checklist: { text: string; done: boolean }[];
+  subtasks: { key: string; title: string; status: Status }[];
+  comments: { author: string; body: string; createdAt: string }[];
+  updatedAt: string;
+  sharedUntil: string | null;
 }
