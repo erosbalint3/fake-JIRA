@@ -1,7 +1,7 @@
 # FakeJIRA
 
 A lightweight, Jira-style task tracker for small teams, built for a university course.
-Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend; 3.0 adds planning, team and integration features.
+Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend; 3.0 added planning, team and integration features; 4.0 adds security, automation, search, flow reports, PostgreSQL and much more (see [What's new in 4.0](#whats-new-in-40)).
 
 ![Board](docs/board.png)
 
@@ -57,6 +57,42 @@ Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** 
 - **Admin page**: sign-up mode, pending accounts, admins, invites and **backups**.
 - Light and dark themes, and a responsive layout for phones.
 
+## What's new in 4.0
+
+**Security and accounts**
+- **Two-step verification** (authenticator app, QR code, recovery codes), **Sign in with Google / GitHub**, a list of **signed-in devices** you can sign out remotely, **data export** and **account deletion**.
+- Configurable **password rules**, a searchable **audit log** and per-user admin actions (reset 2FA, set a password, sign out everywhere, delete).
+- **Personal API tokens** (read-only or read & write, with expiry) for scripts: `Authorization: Bearer fjt_…`.
+
+**Tasks**
+- **Issue types** (task, bug, story, spike), **task templates** and **recurring tasks**.
+- **Undo** from the toast for moves, edits, bulk changes and deletes; unsent comments and new tasks are kept as **drafts**.
+- Inline edits in the backlog, pasted/dropped **images**, comment **replies** and **reactions**, description diffs, **clone** and **move** to another project.
+- **Custom fields** (text, number, date, choice, checkbox, URL) per project, searchable like built-in fields.
+- **Public share links**: a read-only page for one task, optionally with comments.
+
+**Planning**
+- Board **swimlanes** (assignee, epic, priority, type), a **workload** panel and a **planning helper** comparing planned points with recent velocity.
+- **Kanban mode** per project (no sprints), **cumulative flow**, **cycle/lead time** and **throughput** reports, **scope changes** on the burndown.
+- **Sprint review** (copy as Markdown), a live **retrospective** board, **planning poker**, **releases** with notes, and **epic dependencies** on the roadmap.
+- **Project templates** (Scrum, Kanban, bug tracking, marketing) and a per-project **accent colour**.
+
+**Finding things and working together**
+- **Search** with a query language (`assignee = me AND status != done ORDER BY due`) with autocomplete, results export and saved filters. Full-text search in the command palette covers comments, files, epics and releases.
+- **Dashboards** with widgets, a **calendar** (due dates, sprints, releases, time off) with a private **iCal feed**, an **activity feed** across projects.
+- **Teams** with `@team` mentions and **out-of-office** notes shown when assigning work.
+- **Email in**: reply to a notification email to comment, or mail the project address to create a task.
+
+**Automation and integrations**
+- **Automation rules**: when a task is created / changes / gets a comment, or on a schedule (SLA escalation, stale tasks), if it matches a query, then set fields, assign (round-robin, least loaded), comment, notify or move to the active sprint. Each rule has a run log.
+- **Outgoing webhooks** (signed with `X-FakeJIRA-Signature`, retries, delivery log), **Slack / Discord** notifications, **GitLab** and **Gitea / Forgejo** next to GitHub.
+- **Import from Jira** (CSV) and **Trello** (JSON).
+
+**Operations and polish**
+- **PostgreSQL** support with a one-time copy from the built-in H2 database.
+- **Off-site backups** to S3-compatible storage or WebDAV (Nextcloud), **attachment quotas**, `/api/health`, **Prometheus metrics** and an admin **System** page with an update check.
+- **Hungarian** translation (Profile → Language), an **accessibility** pass (skip link, contrast, screen-reader labels), **offline reading** of pages you have opened, and a short **first-run tour**.
+
 ## Tech stack
 
 | Layer | Stack |
@@ -102,7 +138,7 @@ You can bundle the React app into the Spring Boot jar and serve everything from 
 ```bash
 cd frontend && npm install && npm run build:backend
 cd ../backend && mvn package
-java -jar target/fake-jira-3.0.0.jar      # http://localhost:8080
+java -jar target/fake-jira-4.0.0.jar      # http://localhost:8080
 ```
 
 ## Running with Docker
@@ -152,6 +188,17 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | `app.rate-limit.enabled` | `APP_RATE_LIMIT_ENABLED` | `true` |
 | `app.rate-limit.client-ip-headers` | `APP_RATE_LIMIT_CLIENT_IP_HEADERS` | `CF-Connecting-IP,X-Forwarded-For`. Set it empty if the app is reachable without your proxy. |
 | `app.push.subject` | `APP_PUSH_SUBJECT` | Contact for push services; defaults to the base URL. |
+| `app.automation.cron` | `APP_AUTOMATION_CRON` | `0 */5 * * * *`. How often scheduled automation rules check their conditions. |
+| `app.backup.s3.*` | `APP_BACKUP_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY`, `_SECRET_KEY`, `_PREFIX`, `_PATH_STYLE` | Empty (off). Copy every backup to S3-compatible storage, see below. |
+| `app.backup.webdav.*` | `APP_BACKUP_WEBDAV_URL`, `_USERNAME`, `_PASSWORD` | Empty (off). Copy every backup to a WebDAV folder. |
+| `app.migrate-from.url` | `APP_MIGRATE_FROM_URL` (+ `_USERNAME`, `_PASSWORD`) | Empty. Old database to copy from once when moving to PostgreSQL. |
+| `app.metrics.token` | `APP_METRICS_TOKEN` | Empty (off). Bearer token for Prometheus metrics at `/api/metrics`. |
+| `app.update-check.enabled` | `APP_UPDATE_CHECK` | `true`. Daily check for a newer release, shown to admins. |
+| `app.mail.inbound.address` | `APP_MAIL_INBOUND_ADDRESS` | Empty (off). Mailbox for reply-by-email and email-to-task, see below. |
+| `app.mail.inbound.secret` | `APP_MAIL_INBOUND_SECRET` | Empty. Secret for `POST /api/inbound/email` (inbound-mail services). |
+| `app.mail.inbound.imap.*` | `APP_MAIL_INBOUND_IMAP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FOLDER`, `_POLL_MS` | Empty. Or poll the mailbox over IMAPS. |
+| `app.oauth.google.*` / `app.oauth.github.*` | `APP_OAUTH_GOOGLE_CLIENT_ID`, `_SECRET`; `APP_OAUTH_GITHUB_CLIENT_ID`, `_SECRET` | Empty (off). Sign in with Google / GitHub. |
+| `app.audit.retention-days` | `APP_AUDIT_RETENTION_DAYS` | `365` |
 | – | `TZ` | `UTC`. Time zone for backups and digests, e.g. `Europe/Budapest`. |
 | `spring.mail.host` | `SPRING_MAIL_HOST` | Empty, so email is off. Also set `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` and `APP_MAIL_FROM`. For an SMTP relay without login, set `SPRING_MAIL_SMTP_AUTH=false`. |
 
@@ -208,15 +255,47 @@ docker compose start fakejira
 
 (`docker volume ls` shows the exact volume name; `100:101` is the `app` user of the image — check with `docker compose exec fakejira id`.)
 
+### PostgreSQL
+
+The built-in H2 database is fine for small teams. To use PostgreSQL instead:
+
+```bash
+# in .env
+POSTGRES_PASSWORD=<something long>
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+```
+
+`docker-compose.postgres.yml` starts a `postgres:16` container and points the app at it. **Moving existing data:** for the first start, also set `APP_MIGRATE_FROM_URL=jdbc:h2:file:/data/fakejira` (plus `APP_MIGRATE_FROM_PASSWORD` if your H2 database has one). The app copies everything into the empty PostgreSQL database once and logs how many rows it moved; it never copies into a database that already has users. Remove the variable afterwards. Keep the old volume until you have checked the result. With PostgreSQL, backups contain a `database.sql` dump instead of the H2 file.
+
+### Off-site backups
+
+Set `APP_BACKUP_S3_ENDPOINT`, `APP_BACKUP_S3_BUCKET`, `APP_BACKUP_S3_ACCESS_KEY` and `APP_BACKUP_S3_SECRET_KEY` (AWS S3, Cloudflare R2, Backblaze B2, MinIO…; `APP_BACKUP_S3_REGION` for AWS, `APP_BACKUP_S3_PATH_STYLE=false` for virtual-hosted buckets) and/or `APP_BACKUP_WEBDAV_URL` with username and password (Nextcloud: `https://cloud.example.com/remote.php/dav/files/USER/Backups`). Every backup is then uploaded after it is written. **Admin → System** shows the last upload and has a *Copy latest backup now* button.
+
+### Monitoring
+
+`GET /api/health` returns `{"status":"UP","database":"UP","version":…}` without signing in (the Docker health check uses it). Set `APP_METRICS_TOKEN` and scrape `/api/metrics` with `Authorization: Bearer <token>` for Prometheus metrics (API requests, users, tasks, storage, backups, JVM, disk). **Admin → System** shows version, database, disk, memory, contents and storage per project, lets you set attachment quotas, and checks for new releases.
+
+### Email in
+
+Set `APP_MAIL_INBOUND_ADDRESS` to a mailbox that supports plus-addressing (`jira+anything@example.com` arrives at `jira@example.com`) and either poll it over IMAPS (`APP_MAIL_INBOUND_IMAP_*`) or have an inbound-mail service POST to `/api/inbound/email` with the `X-Inbound-Secret` header set to `APP_MAIL_INBOUND_SECRET`. Notification emails then get a signed reply address — replies become comments — and each project shows an address in **Project settings** that turns mail into tasks (members only).
+
+### Automation, webhooks and API tokens
+
+Project owners set up rules under **Automation**, and outgoing webhooks under **Project settings → Outgoing webhooks**. Each webhook delivery is a JSON POST with `X-FakeJIRA-Event` and `X-FakeJIRA-Signature: sha256=<HMAC of the body with the secret>`. Personal API tokens (**Profile → API tokens**) work as bearer tokens for the whole task API, but not for admin, profile or account endpoints.
+
 ### GitHub integration
 
-As the project owner open **Project settings → GitHub → Connect a repository**. In the GitHub repository go to **Settings → Webhooks → Add webhook**, paste the payload URL and secret shown, pick content type `application/json` and the **Pushes** and **Pull requests** events. Task keys in commit messages, branch names and pull request titles/bodies then link commits and PRs to tasks (shown under *Development* on the task). Turn on *Move tasks to Done when a pull request is merged* to close tasks automatically. Deliveries are verified with the `X-Hub-Signature-256` HMAC.
+(GitLab and Gitea/Forgejo work the same way; pick the host in **Project settings → Git hosting**.)
+
+As the project owner open **Project settings → Git hosting → Connect a repository**. In the GitHub repository go to **Settings → Webhooks → Add webhook**, paste the payload URL and secret shown, pick content type `application/json` and the **Pushes** and **Pull requests** events. Task keys in commit messages, branch names and pull request titles/bodies then link commits and PRs to tasks (shown under *Development* on the task). Turn on *Move tasks to Done when a pull request is merged* to close tasks automatically. Deliveries are verified with the `X-Hub-Signature-256` HMAC.
 
 ### Push notifications and installing the app
 
 Each user turns on push in **Profile → Push notifications** (per device). This needs HTTPS (fine behind Caddy/Cloudflare). On iPhone/iPad, first add FakeJIRA to the home screen (Share → Add to Home Screen), then enable push from the installed app. Keys for push (VAPID) are generated on first use and stored in the database.
 
 ### Upgrading
+
+**From 3.x to 4.0:** deploy the new version on your existing database; new tables and columns are added automatically and nothing needs to be migrated by hand. Everyone signs in once after the upgrade (sign-ins are now revocable sessions, which older tokens are not). All 4.0 integrations (OAuth, email in, off-site backups, metrics) stay off until configured.
 
 **From 2.x to 3.0:** deploy the new version on your existing database; the schema is updated automatically. The oldest account becomes admin, email notification settings carry over, and existing projects get the default four board columns. Make sure `APP_BACKUP_DIR` points into the data volume (the Dockerfile sets `/data/backups`).
 
@@ -279,6 +358,16 @@ All endpoints except register, login and password reset need an `Authorization: 
 | GET / POST / DELETE | `/api/invites` | Invite links |
 | GET / PUT / POST / DELETE | `/api/admin/...` | Admin: sign-up mode, users, backups |
 | GET · POST / DELETE | `/api/push/key` · `/api/push/subscribe` | Web push |
+| GET | `/api/search?q=<query>`, `/api/search/text?q=` | Query-language search / full-text search |
+| GET / POST · PUT / DELETE | `/api/projects/{key}/automations` · `/api/automations/{id}` | Automation rules (`/run`, `/log`) |
+| GET / POST · PUT / DELETE | `/api/projects/{key}/webhooks` · `/api/webhooks/{id}` | Outgoing webhooks |
+| GET / POST · PUT / DELETE · PUT | `/api/projects/{key}/fields` · `/api/fields/{id}` · `/api/tasks/{id}/fields/{fieldId}` | Custom fields and values |
+| GET / POST · POST | `/api/projects/{key}/releases` · `/api/releases/{id}/ship` | Releases |
+| GET · GET | `/api/calendar?from=&to=` · `/api/calendar/feed/{token}.ics` | Calendar / iCal feed |
+| GET / POST / DELETE | `/api/profile/tokens` | Personal API tokens |
+| GET / POST / DELETE | `/api/tasks/{id}/shares` · `/api/public/share/{token}` | Share links / public read-only view |
+| GET · GET | `/api/health` · `/api/metrics` | Health (public) / Prometheus metrics (metrics token) |
+| GET | `/api/project-templates` | Templates for new projects (`template` in `POST /api/projects`) |
 
 ## Contact
 

@@ -46,8 +46,11 @@ public class TaskController {
     private final TaskService taskService;
     private final TaskDetailsService details;
     private final CurrentUser currentUser;
+    private final TaskCopyService copies;
 
-    public TaskController(TaskService taskService, TaskDetailsService details, CurrentUser currentUser) {
+    public TaskController(TaskService taskService, TaskDetailsService details, CurrentUser currentUser,
+                          TaskCopyService copies) {
+        this.copies = copies;
         this.taskService = taskService;
         this.details = details;
         this.currentUser = currentUser;
@@ -63,9 +66,10 @@ public class TaskController {
                                    @RequestParam(required = false) String label,
                                    @RequestParam(required = false) String sprint,
                                    @RequestParam(required = false) String assignee,
-                                   @RequestParam(required = false) String epic) {
+                                   @RequestParam(required = false) String epic,
+                                   @RequestParam(required = false) TaskType type) {
         return taskService.search(currentUser.from(jwt),
-                new TaskFilter(project, scope, q, priority, status, label, sprint, assignee, epic));
+                new TaskFilter(project, scope, q, priority, status, label, sprint, assignee, epic, type));
     }
 
     @PostMapping
@@ -145,11 +149,49 @@ public class TaskController {
         return details.comments(currentUser.from(jwt), id);
     }
 
+    @PutMapping("/{id}/comments/{commentId}")
+    public CommentResponse editComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @PathVariable Long commentId,
+                                       @Valid @RequestBody CommentRequest request) {
+        return details.editComment(currentUser.from(jwt), id, commentId, request.body());
+    }
+
+    @DeleteMapping("/{id}/comments/{commentId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @PathVariable Long commentId) {
+        details.deleteComment(currentUser.from(jwt), id, commentId);
+    }
+
+    /** Toggles the current user's emoji reaction on a comment. */
+    @PutMapping("/{id}/comments/{commentId}/reactions")
+    public CommentResponse react(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @PathVariable Long commentId,
+                                 @Valid @RequestBody TaskDtos.ReactionRequest request) {
+        return details.toggleReaction(currentUser.from(jwt), id, commentId, request.emoji());
+    }
+
+    public record CloneRequest(boolean subtasks) {
+    }
+
+    public record MoveRequest(@jakarta.validation.constraints.NotBlank(message = "Choose a project") String projectKey) {
+    }
+
+    @PostMapping("/{id}/clone")
+    @ResponseStatus(HttpStatus.CREATED)
+    public TaskResponse cloneTask(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                  @RequestBody(required = false) CloneRequest request) {
+        return copies.cloneTask(currentUser.from(jwt), id, request != null && request.subtasks());
+    }
+
+    @PostMapping("/{id}/move")
+    public TaskResponse move(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                             @Valid @RequestBody MoveRequest request) {
+        return copies.move(currentUser.from(jwt), id, request.projectKey());
+    }
+
     @PostMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse addComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                       @Valid @RequestBody CommentRequest request) {
-        return details.addComment(currentUser.from(jwt), id, request.body());
+        return details.addComment(currentUser.from(jwt), id, request.body(), request.parentId());
     }
 
     @GetMapping("/{id}/checklist")

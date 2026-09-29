@@ -1,0 +1,33 @@
+# Optional: run FakeJIRA on PostgreSQL instead of the built-in H2 database.
+# Set POSTGRES_PASSWORD in .env. To bring existing data along, also set
+# APP_MIGRATE_FROM_URL=jdbc:h2:file:/data/fakejira for the first start (see README).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fakejira-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fakejira
+      POSTGRES_USER: fakejira
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - fakejira-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fakejira -d fakejira"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  fakejira:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fakejira
+      SPRING_DATASOURCE_USERNAME: fakejira
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+
+volumes:
+  fakejira-postgres:

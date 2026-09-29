@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react';
+import { useLanguage } from './i18n';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './auth';
 import { useProjects } from './projects';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/States';
-import { AdminPage } from './pages/AdminPage';
 import { AuthPage } from './pages/AuthPage';
 import { BacklogPage } from './pages/BacklogPage';
 import { BoardPage } from './pages/BoardPage';
@@ -12,12 +12,24 @@ import { MyWorkPage } from './pages/MyWorkPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPages';
-import { ProfilePage } from './pages/ProfilePage';
-import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { RoadmapPage } from './pages/RoadmapPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
+
+const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })));
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const RoadmapPage = lazy(() => import('./pages/RoadmapPage').then((m) => ({ default: m.RoadmapPage })));
+const ProjectSettingsPage = lazy(() => import('./pages/ProjectSettingsPage').then((m) => ({ default: m.ProjectSettingsPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SprintPage = lazy(() => import('./pages/SprintPage').then((m) => ({ default: m.SprintPage })));
+const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then((m) => ({ default: m.ReleasesPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const SearchPage = lazy(() => import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })));
+const CalendarPage = lazy(() => import('./pages/CalendarPage').then((m) => ({ default: m.CalendarPage })));
+const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ default: m.ActivityPage })));
+const TeamsPage = lazy(() => import('./pages/TeamsPage').then((m) => ({ default: m.TeamsPage })));
+const AutomationPage = lazy(() => import('./pages/AutomationPage').then((m) => ({ default: m.AutomationPage })));
+const SharedTaskPage = lazy(() => import('./pages/SharedTaskPage').then((m) => ({ default: m.SharedTaskPage })));
+const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -55,12 +67,17 @@ function ProjectIndex() {
 }
 
 export function App() {
+  // Switching language re-renders every page with the new strings.
+  const lang = useLanguage();
   return (
+    <Suspense key={lang} fallback={<div className="page"><Spinner /></div>}>
     <Routes>
       <Route path="/login" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
       <Route path="/register" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
       <Route path="/forgot-password" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/oauth-complete" element={<OAuthCompletePage />} />
+      <Route path="/share/:token" element={<SharedTaskPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="/projects" element={<ProjectsPage />} />
@@ -69,8 +86,16 @@ export function App() {
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
         <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
         <Route path="/p/:key/reports" element={<ReportsPage />} />
+        <Route path="/p/:key/releases" element={<ReleasesPage />} />
+        <Route path="/p/:key/automation" element={<AutomationPage />} />
+        <Route path="/p/:key/sprints/:id" element={<SprintPage />} />
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
+        <Route path="/teams" element={<TeamsPage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
@@ -80,5 +105,6 @@ export function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }

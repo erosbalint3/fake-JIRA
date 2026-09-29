@@ -2,12 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
-  PRIORITIES, PRIORITY_LABEL, type CreateTaskInput, type Epic, type Priority, type Sprint, type TaskInput, type User,
+  PRIORITIES, PRIORITY_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type CreateTaskInput, type TaskTemplate, type Epic, type Priority, type Sprint, type TaskInput, type User,
 } from '../types';
 import { Modal } from './Modal';
-import { PriorityBadge } from './Badges';
+import { PriorityBadge, TypeIcon } from './Badges';
+import { draftStore } from '../drafts';
 import { MarkdownEditor } from './MarkdownEditor';
 import { LabelInput } from './LabelInput';
+import { t } from '../i18n';
 
 type Mode =
   | {
@@ -25,15 +27,23 @@ interface Props {
   submitLabel: string;
   mode: Mode;
   onClose: () => void;
+  /** Lets images be pasted into the description (editing an existing task). */
+  uploadImage?: (file: File) => Promise<string>;
 }
 
-export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
+export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }: Props) {
   const { projects, lastKey } = useProjects();
   const initial = mode.kind === 'edit' ? mode.initial : null;
   const [projectKey, setProjectKey] = useState(mode.projectKey ?? lastKey() ?? '');
-  const [form, setForm] = useState<TaskInput>(initial ?? {
-    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [], storyPoints: null, epicId: null,
-  });
+  const empty: TaskInput = {
+    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [], storyPoints: null, epicId: null, type: 'TASK',
+  };
+  // New top-level tasks keep a draft per project, so a refresh or accidental close loses nothing.
+  const draftKey = mode.kind === 'create' && !mode.parent ? `new-task:${projectKey || 'any'}` : null;
+  const [form, setForm] = useState<TaskInput>(() => initial ?? (draftKey ? draftStore.get<TaskInput>(draftKey) : null) ?? empty);
+  const [restored, setRestored] = useState(() => !initial && !!draftKey && !!draftStore.get<TaskInput>(draftKey));
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [checklist, setChecklist] = useState<string[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [sprintId, setSprintId] = useState<number | null>(mode.kind === 'create' ? mode.sprintId ?? null : null);
@@ -51,11 +61,32 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     api.epics(projectKey).then(setEpics).catch(() => setEpics([]));
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
+      api.templates(projectKey).then(setTemplates).catch(() => setTemplates([]));
       api.sprints(projectKey)
         .then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED')))
         .catch(() => setSprints([]));
     }
   }, [projectKey, projects, mode.kind]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const timer = window.setTimeout(() => {
+      if (form.title.trim() || form.description.trim()) draftStore.set(draftKey, form);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [form, draftKey]);
+
+  const applyTemplate = (id: string) => {
+    const template = templates.find((t) => String(t.id) === id);
+    if (!template) return;
+    setForm({
+      ...form, type: template.type, priority: template.priority, storyPoints: template.storyPoints,
+      title: form.title.trim() ? form.title : template.title,
+      description: form.description.trim() ? form.description : template.description,
+      labels: [...new Set([...form.labels, ...template.labels])],
+    });
+    setChecklist(template.checklist);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -73,7 +104,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     const input = { ...form, title: form.title.trim(), dueDate: form.dueDate || null };
     try {
       if (mode.kind === 'create') {
-        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null });
+        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist });
+        if (draftKey) draftStore.clear(draftKey);
       } else {
         await mode.onSubmit(input);
       }
@@ -93,7 +125,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
           <button type="submit" form="task-form" className="btn btn-primary" disabled={busy}>
             {busy ? 'Saving…' : submitLabel}
           </button>
@@ -102,50 +134,79 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     >
       <form id="task-form" className="form" onSubmit={submit} noValidate>
         {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
+        {restored && (
+          <p className="notice small">{t("Restored your unsaved task.")} <button type="button" className="link" onClick={() => {
+            if (draftKey) draftStore.clear(draftKey);
+            setForm(empty);
+            setRestored(false);
+          }}>{t("Discard it")}</button></p>
+        )}
+        {mode.kind === 'create' && templates.length > 0 && (
+          <label className="field">
+            <span>{t("Template")}</span>
+            <select defaultValue="" onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">{t("Blank task")}</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
         {mode.kind === 'create' && mode.parent && (
-          <p className="muted form-note">Subtask of <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
+          <p className="muted form-note">{t("Subtask of")} <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
         )}
         {mode.kind === 'create' && !mode.projectKey && (
           <label className="field">
-            <span>Project</span>
+            <span>{t("Project")}</span>
             <select value={projectKey} onChange={(e) => {
               setProjectKey(e.target.value);
               setAssigneeId(null);
               setSprintId(null);
             }} aria-invalid={!!errors.projectKey}>
-              <option value="" disabled>Choose a project</option>
+              <option value="" disabled>{t("Choose a project")}</option>
               {projects?.map((p) => <option key={p.key} value={p.key}>{p.name} ({p.key})</option>)}
             </select>
             {errors.projectKey && <small className="field-error">{errors.projectKey}</small>}
           </label>
         )}
         <label className="field">
-          <span>Title</span>
+          <span>{t("Title")}</span>
           <input
             value={form.title}
             maxLength={120}
-            placeholder="What needs to be done?"
+            placeholder={t("What needs to be done?")}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             aria-invalid={!!errors.title}
           />
           {errors.title && <small className="field-error">{errors.title}</small>}
         </label>
         <div className="field">
-          <span>Description</span>
+          <span>{t("Description")}</span>
           <MarkdownEditor
             value={form.description}
             onChange={(description) => setForm({ ...form, description })}
             members={members}
             maxLength={5000}
             rows={6}
-            label="Description"
-            placeholder="Add context, acceptance criteria, links… Markdown and @mentions work."
+            label={t("Description")}
+            onUploadImage={uploadImage}
+            placeholder={t("Add context, acceptance criteria, links… Markdown and @mentions work.")}
             invalid={!!errors.description}
           />
           {errors.description && <small className="field-error">{errors.description}</small>}
         </div>
         <fieldset className="field">
-          <span>Priority</span>
+          <span>{t("Type")}</span>
+          <div className="segmented types">
+            {TASK_TYPES.map((type) => (
+              <label key={type} className={form.type === type ? 'active' : ''}>
+                <input type="radio" name="type" value={type} checked={form.type === type}
+                  onChange={() => setForm({ ...form, type })} />
+                <TypeIcon type={type} /> {TASK_TYPE_LABEL[type]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="field">
+          <span>{t("Priority")}</span>
           <div className="segmented">
             {PRIORITIES.map((priority: Priority) => (
               <label key={priority} className={form.priority === priority ? 'active' : ''}>
@@ -165,25 +226,25 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
         <div className="form-grid">
           {mode.kind === 'create' && (
             <label className="field">
-              <span>Assignee</span>
+              <span>{t("Assignee")}</span>
               <select value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Unassigned</option>
+                <option value="">{t("Unassigned")}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
               </select>
             </label>
           )}
           <label className="field">
-            <span>Due date</span>
+            <span>{t("Due date")}</span>
             <input type="date" value={form.dueDate ?? ''} onChange={(e) => setForm({ ...form, dueDate: e.target.value || null })} />
           </label>
           <label className="field">
-            <span>Story points</span>
+            <span>{t("Story points")}</span>
             <input type="number" min={0} max={100} inputMode="numeric" placeholder="–"
               value={form.storyPoints ?? ''}
               onChange={(e) => setForm({ ...form, storyPoints: e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) })} />
           </label>
           <label className="field">
-            <span>Epic</span>
+            <span>{t("Epic")}</span>
             <select value={form.epicId ?? ''} onChange={(e) => setForm({ ...form, epicId: e.target.value ? Number(e.target.value) : null })}>
               <option value="">{mode.kind === 'create' && mode.parent ? 'Same as parent' : 'No epic'}</option>
               {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
@@ -191,16 +252,29 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
           </label>
           {mode.kind === 'create' && !mode.parent && (
             <label className="field">
-              <span>Sprint</span>
+              <span>{t("Sprint")}</span>
               <select value={sprintId ?? ''} onChange={(e) => setSprintId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Backlog</option>
+                <option value="">{t("Backlog")}</option>
                 {sprints.map((s) => <option key={s.id} value={s.id}>{s.name}{s.state === 'ACTIVE' ? ' (active)' : ''}</option>)}
               </select>
             </label>
           )}
         </div>
+        {checklist.length > 0 && (
+          <div className="field">
+            <span>{t("Checklist from template")}</span>
+            <ul className="template-checklist">
+              {checklist.map((item, i) => (
+                <li key={`${item}-${i}`}>{item}
+                  <button type="button" className="icon-button sm" aria-label={`Remove ${item}`}
+                    onClick={() => setChecklist(checklist.filter((_, j) => j !== i))}>×</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="field">
-          <span>Labels</span>
+          <span>{t("Labels")}</span>
           <LabelInput value={form.labels} onChange={(labels) => setForm({ ...form, labels })} suggestions={labelSuggestions} />
           {errors.labels && <small className="field-error">{errors.labels}</small>}
         </div>

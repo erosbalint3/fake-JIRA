@@ -103,11 +103,20 @@ public class MailService {
 
     @Async
     public void send(String to, String subject, String body) {
+        send(to, subject, body, null);
+    }
+
+    /** {@code replyTo}: where replies go (for reply-by-email), or null. */
+    @Async
+    public void send(String to, String subject, String body, String replyTo) {
         if (!isEnabled()) {
             return;
         }
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
+        if (replyTo != null) {
+            message.setReplyTo(replyTo);
+        }
         message.setTo(to);
         message.setSubject(subject);
         message.setText(body);

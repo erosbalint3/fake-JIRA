@@ -5,7 +5,10 @@ import com.fakejira.auth.AuthDtos.ForgotPasswordRequest;
 import com.fakejira.auth.AuthDtos.InviteInfo;
 import com.fakejira.auth.AuthDtos.LoginRequest;
 import com.fakejira.auth.AuthDtos.RegisterRequest;
+import com.fakejira.auth.AuthDtos.PasswordRules;
 import com.fakejira.auth.AuthDtos.ResetPasswordRequest;
+import com.fakejira.auth.AuthDtos.TwoFactorLoginRequest;
+import com.fakejira.session.SessionService;
 import com.fakejira.common.CurrentUser;
 import com.fakejira.mail.MailService;
 import com.fakejira.user.User;
@@ -32,16 +35,21 @@ public class AuthController {
     private final PasswordResetService passwordReset;
     private final CurrentUser currentUser;
     private final MailService mail;
+    private final SessionService sessions;
+    private final PasswordPolicy policy;
 
     public AuthController(AuthService authService, PasswordResetService passwordReset, CurrentUser currentUser,
-                          MailService mail) {
+                          MailService mail, SessionService sessions, PasswordPolicy policy) {
+        this.sessions = sessions;
+        this.policy = policy;
         this.authService = authService;
         this.passwordReset = passwordReset;
         this.currentUser = currentUser;
         this.mail = mail;
     }
 
-    public record MeResponse(UserSummary user, boolean admin) {
+    /** {@code mustChangePassword}: an admin requires a new password before anything else. */
+    public record MeResponse(UserSummary user, boolean admin, boolean mustChangePassword, String language) {
     }
 
     /** 201 with a token, or 202 without one when the account needs admin approval. */
@@ -54,6 +62,25 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    /** Second sign-in step when two-factor authentication is on. */
+    @PostMapping("/login/2fa")
+    public AuthResponse loginSecondStep(@Valid @RequestBody TwoFactorLoginRequest request) {
+        return authService.loginSecondStep(request.challenge(), request.code());
+    }
+
+    /** Signs this device out. */
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@AuthenticationPrincipal Jwt jwt) {
+        sessions.revoke(Long.valueOf(jwt.getSubject()), jwt.getClaimAsString(TokenService.SESSION));
+    }
+
+    @GetMapping("/password-policy")
+    public PasswordRules passwordPolicy() {
+        PasswordPolicy.Rules rules = policy.rules();
+        return new PasswordRules(rules.minLength(), rules.upper(), rules.digit(), rules.special());
     }
 
     @PostMapping("/forgot-password")
@@ -81,6 +108,6 @@ public class AuthController {
             // Without APP_BASE_URL, links in emails and invites use the address admins open the app at.
             mail.rememberSiteUrl(request);
         }
-        return new MeResponse(UserSummary.of(user), user.isAdmin());
+        return new MeResponse(UserSummary.of(user), user.isAdmin(), user.isMustChangePassword(), user.getLanguage());
     }
 }

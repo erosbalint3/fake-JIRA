@@ -1,7 +1,11 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Users } from 'lucide-react';
+import { api } from '../api';
 import { Avatar } from './Avatar';
 import { Markdown } from './Markdown';
-import type { User } from '../types';
+import type { Team, User } from '../types';
+
+let teamsCache: Promise<Team[]> | null = null;
 
 interface Props {
   value: string;
@@ -14,25 +18,69 @@ interface Props {
   onSubmitShortcut?: () => void;
   label?: string;
   invalid?: boolean;
+  /** Enables pasting/dropping images: uploads one and resolves to the Markdown that shows it. */
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
-/** Textarea with a Write / Preview toggle and @mention autocomplete. */
+/** Textarea with a Write / Preview toggle, @mention autocomplete and (optionally) image paste. */
 export function MarkdownEditor({
-  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid,
+  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage,
 }: Props) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
+  const [uploading, setUploading] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  /** Inserts a placeholder at the caret, uploads, then swaps in the image Markdown. */
+  const uploadImages = (files: File[]) => {
+    if (!onUploadImage) return false;
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return false;
+    const at = ref.current?.selectionStart ?? valueRef.current.length;
+    images.forEach((file, index) => {
+      const marker = `![Uploading ${file.name || 'image'}${index ? ` ${index + 1}` : ''}…]()`;
+      const current = valueRef.current;
+      const insertAt = Math.min(at, current.length);
+      const next = `${current.slice(0, insertAt)}${marker}\n${current.slice(insertAt)}`;
+      valueRef.current = next;
+      onChange(next);
+      setUploading((n) => n + 1);
+      onUploadImage(file)
+        .then((markdown) => {
+          valueRef.current = valueRef.current.replace(marker, markdown);
+          onChange(valueRef.current);
+        })
+        .catch(() => {
+          valueRef.current = valueRef.current.replace(`${marker}\n`, '').replace(marker, '');
+          onChange(valueRef.current);
+        })
+        .finally(() => setUploading((n) => n - 1));
+    });
+    return true;
+  };
+
+  // Teams can be @mentioned too (everyone in the team who is in the project gets notified).
+  const [teams, setTeams] = useState<Team[]>([]);
+  useEffect(() => {
+    if (members.length === 0) return;
+    teamsCache ??= api.teams().catch(() => []);
+    teamsCache.then(setTeams);
+  }, [members.length]);
 
   const mention = useMemo(() => {
     const before = value.slice(0, caret);
     const match = /(^|\s)@([A-Za-z0-9._-]{0,40})$/.exec(before);
     if (!match) return null;
     const query = match[2].toLowerCase();
-    const options = members.filter((m) => m.username.toLowerCase().startsWith(query)).slice(0, 6);
+    const teamOptions: User[] = teams.map((t) => ({
+      id: -t.id, username: t.handle, email: '', displayName: `${t.name} · team of ${t.members.length}`, avatarUrl: null,
+    }));
+    const options = [...members, ...teamOptions].filter((m) => m.username.toLowerCase().startsWith(query)).slice(0, 8);
     return options.length ? { start: before.length - match[2].length, options } : null;
-  }, [value, caret, members]);
+  }, [value, caret, members, teams]);
 
   const insert = (username: string) => {
     if (!mention) return;
@@ -73,7 +121,9 @@ export function MarkdownEditor({
           onClick={() => setTab('write')}>Write</button>
         <button type="button" role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'active' : ''}
           onClick={() => setTab('preview')}>Preview</button>
-        <span className="md-hint">Markdown supported</span>
+        <span className="md-hint">
+          {uploading > 0 ? 'Uploading image…' : onUploadImage ? 'Markdown · paste or drop images' : 'Markdown supported'}
+        </span>
       </div>
       {tab === 'write' ? (
         <div className="md-write">
@@ -92,6 +142,18 @@ export function MarkdownEditor({
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              if (uploadImages(Array.from(e.clipboardData.files))) e.preventDefault();
+            }}
+            onDragOver={(e) => {
+              if (onUploadImage && Array.from(e.dataTransfer.items).some((i) => i.type.startsWith('image/'))) e.preventDefault();
+            }}
+            onDrop={(e) => {
+              if (uploadImages(Array.from(e.dataTransfer.files))) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
           />
           {mention && (
             <ul className="mention-menu" role="listbox">
@@ -102,7 +164,9 @@ export function MarkdownEditor({
                       e.preventDefault();
                       insert(member.username);
                     }}>
-                    <Avatar user={member} size={20} /> {member.username}
+                    {member.id < 0 ? <span className="team-chip"><Users size={13} /></span> : <Avatar user={member} size={20} />}
+                    {member.username}
+                    {member.id < 0 && <span className="muted small">{member.displayName}</span>}
                   </button>
                 </li>
               ))}

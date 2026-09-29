@@ -14,5 +14,11 @@ app:
     enabled: false
   backup:
     cron: "-"
+  recurring:
+    cron: "-"
   digest:
     cron: "-"
+  automation:
+    cron: "-"
+  update-check:
+    enabled: false

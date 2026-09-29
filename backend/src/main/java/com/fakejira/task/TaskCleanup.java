@@ -20,10 +20,15 @@ public class TaskCleanup {
     private final TaskLinkRepository links;
     private final TimeEntryRepository time;
     private final DevLinkRepository devLinks;
+    private final CommentReactionRepository reactions;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     public TaskCleanup(TaskRepository tasks, CommentRepository comments, ChecklistItemRepository checklist,
                        TaskActivityRepository activity, AttachmentRepository attachments, AttachmentStorage storage,
-                       TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks) {
+                       TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks,
+                       CommentReactionRepository reactions, org.springframework.context.ApplicationEventPublisher events) {
+        this.reactions = reactions;
+        this.events = events;
         this.tasks = tasks;
         this.comments = comments;
         this.checklist = checklist;
@@ -43,6 +48,9 @@ public class TaskCleanup {
         List<Attachment> files = attachments.findForTask(task.getId());
         List<String> storageNames = files.stream().map(Attachment::getStorageName).toList();
         attachments.deleteAll(files);
+        events.publishEvent(new TaskDeleting(task.getId()));
+        reactions.deleteForTask(task.getId());
+        comments.detachReplies(task.getId());
         comments.deleteForTask(task.getId());
         checklist.deleteForTask(task.getId());
         activity.deleteForTask(task.getId());

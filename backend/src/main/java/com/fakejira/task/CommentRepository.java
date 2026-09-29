@@ -15,4 +15,11 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     @Modifying
     @Query("delete from Comment c where c.task.id = :taskId")
     void deleteForTask(@Param("taskId") Long taskId);
+
+    /** Run before {@link #deleteForTask} so replies do not block deleting their parents. */
+    @Modifying
+    @Query("update Comment c set c.parent = null where c.task.id = :taskId")
+    void detachReplies(@Param("taskId") Long taskId);
+
+    List<Comment> findByParentId(Long parentId);
 }

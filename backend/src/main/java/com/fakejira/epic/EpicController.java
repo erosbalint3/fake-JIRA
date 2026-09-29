@@ -62,7 +62,11 @@ public class EpicController {
     }
 
     public record EpicResponse(Long id, String name, String description, int colorIndex, LocalDate startDate,
-                               LocalDate dueDate, int taskCount, int doneCount, int points, int donePoints) {
+                               LocalDate dueDate, int taskCount, int doneCount, int points, int donePoints,
+                               List<Long> dependsOn) {
+    }
+
+    public record DependenciesRequest(List<Long> dependsOn) {
     }
 
     @GetMapping("/api/projects/{key}/epics")
@@ -116,6 +120,42 @@ public class EpicController {
         return response(epic, new int[4]);
     }
 
+    /** Replaces the epics this one depends on; rejects cycles. */
+    @PutMapping("/api/epics/{id}/dependencies")
+    @Transactional
+    public EpicResponse dependencies(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                     @RequestBody DependenciesRequest request) {
+        User user = currentUser.from(jwt);
+        Epic epic = editable(id, user);
+        java.util.Set<Epic> next = new java.util.LinkedHashSet<>();
+        for (Long otherId : request.dependsOn() == null ? List.<Long>of() : request.dependsOn()) {
+            Epic other = epics.findById(otherId)
+                    .filter(e -> e.getProject().getId().equals(epic.getProject().getId()))
+                    .orElseThrow(() -> ApiException.badRequest("Dependencies must be epics of the same project."));
+            if (other.getId().equals(epic.getId()) || reaches(other, epic, new java.util.HashSet<>())) {
+                throw ApiException.badRequest(other.getName() + " already depends on " + epic.getName() + ".");
+            }
+            next.add(other);
+        }
+        epic.getDependsOn().clear();
+        epic.getDependsOn().addAll(next);
+        live.projectChanged(epic.getProject());
+        return response(epic, new int[4]);
+    }
+
+    /** True when {@code from} depends (directly or not) on {@code target}. */
+    private static boolean reaches(Epic from, Epic target, java.util.Set<Long> seen) {
+        if (!seen.add(from.getId())) {
+            return false;
+        }
+        for (Epic next : from.getDependsOn()) {
+            if (next.getId().equals(target.getId()) || reaches(next, target, seen)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Deleting an epic keeps its tasks; they just no longer belong to an epic. */
     @DeleteMapping("/api/epics/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -127,6 +167,10 @@ public class EpicController {
             task.setEpic(null);
             taskSupport.record(task, user, "removed the task from epic " + epic.getName() + " (epic deleted)");
         }
+        for (Epic other : epics.findByProjectIdOrderByCreatedAtAsc(epic.getProject().getId())) {
+            other.getDependsOn().removeIf(e -> e.getId().equals(epic.getId()));
+        }
+        epic.getDependsOn().clear();
         live.projectChanged(epic.getProject());
         epics.delete(epic);
     }
@@ -145,7 +189,8 @@ public class EpicController {
 
     private static EpicResponse response(Epic epic, int[] s) {
         return new EpicResponse(epic.getId(), epic.getName(), epic.getDescription(), epic.getColorIndex(),
-                epic.getStartDate(), epic.getDueDate(), s[0], s[1], s[2], s[3]);
+                epic.getStartDate(), epic.getDueDate(), s[0], s[1], s[2], s[3],
+                epic.getDependsOn().stream().map(Epic::getId).sorted().toList());
     }
 
     private static String trim(String value) {

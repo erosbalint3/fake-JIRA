@@ -6,6 +6,8 @@ import com.fakejira.common.ApiException;
 import com.fakejira.epic.Epic;
 import com.fakejira.epic.EpicRepository;
 import com.fakejira.events.LiveEvents;
+import com.fakejira.integration.ChatNotifier;
+import com.fakejira.sprint.SprintScope;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.project.Project;
 import com.fakejira.project.ProjectAccess;
@@ -35,6 +37,8 @@ import java.util.TreeSet;
 @Transactional
 public class TaskService {
 
+    private final TaskEvents taskEvents;
+
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH);
 
     private final TaskRepository tasks;
@@ -47,10 +51,20 @@ public class TaskService {
     private final TaskSupport support;
     private final NotificationService notifications;
     private final LiveEvents live;
+    private final ChatNotifier chat;
+    private final ChecklistItemRepository checklistItems;
+    private final TaskKeyAliasRepository aliases;
+    private final SprintScope scope;
 
     public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
                        EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
-                       NotificationService notifications, LiveEvents live) {
+                       NotificationService notifications, LiveEvents live, ChatNotifier chat,
+                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope, TaskEvents taskEvents) {
+        this.taskEvents = taskEvents;
+        this.aliases = aliases;
+        this.scope = scope;
+        this.chat = chat;
+        this.checklistItems = checklistItems;
         this.tasks = tasks;
         this.projects = projects;
         this.access = access;
@@ -86,6 +100,13 @@ public class TaskService {
     }
 
     public Task taskByKey(User user, String key) {
+        // A task that moved to another project is still found by its old key.
+        var alias = aliases.findByOldKey(key.toUpperCase(java.util.Locale.ROOT));
+        if (alias.isPresent()) {
+            Task moved = alias.get().getTask();
+            access.requireMember(moved.getProject(), user);
+            return moved;
+        }
         int dash = key.lastIndexOf('-');
         if (dash <= 0) {
             throw ApiException.notFound("Task " + key + " does not exist.");
@@ -125,6 +146,7 @@ public class TaskService {
         task.setDueDate(request.dueDate());
         task.getLabels().addAll(normalizeLabels(request.labels()));
         task.setStoryPoints(request.storyPoints());
+        task.setType(request.type());
         task.setParent(parent);
         if (request.sprintId() != null) {
             task.setSprint(openSprint(project, request.sprintId()));
@@ -140,6 +162,16 @@ public class TaskService {
             task.setAssignee(editor(project, request.assigneeId()));
         }
         tasks.save(task);
+        scope.statusChanged(task, null, task.getStatus());
+        scope.sprintChanged(task, null, user);
+        if (request.checklist() != null) {
+            int position = 0;
+            for (String text : request.checklist()) {
+                if (text != null && !text.isBlank()) {
+                    checklistItems.save(new ChecklistItem(task, text.trim(), ++position));
+                }
+            }
+        }
         support.record(task, user, parent == null ? "created the task" : "created the task as a subtask of " + parent.getKey());
         if (parent != null) {
             support.record(parent, user, "added subtask " + task.getKey());
@@ -149,6 +181,8 @@ public class TaskService {
             notifications.notify(task.getAssignee(), user, task, "assigned you to");
         }
         live.taskChanged(task);
+        chat.created(task, user);
+        taskEvents.publish(TaskEvent.Kind.CREATED, task, user);
         return support.response(task);
     }
 
@@ -161,9 +195,14 @@ public class TaskService {
             task.setTitle(title);
         }
         String description = normalize(request.description());
-        if (!description.equals(task.getDescription())) {
-            changes.add("updated the description");
+        boolean descriptionChanged = !description.equals(task.getDescription());
+        String oldDescription = task.getDescription();
+        if (descriptionChanged) {
             task.setDescription(description);
+        }
+        if (request.type() != null && request.type() != task.getType()) {
+            changes.add("changed the type from " + task.getType().label() + " to " + request.type().label());
+            task.setType(request.type());
         }
         if (request.priority() != task.getPriority()) {
             changes.add("changed priority from " + task.getPriority().label() + " to " + request.priority().label());
@@ -193,11 +232,16 @@ public class TaskService {
             changes.add(epic == null ? "removed the task from its epic" : "added the task to epic " + epic.getName());
             task.setEpic(epic);
         }
-        if (!changes.isEmpty()) {
+        if (descriptionChanged) {
+            support.recordChange(task, user, "updated the description", oldDescription, description);
+        }
+        if (!changes.isEmpty() || descriptionChanged) {
             changes.forEach(change -> support.record(task, user, change));
             support.notifyParticipants(task, user, "updated");
             tasks.saveAndFlush(task);
             live.taskChanged(task);
+            taskEvents.publish(TaskEvent.Kind.UPDATED, task, user, "changes",
+                    String.join("; ", descriptionChanged ? concat(changes, "updated the description") : changes));
         }
         return support.response(task);
     }
@@ -232,6 +276,9 @@ public class TaskService {
             return;
         }
         support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
+        chat.statusChanged(task, user, task.getStatus().label(), status.label());
+        TaskStatus from = task.getStatus();
+        scope.statusChanged(task, task.getStatus(), status);
         task.setStatus(status);
         // A column pinned to another status no longer fits; fall back to the first column of the new status.
         if (task.getBoardColumn() != null && task.getBoardColumn().getStatus() != status) {
@@ -240,6 +287,7 @@ public class TaskService {
         support.notifyParticipants(task, user, "moved to " + status.label().toLowerCase(Locale.ROOT));
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.STATUS_CHANGED, task, user, "from", from.name(), "to", status.name());
     }
 
     public TaskResponse assign(User user, Long id, Long assigneeId) {
@@ -268,6 +316,8 @@ public class TaskService {
         }
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", previous == null ? "" : previous.getUsername(),
+                "to", next == null ? "" : next.getUsername());
     }
 
     public TaskResponse accept(User user, Long id) {
@@ -282,6 +332,7 @@ public class TaskService {
         notifications.notify(task.getReporter(), user, task, "accepted");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", "", "to", user.getUsername());
         return support.response(task);
     }
 
@@ -297,6 +348,7 @@ public class TaskService {
         notifications.notify(task.getReporter(), user, task, "released");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", user.getUsername(), "to", "");
         return support.response(task);
     }
 
@@ -310,7 +362,9 @@ public class TaskService {
         Sprint target = sprintId == null ? null : openSprint(task.getProject(), sprintId);
         Long current = task.getSprint() == null ? null : task.getSprint().getId();
         if (!Objects.equals(current, sprintId)) {
+            Sprint before = task.getSprint();
             task.setSprint(target);
+            scope.sprintChanged(task, before, user);
             support.record(task, user, target == null ? "moved the task to the backlog" : "moved the task to " + target.getName());
             tasks.saveAndFlush(task);
             live.taskChanged(task);
@@ -323,6 +377,7 @@ public class TaskService {
             throw ApiException.forbidden("Only the reporter or the project owner can delete this task.");
         }
         notifications.notify(task.getAssignee(), user, task, "deleted");
+        taskEvents.publish(TaskEvent.Kind.DELETED, task, user);
         Project project = task.getProject();
         Long taskId = task.getId();
         Task parent = task.getParent();
@@ -363,6 +418,11 @@ public class TaskService {
             if (request.priority() != null && request.priority() != task.getPriority()) {
                 support.record(task, user, "changed priority from " + task.getPriority().label() + " to " + request.priority().label());
                 task.setPriority(request.priority());
+                changed = true;
+            }
+            if (request.type() != null && request.type() != task.getType()) {
+                support.record(task, user, "changed the type from " + task.getType().label() + " to " + request.type().label());
+                task.setType(request.type());
                 changed = true;
             }
             if (request.clearEpic() && task.getEpic() != null) {
@@ -441,5 +501,11 @@ public class TaskService {
             }
         }
         return result;
+    }
+
+    private static List<String> concat(List<String> list, String extra) {
+        List<String> all = new ArrayList<>(list);
+        all.add(extra);
+        return all;
     }
 }

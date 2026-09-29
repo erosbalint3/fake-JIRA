@@ -12,6 +12,7 @@ import com.fakejira.task.TaskPriority;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.task.TaskService;
 import com.fakejira.task.TaskStatus;
+import com.fakejira.task.TaskType;
 import com.fakejira.task.TimeEntry;
 import com.fakejira.task.TimeEntryRepository;
 import com.fakejira.user.User;
@@ -48,6 +49,9 @@ import java.util.Map;
 @RestController
 public class ProjectDataController {
 
+    private final com.fakejira.field.CustomFieldRepository customFields;
+    private final com.fakejira.field.CustomFieldValueRepository customFieldValues;
+
     static final int MAX_IMPORT_ROWS = 1000;
 
     private final ProjectAccess access;
@@ -60,7 +64,11 @@ public class ProjectDataController {
 
     public ProjectDataController(ProjectAccess access, CurrentUser currentUser, TaskRepository tasks,
                                  TaskService taskService, TimeEntryRepository time, EpicRepository epics,
-                                 TransactionTemplate transactions) {
+                                 TransactionTemplate transactions,
+                                 com.fakejira.field.CustomFieldRepository customFields,
+                                 com.fakejira.field.CustomFieldValueRepository customFieldValues) {
+        this.customFields = customFields;
+        this.customFieldValues = customFieldValues;
         this.access = access;
         this.currentUser = currentUser;
         this.tasks = tasks;
@@ -117,8 +125,8 @@ public class ProjectDataController {
 
     // ---------------------------------------------------------------- CSV export
 
-    static final List<String> COLUMNS = List.of("Key", "Title", "Description", "Status", "Priority", "Assignee",
-            "Reporter", "Labels", "Due date", "Story points", "Sprint", "Epic", "Parent", "Time spent (minutes)",
+    static final List<String> COLUMNS = List.of("Key", "Type", "Title", "Description", "Status", "Priority", "Assignee",
+            "Reporter", "Labels", "Due date", "Story points", "Sprint", "Epic", "Release", "Parent", "Time spent (minutes)",
             "Created", "Updated");
 
     @GetMapping("/api/projects/{key}/export.csv")
@@ -133,10 +141,24 @@ public class ProjectDataController {
                 minutes.put((Long) row[0], ((Number) row[1]).intValue());
             }
         }
-        StringBuilder csv = new StringBuilder("﻿").append(Csv.row(COLUMNS));
+        // Custom fields become extra columns at the end.
+        List<com.fakejira.field.CustomField> custom = customFields.findByProjectIdOrderByPositionAscIdAsc(project.getId());
+        Map<Long, Map<Long, String>> customValues = new HashMap<>();
+        if (!custom.isEmpty() && !list.isEmpty()) {
+            for (var v : customFieldValues.findForTasks(list.stream().map(Task::getId).toList())) {
+                customValues.computeIfAbsent(v.getTask().getId(), k -> new HashMap<>()).put(v.getField().getId(), v.getValue());
+            }
+        }
+        List<String> header = new ArrayList<>(COLUMNS);
+        custom.forEach(f -> header.add(f.getName()));
+        StringBuilder csv = new StringBuilder("﻿").append(Csv.row(header));
         for (Task task : list) {
-            csv.append(Csv.row(Arrays.asList(
-                    task.getKey(), task.getTitle(), task.getDescription(), task.getStatus().label(),
+            List<String> extra = new ArrayList<>();
+            for (var f : custom) {
+                extra.add(customValues.getOrDefault(task.getId(), Map.of()).getOrDefault(f.getId(), ""));
+            }
+            csv.append(Csv.row(concat(Arrays.asList(
+                    task.getKey(), task.getType().label(), task.getTitle(), task.getDescription(), task.getStatus().label(),
                     task.getPriority().label(),
                     task.getAssignee() == null ? "" : task.getAssignee().getUsername(),
                     task.getReporter().getUsername(),
@@ -145,10 +167,11 @@ public class ProjectDataController {
                     task.getStoryPoints() == null ? "" : task.getStoryPoints().toString(),
                     task.getSprint() == null ? "" : task.getSprint().getName(),
                     task.getEpic() == null ? "" : task.getEpic().getName(),
+                    task.getRelease() == null ? "" : task.getRelease().getName(),
                     task.getParent() == null ? "" : task.getParent().getKey(),
                     String.valueOf(minutes.getOrDefault(task.getId(), 0)),
                     task.getCreatedAt().toString(),
-                    task.getUpdatedAt().toString())));
+                    task.getUpdatedAt().toString()), extra)));
         }
         String filename = project.getKey().toLowerCase(Locale.ROOT) + "-tasks-" + LocalDate.now() + ".csv";
         return ResponseEntity.ok()
@@ -217,6 +240,8 @@ public class ProjectDataController {
                 }
                 TaskPriority priority = parseEnum(TaskPriority.class, cell(row, header, "priority"), TaskPriority.MEDIUM, "priority");
                 TaskStatus status = parseEnum(TaskStatus.class, cell(row, header, "status"), TaskStatus.TODO, "status");
+                TaskType type = parseEnum(TaskType.class, firstNonBlank(cell(row, header, "type"), cell(row, header, "issue type")),
+                        TaskType.TASK, "type");
                 Long assigneeId = null;
                 String assignee = cell(row, header, "assignee");
                 if (!assignee.isBlank()) {
@@ -255,7 +280,7 @@ public class ProjectDataController {
                 }
                 var created = taskService.create(user, new CreateTaskRequest(project.getKey(), title.trim(), description,
                         priority, due, labels.size() > 10 ? labels.subList(0, 10) : labels, assigneeId, null, points,
-                        epicId, null));
+                        epicId, null, type, List.of()));
                 if (status != TaskStatus.TODO) {
                     taskService.changeStatus(user, created.id(), status);
                 }
@@ -279,6 +304,12 @@ public class ProjectDataController {
             return epics.save(new Epic(project, name.length() > 80 ? name.substring(0, 80) : name, "", color, null, null))
                     .getId();
         });
+    }
+
+    private static List<String> concat(List<String> a, List<String> b) {
+        List<String> all = new ArrayList<>(a);
+        all.addAll(b);
+        return all;
     }
 
     private static String cell(List<String> row, Map<String, Integer> header, String name) {

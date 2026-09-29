@@ -29,6 +29,9 @@ import java.util.List;
 @RestController
 public class AttachmentController {
 
+    private final AttachmentQuota quota;
+    private final com.fakejira.project.ProjectAccess projectAccess;
+
     private final TaskSupport support;
     private final AttachmentRepository attachments;
     private final AttachmentStorage storage;
@@ -36,7 +39,10 @@ public class AttachmentController {
     private final LiveEvents live;
 
     public AttachmentController(TaskSupport support, AttachmentRepository attachments,
-                                AttachmentStorage storage, CurrentUser currentUser, LiveEvents live) {
+                                AttachmentStorage storage, CurrentUser currentUser, LiveEvents live, AttachmentQuota quota,
+                                com.fakejira.project.ProjectAccess projectAccess) {
+        this.quota = quota;
+        this.projectAccess = projectAccess;
         this.support = support;
         this.attachments = attachments;
         this.storage = storage;
@@ -65,12 +71,26 @@ public class AttachmentController {
         String contentType = file.getContentType() == null || file.getContentType().length() > 150
                 ? MediaType.APPLICATION_OCTET_STREAM_VALUE
                 : file.getContentType();
+        quota.check(task.getProject(), file.getSize());
         String storageName = storage.store(file);
         Attachment attachment = attachments.save(
                 new Attachment(task, user, filename, contentType, file.getSize(), storageName));
         support.record(task, user, "attached " + filename);
         live.taskChanged(task);
         return AttachmentResponse.of(attachment);
+    }
+
+    /** Attachment storage used by a project, and its limit (null = unlimited). */
+    public record StorageUsage(long usedBytes, long files, Long quotaBytes) {
+    }
+
+    @GetMapping("/api/projects/{key}/storage")
+    @Transactional(readOnly = true)
+    public StorageUsage storage(@AuthenticationPrincipal Jwt jwt, @PathVariable String key) {
+        var project = projectAccess.memberProject(key, currentUser.from(jwt));
+        long limit = quota.limits().projectMb();
+        return new StorageUsage(attachments.bytesInProject(project.getId()), attachments.countInProject(project.getId()),
+                limit > 0 ? limit * 1024 * 1024 : null);
     }
 
     /**

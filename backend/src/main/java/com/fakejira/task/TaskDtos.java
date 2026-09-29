@@ -51,7 +51,41 @@ public final class TaskDtos {
             Long epicId,
 
             /** Makes the new task a subtask of this task (same project). */
-            Long parentId) {
+            Long parentId,
+
+            /** Defaults to TASK. */
+            TaskType type,
+
+            /** Checklist items to start with (e.g. from a template). */
+            @Size(max = 50, message = "At most 50 checklist items")
+            List<@Size(max = 200, message = "Checklist items are at most 200 characters") String> checklist) {
+
+        /** A plain task with defaults, for tasks created by the app itself (templates, recurring, email…). */
+        public static CreateTaskRequest of(String projectKey, String title, String description, TaskPriority priority,
+                                           TaskType type) {
+            return new CreateTaskRequest(projectKey, title, description, priority == null ? TaskPriority.MEDIUM : priority,
+                    null, List.of(), null, null, null, null, null, type, List.of());
+        }
+
+        public CreateTaskRequest withLabels(List<String> labels) {
+            return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, assigneeId, sprintId,
+                    storyPoints, epicId, parentId, type, checklist);
+        }
+
+        public CreateTaskRequest withAssignee(Long id) {
+            return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, id, sprintId,
+                    storyPoints, epicId, parentId, type, checklist);
+        }
+
+        public CreateTaskRequest withParent(Long id) {
+            return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, assigneeId, sprintId,
+                    storyPoints, epicId, id, type, checklist);
+        }
+
+        public CreateTaskRequest withDetails(LocalDate due, Integer points, Long epic, Long sprint, List<String> items) {
+            return new CreateTaskRequest(projectKey, title, description, priority, due, labels, assigneeId, sprint,
+                    points, epic, parentId, type, items);
+        }
     }
 
     public record UpdateTaskRequest(
@@ -74,7 +108,10 @@ public final class TaskDtos {
             @Max(value = 100, message = "At most 100 story points")
             Integer storyPoints,
 
-            Long epicId) {
+            Long epicId,
+
+            /** Unchanged when null. */
+            TaskType type) {
     }
 
     public record StatusRequest(@NotNull(message = "Status is required") TaskStatus status) {
@@ -105,6 +142,7 @@ public final class TaskDtos {
             boolean clearSprint,
             Long epicId,
             boolean clearEpic,
+            TaskType type,
             List<String> addLabels,
             List<String> removeLabels,
             boolean delete) {
@@ -113,7 +151,17 @@ public final class TaskDtos {
     public record CommentRequest(
             @NotBlank(message = "Comment cannot be empty")
             @Size(max = 2000, message = "Comment must be at most 2000 characters")
-            String body) {
+            String body,
+
+            /** Replies to this comment (replies are one level deep). */
+            Long parentId) {
+    }
+
+    public record ReactionRequest(@NotBlank String emoji) {
+    }
+
+    /** One emoji on a comment: how many, whether the viewer is one of them, and who. */
+    public record ReactionSummary(String emoji, int count, boolean mine, List<String> users) {
     }
 
     public record ChecklistItemRequest(
@@ -146,6 +194,12 @@ public final class TaskDtos {
         }
     }
 
+    public record ReleaseRef(Long id, String name, boolean released) {
+        public static ReleaseRef of(com.fakejira.release.Release release) {
+            return release == null ? null : new ReleaseRef(release.getId(), release.getName(), release.isReleased());
+        }
+    }
+
     public record EpicRef(Long id, String name, int colorIndex) {
         public static EpicRef of(Epic epic) {
             return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex());
@@ -170,6 +224,7 @@ public final class TaskDtos {
             String description,
             TaskPriority priority,
             TaskStatus status,
+            TaskType type,
             UserSummary reporter,
             UserSummary assignee,
             SprintRef sprint,
@@ -187,7 +242,8 @@ public final class TaskDtos {
             boolean blocked,
             Instant createdAt,
             Instant updatedAt,
-            Instant completedAt) {
+            Instant completedAt,
+            ReleaseRef release) {
 
         public static TaskResponse of(Task task, int checklistTotal, int checklistDone, int subtaskTotal,
                                       int subtaskDone, int timeSpentMinutes, boolean blocked) {
@@ -201,6 +257,7 @@ public final class TaskDtos {
                     task.getDescription(),
                     task.getPriority(),
                     task.getStatus(),
+                    task.getType(),
                     UserSummary.of(task.getReporter()),
                     UserSummary.of(task.getAssignee()),
                     SprintRef.of(task.getSprint()),
@@ -218,15 +275,22 @@ public final class TaskDtos {
                     blocked,
                     task.getCreatedAt(),
                     task.getUpdatedAt(),
-                    task.getCompletedAt());
+                    task.getCompletedAt(),
+                    ReleaseRef.of(task.getRelease()));
         }
     }
 
-    public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt) {
+    public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt, Instant editedAt,
+                                  Long parentId, List<ReactionSummary> reactions) {
 
         public static CommentResponse of(Comment comment) {
-            return new CommentResponse(
-                    comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(), comment.getCreatedAt());
+            return of(comment, List.of());
+        }
+
+        public static CommentResponse of(Comment comment, List<ReactionSummary> reactions) {
+            return new CommentResponse(comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(),
+                    comment.getCreatedAt(), comment.getEditedAt(),
+                    comment.getParent() == null ? null : comment.getParent().getId(), reactions);
         }
     }
 
@@ -236,10 +300,12 @@ public final class TaskDtos {
         }
     }
 
-    public record ActivityResponse(Long id, UserSummary actor, String message, Instant createdAt) {
+    /** {@code before}/{@code after}: the text around a description change, else null. */
+    public record ActivityResponse(Long id, UserSummary actor, String message, Instant createdAt, String before,
+                                   String after) {
         public static ActivityResponse of(TaskActivity activity) {
-            return new ActivityResponse(
-                    activity.getId(), UserSummary.of(activity.getActor()), activity.getMessage(), activity.getCreatedAt());
+            return new ActivityResponse(activity.getId(), UserSummary.of(activity.getActor()), activity.getMessage(),
+                    activity.getCreatedAt(), activity.getBeforeText(), activity.getAfterText());
         }
     }
 

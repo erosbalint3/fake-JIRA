@@ -28,7 +28,7 @@ export function Avatar({ user, name, size = 28 }: Props) {
     ? label.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('')
     : label.slice(0, 2);
   return (
-    <span className="avatar" title={label} style={{ ...style, background: `hsl(${hue} 70% 45%)` }}>
+    <span className="avatar" title={label} style={{ ...style, background: `hsl(${hue} 65% 32%)` }}>
       {initials.toUpperCase()}
     </span>
   );

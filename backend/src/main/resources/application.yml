@@ -43,6 +43,20 @@ app:
   base-url: ${APP_BASE_URL:}
   mail:
     from: ${APP_MAIL_FROM:FakeJIRA <no-reply@localhost>}
+    inbound:
+      # Reply-by-email and email-to-task: the mailbox that receives mail, e.g. jira@example.com.
+      # Plus-addressing must deliver jira+anything@example.com to it. Off when empty.
+      address: ${APP_MAIL_INBOUND_ADDRESS:}
+      # Shared secret for POST /api/inbound/email (header X-Inbound-Secret), for inbound-mail services.
+      secret: ${APP_MAIL_INBOUND_SECRET:}
+      # Or poll a mailbox over IMAP(S).
+      imap:
+        host: ${APP_MAIL_INBOUND_IMAP_HOST:}
+        port: ${APP_MAIL_INBOUND_IMAP_PORT:993}
+        username: ${APP_MAIL_INBOUND_IMAP_USERNAME:}
+        password: ${APP_MAIL_INBOUND_IMAP_PASSWORD:}
+        folder: ${APP_MAIL_INBOUND_IMAP_FOLDER:INBOX}
+        poll-ms: ${APP_MAIL_INBOUND_IMAP_POLL_MS:60000}
   storage:
     dir: ${APP_STORAGE_DIR:./data/attachments}
   registration:
@@ -57,11 +71,52 @@ app:
     # Spring cron (sec min hour day month weekday); "-" disables scheduled backups.
     cron: ${APP_BACKUP_CRON:0 30 3 * * *}
     keep: ${APP_BACKUP_KEEP:14}
+    # Off-site copies of every backup (optional): S3-compatible storage (AWS, Cloudflare R2, Backblaze B2, MinIO)…
+    s3:
+      endpoint: ${APP_BACKUP_S3_ENDPOINT:}
+      bucket: ${APP_BACKUP_S3_BUCKET:}
+      region: ${APP_BACKUP_S3_REGION:us-east-1}
+      access-key: ${APP_BACKUP_S3_ACCESS_KEY:}
+      secret-key: ${APP_BACKUP_S3_SECRET_KEY:}
+      prefix: ${APP_BACKUP_S3_PREFIX:fakejira/}
+      path-style: ${APP_BACKUP_S3_PATH_STYLE:true}
+    # …and/or a WebDAV folder (Nextcloud: https://cloud.example.com/remote.php/dav/files/USER/Backups).
+    webdav:
+      url: ${APP_BACKUP_WEBDAV_URL:}
+      username: ${APP_BACKUP_WEBDAV_USERNAME:}
+      password: ${APP_BACKUP_WEBDAV_PASSWORD:}
   digest:
     cron: ${APP_DIGEST_CRON:0 0 7 * * *}
+  migrate-from:
+    # Moving to PostgreSQL: point this at the old database (e.g. jdbc:h2:file:./data/fakejira) while starting
+    # the app with the new SPRING_DATASOURCE_URL; data is copied once into the empty new database.
+    url: ${APP_MIGRATE_FROM_URL:}
+    username: ${APP_MIGRATE_FROM_USERNAME:sa}
+    password: ${APP_MIGRATE_FROM_PASSWORD:}
+  metrics:
+    # Prometheus metrics at /api/metrics, scraped with "Authorization: Bearer <token>". Off when empty.
+    token: ${APP_METRICS_TOKEN:}
+  update-check:
+    # Daily check for a newer FakeJIRA release (shown to admins on the System page).
+    enabled: ${APP_UPDATE_CHECK:true}
+  automation:
+    # How often scheduled automation rules (SLA escalation, stale tasks) check their conditions.
+    cron: ${APP_AUTOMATION_CRON:0 */5 * * * *}
   push:
     # VAPID "sub" claim; defaults to the app's https base URL.
     subject: ${APP_PUSH_SUBJECT:}
+  audit:
+    # How long audit log entries are kept.
+    retention-days: ${APP_AUDIT_RETENTION_DAYS:365}
+  oauth:
+    # "Sign in with Google / GitHub". Off until a client id and secret are set. Callback URL to register
+    # with the provider: <APP_BASE_URL>/api/auth/oauth/google/callback (or .../github/callback).
+    google:
+      client-id: ${APP_OAUTH_GOOGLE_CLIENT_ID:}
+      client-secret: ${APP_OAUTH_GOOGLE_CLIENT_SECRET:}
+    github:
+      client-id: ${APP_OAUTH_GITHUB_CLIENT_ID:}
+      client-secret: ${APP_OAUTH_GITHUB_CLIENT_SECRET:}
   db-tcp:
     # Network access to the live H2 database for tools like DBeaver, e.g. 9092. Off when empty;
     # needs SPRING_DATASOURCE_PASSWORD. Connect with jdbc:h2:tcp://HOST:PORT/fakejira

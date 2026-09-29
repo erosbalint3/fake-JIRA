@@ -4,13 +4,9 @@ import { CheckCircle2, MailCheck } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useToast } from '../toast';
 import { Logo } from '../components/Logo';
+import { usePasswordRules } from '../passwordRules';
+import { t } from '../i18n';
 
-const RULES: [RegExp, string][] = [
-  [/.{8,}/, 'At least 8 characters'],
-  [/[A-Z]/, 'An uppercase letter'],
-  [/\d/, 'A number'],
-  [/[^A-Za-z0-9]/, 'A special character'],
-];
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -47,23 +43,23 @@ export function ForgotPasswordPage() {
       {sent ? (
         <div className="form center">
           <div className="empty-icon"><MailCheck size={26} /></div>
-          <h2>Check your inbox</h2>
-          <p className="muted">If an account uses <b>{email}</b>, we sent a link to reset its password. It is valid for one hour.</p>
-          <Link to="/login">Back to sign in</Link>
+          <h2>{t("Check your inbox")}</h2>
+          <p className="muted">{t("If an account uses")} <b>{email}</b>, we sent a link to reset its password. It is valid for one hour.</p>
+          <Link to="/login">{t("Back to sign in")}</Link>
         </div>
       ) : (
         <form className="form" onSubmit={submit} noValidate>
           <div>
-            <h2>Forgot your password?</h2>
-            <p className="muted">Enter your account email and we will send you a reset link.</p>
+            <h2>{t("Forgot your password?")}</h2>
+            <p className="muted">{t("Enter your account email and we will send you a reset link.")}</p>
           </div>
           {error && <div className="alert">{error}</div>}
           <label className="field">
-            <span>Email</span>
+            <span>{t("Email")}</span>
             <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-          <button className="btn btn-primary btn-block" disabled={busy || !email.trim()}>Send reset link</button>
-          <p className="muted center"><Link to="/login">Back to sign in</Link></p>
+          <button className="btn btn-primary btn-block" disabled={busy || !email.trim()}>{t("Send reset link")}</button>
+          <p className="muted center"><Link to="/login">{t("Back to sign in")}</Link></p>
         </form>
       )}
     </Shell>
@@ -74,6 +70,7 @@ export function ResetPasswordPage() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const navigate = useNavigate();
+  const rules = usePasswordRules();
   const toast = useToast();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -90,7 +87,7 @@ export function ResetPasswordPage() {
     setError('');
     try {
       await api.resetPassword(token, password);
-      toast('Password changed. You can sign in now.');
+      toast(t("Password changed. You can sign in now."));
       navigate('/login', { replace: true });
     } catch (e) {
       const apiError = e as ApiError;
@@ -103,8 +100,8 @@ export function ResetPasswordPage() {
     return (
       <Shell>
         <div className="form center">
-          <h2>Invalid link</h2>
-          <p className="muted">This reset link is incomplete. <Link to="/forgot-password">Request a new one</Link>.</p>
+          <h2>{t("Invalid link")}</h2>
+          <p className="muted">{t("This reset link is incomplete.")} <Link to="/forgot-password">{t("Request a new one")}</Link>.</p>
         </div>
       </Shell>
     );
@@ -114,24 +111,24 @@ export function ResetPasswordPage() {
     <Shell>
       <form className="form" onSubmit={submit} noValidate>
         <div>
-          <h2>Choose a new password</h2>
-          <p className="muted">After saving, sign in with your new password.</p>
+          <h2>{t("Choose a new password")}</h2>
+          <p className="muted">{t("After saving, sign in with your new password.")}</p>
         </div>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>New password</span>
+          <span>{t("New password")}</span>
           <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <ul className="rules">
-          {RULES.map(([rule, text]) => (
-            <li key={text} className={rule.test(password) ? 'ok' : ''}><CheckCircle2 size={14} /> {text}</li>
+          {rules.map((rule) => (
+            <li key={rule.label} className={rule.test(password) ? 'ok' : ''}><CheckCircle2 size={14} /> {rule.label}</li>
           ))}
         </ul>
         <label className="field">
-          <span>Confirm new password</span>
+          <span>{t("Confirm new password")}</span>
           <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </label>
-        <button className="btn btn-primary btn-block" disabled={busy || !password}>Save password</button>
+        <button className="btn btn-primary btn-block" disabled={busy || !password}>{t("Save password")}</button>
       </form>
     </Shell>
   );

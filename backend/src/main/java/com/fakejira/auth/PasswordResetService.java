@@ -1,5 +1,7 @@
 package com.fakejira.auth;
 
+import com.fakejira.audit.AuditLog;
+import com.fakejira.session.SessionService;
 import com.fakejira.common.ApiException;
 import com.fakejira.mail.MailService;
 import com.fakejira.user.User;
@@ -29,10 +31,17 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository tokens;
     private final PasswordEncoder passwordEncoder;
     private final MailService mail;
+    private final PasswordPolicy policy;
+    private final SessionService sessions;
+    private final AuditLog audit;
     private final SecureRandom random = new SecureRandom();
 
     public PasswordResetService(UserRepository users, PasswordResetTokenRepository tokens,
-                                PasswordEncoder passwordEncoder, MailService mail) {
+                                PasswordEncoder passwordEncoder, MailService mail, PasswordPolicy policy,
+                                SessionService sessions, AuditLog audit) {
+        this.policy = policy;
+        this.sessions = sessions;
+        this.audit = audit;
         this.users = users;
         this.tokens = tokens;
         this.passwordEncoder = passwordEncoder;
@@ -45,7 +54,8 @@ public class PasswordResetService {
      */
     @Transactional
     public void requestReset(String email) {
-        users.findByEmailIgnoreCase(email.trim()).ifPresent(user -> {
+        users.findByEmailIgnoreCase(email.trim())
+                .filter(user -> user.getStatus() != com.fakejira.user.AccountStatus.DELETED).ifPresent(user -> {
             byte[] bytes = new byte[32];
             random.nextBytes(bytes);
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -68,9 +78,15 @@ public class PasswordResetService {
         PasswordResetToken reset = tokens.findByTokenHash(hash(token))
                 .filter(candidate -> candidate.isUsable(Instant.now()))
                 .orElseThrow(() -> ApiException.badRequest("This reset link is invalid or has expired."));
+        policy.check(newPassword, "newPassword");
         User user = reset.getUser();
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordSet(true);
+        user.setMustChangePassword(false);
         reset.markUsed();
+        // Someone who could reset the password might be locking out an intruder: end every session.
+        sessions.revokeAll(user.getId(), null);
+        audit.record(user, "password.reset", user.getUsername(), "via email link");
     }
 
     static String hash(String token) {

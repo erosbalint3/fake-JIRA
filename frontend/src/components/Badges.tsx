@@ -1,6 +1,7 @@
-import { Ban, CalendarClock, CheckSquare, ChevronsUp, ChevronUp, Equal, ChevronDown, ListTree } from 'lucide-react';
+import { Ban, BookOpen, Bug, CalendarClock, CheckSquare, ChevronDown, ChevronUp, ChevronsUp, Equal, FlaskConical, ListTree } from 'lucide-react';
 import { dueState, formatDay } from '../format';
-import { PRIORITY_LABEL, STATUS_LABEL, type EpicRef, type Priority, type Status } from '../types';
+import { PRIORITY_LABEL, STATUS_LABEL, TASK_TYPE_LABEL, type EpicRef, type Priority, type Status, type TaskType } from '../types';
+import { t } from '../i18n';
 
 const PRIORITY_ICON = {
   CRITICAL: ChevronsUp,
@@ -12,15 +13,15 @@ const PRIORITY_ICON = {
 export function PriorityBadge({ priority, compact = false }: { priority: Priority; compact?: boolean }) {
   const Icon = PRIORITY_ICON[priority];
   return (
-    <span className={`priority priority-${priority.toLowerCase()}`} title={`${PRIORITY_LABEL[priority]} priority`}>
+    <span className={`priority priority-${priority.toLowerCase()}`} title={t('{p} priority', { p: t(PRIORITY_LABEL[priority]) })}>
       <Icon size={14} strokeWidth={2.5} aria-hidden />
-      {!compact && PRIORITY_LABEL[priority]}
+      {!compact && t(PRIORITY_LABEL[priority])}
     </span>
   );
 }
 
 export function StatusBadge({ status }: { status: Status }) {
-  return <span className={`status status-${status.toLowerCase()}`}>{STATUS_LABEL[status]}</span>;
+  return <span className={`status status-${status.toLowerCase()}`}>{t(STATUS_LABEL[status])}</span>;
 }
 
 export function DueBadge({ date, done }: { date: string; done: boolean }) {
@@ -82,6 +83,19 @@ export function SubtaskBadge({ done, total }: { done: number; total: number }) {
     <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={`${done} of ${total} subtasks done`}>
       <ListTree size={13} aria-hidden />
       {done}/{total}
+    </span>
+  );
+}
+
+const TYPE_ICON = { TASK: CheckSquare, BUG: Bug, STORY: BookOpen, SPIKE: FlaskConical } as const;
+
+/** Issue type as a small colored icon (with a tooltip); pass {@code label} to show the name too. */
+export function TypeIcon({ type, label = false }: { type: TaskType; label?: boolean }) {
+  const Icon = TYPE_ICON[type] ?? CheckSquare;
+  return (
+    <span className={`type-icon type-${type.toLowerCase()}`} title={t(TASK_TYPE_LABEL[type])}>
+      <Icon size={14} aria-hidden />
+      {label ? <span>{t(TASK_TYPE_LABEL[type])}</span> : <span className="sr-only">{t(TASK_TYPE_LABEL[type])}</span>}
     </span>
   );
 }

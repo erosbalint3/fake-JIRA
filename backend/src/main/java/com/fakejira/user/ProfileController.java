@@ -1,5 +1,11 @@
 package com.fakejira.user;
 
+import com.fakejira.audit.AuditLog;
+import com.fakejira.auth.PasswordPolicy;
+import com.fakejira.auth.TokenService;
+import com.fakejira.auth.TwoFactorService;
+import com.fakejira.auth.oauth.UserIdentityRepository;
+import com.fakejira.session.SessionService;
 import com.fakejira.auth.AuthDtos.ChangePasswordRequest;
 import com.fakejira.common.ApiException;
 import com.fakejira.common.CurrentUser;
@@ -32,9 +38,21 @@ public class ProfileController {
     private final PasswordEncoder passwordEncoder;
     private final MailService mail;
     private final PushSubscriptionRepository push;
+    private final PasswordPolicy policy;
+    private final SessionService sessions;
+    private final AuditLog audit;
+    private final TwoFactorService twoFactor;
+    private final UserIdentityRepository identities;
 
     public ProfileController(CurrentUser currentUser, TaskRepository tasks, UserRepository users,
-                             PasswordEncoder passwordEncoder, MailService mail, PushSubscriptionRepository push) {
+                             PasswordEncoder passwordEncoder, MailService mail, PushSubscriptionRepository push,
+                             PasswordPolicy policy, SessionService sessions, AuditLog audit, TwoFactorService twoFactor,
+                             UserIdentityRepository identities) {
+        this.policy = policy;
+        this.sessions = sessions;
+        this.audit = audit;
+        this.twoFactor = twoFactor;
+        this.identities = identities;
         this.push = push;
         this.currentUser = currentUser;
         this.tasks = tasks;
@@ -47,13 +65,22 @@ public class ProfileController {
     }
 
     public record ProfileResponse(UserSummary user, Instant memberSince, Stats stats, boolean admin,
-                                  EmailFrequency emailFrequency, boolean emailAvailable, int pushDevices) {
+                                  EmailFrequency emailFrequency, boolean emailAvailable, int pushDevices,
+                                  boolean twoFactorEnabled, int recoveryCodesLeft, boolean passwordSet,
+                                  boolean mustChangePassword, java.util.List<String> identities, Away away,
+                                  boolean calendarFeed, String language) {
+    }
+
+    /** Out-of-office settings; all null when none are set. */
+    public record Away(java.time.LocalDate from, java.time.LocalDate until, String message) {
     }
 
     /** Only non-null fields change. An empty display name removes it. */
     public record SettingsRequest(EmailFrequency emailFrequency,
                                   @jakarta.validation.constraints.Size(max = 60, message = "Display name must be at most 60 characters")
-                                  String displayName) {
+                                  String displayName,
+                                  @jakarta.validation.constraints.Pattern(regexp = "^(en|hu)$", message = "Unsupported language")
+                                  String language) {
     }
 
     @GetMapping
@@ -67,7 +94,11 @@ public class ProfileController {
                 tasks.countByAssigneeIdAndStatus(id, TaskStatus.DONE),
                 tasks.countByReporterId(id));
         return new ProfileResponse(UserSummary.of(user), user.getCreatedAt(), stats, user.isAdmin(),
-                user.getEmailFrequency(), mail.isEnabled(), (int) push.countByUserId(user.getId()));
+                user.getEmailFrequency(), mail.isEnabled(), (int) push.countByUserId(user.getId()),
+                user.isTotpEnabled(), twoFactor.remainingRecoveryCodes(user), user.isPasswordSet(),
+                user.isMustChangePassword(), identities.providersFor(user.getId()),
+                new Away(user.getAwayFrom(), user.getAwayUntil(), user.getAwayMessage()), user.getCalendarToken() != null,
+                user.getLanguage());
     }
 
     @PutMapping("/settings")
@@ -86,6 +117,9 @@ public class ProfileController {
             String name = request.displayName().trim();
             user.setDisplayName(name.isEmpty() ? null : name);
         }
+        if (request.language() != null) {
+            user.setLanguage(request.language());
+        }
         users.save(user);
         return profile(jwt);
     }
@@ -95,10 +129,17 @@ public class ProfileController {
     @Transactional
     public void changePassword(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePasswordRequest request) {
         User user = currentUser.from(jwt);
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            throw ApiException.badRequest("Your current password is incorrect.");
+        if (user.isPasswordSet() && (request.currentPassword() == null
+                || !passwordEncoder.matches(request.currentPassword(), user.getPasswordHash()))) {
+            throw ApiException.field("currentPassword", "Your current password is incorrect.");
         }
+        policy.check(request.newPassword(), "newPassword");
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setPasswordSet(true);
+        user.setMustChangePassword(false);
         users.save(user);
+        // Other devices signed in with the old password are signed out.
+        sessions.revokeAll(user.getId(), jwt.getClaimAsString(TokenService.SESSION));
+        audit.record(user, "password.change", user.getUsername(), null);
     }
 }

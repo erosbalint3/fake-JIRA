@@ -42,7 +42,11 @@ public final class SprintDtos {
     }
 
     public record Burndown(SprintResponse sprint, int total, int done, int totalPoints, int donePoints,
-                           List<BurndownPoint> points) {
+                           List<BurndownPoint> points, List<ScopeChange> changes) {
+    }
+
+    /** A task added to or removed from the sprint after it started. */
+    public record ScopeChange(LocalDate date, String key, String title, Integer points, boolean added, String actor) {
     }
 
     /** Committed vs completed work per finished sprint (oldest first). */

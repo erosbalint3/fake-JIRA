@@ -1,4 +1,4 @@
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+import { locale, t } from './i18n';
 
 export function timeAgo(iso: string): string {
   const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
@@ -7,19 +7,21 @@ export function timeAgo(iso: string): string {
     ['day', 86400], ['hour', 3600], ['minute', 60],
   ];
   for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
+    if (Math.abs(seconds) >= size) {
+      return new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' }).format(Math.round(seconds / size), unit);
+    }
   }
-  return 'just now';
+  return t('just now');
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(locale(), { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /** Formats a calendar date (yyyy-mm-dd) without shifting it through time zones. */
 export function formatDay(day: string, withYear = false): string {
   const [year, month, date] = day.split('-').map(Number);
-  return new Date(year, month - 1, date).toLocaleDateString(undefined, {
+  return new Date(year, month - 1, date).toLocaleDateString(locale(), {
     month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}),
   });
 }

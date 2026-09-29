@@ -25,7 +25,14 @@ public final class ProjectDtos {
             String name,
 
             @Size(max = 1000, message = "Description must be at most 1000 characters")
-            String description) {
+            String description,
+
+            /** blank (default), scrum, kanban, bugs or marketing; see ProjectTemplates. */
+            String template) {
+
+        public CreateProjectRequest(String key, String name, String description) {
+            this(key, name, description, null);
+        }
     }
 
     public record UpdateProjectRequest(
@@ -34,7 +41,18 @@ public final class ProjectDtos {
             String name,
 
             @Size(max = 1000, message = "Description must be at most 1000 characters")
-            String description) {
+            String description,
+
+            /** Kanban projects have no sprints: a continuous board and flow reports. Unchanged when null. */
+            Boolean kanban,
+
+            /** Accent colour like #2a78d6; empty clears it. Unchanged when null. */
+            @jakarta.validation.constraints.Pattern(regexp = "^(#[0-9a-fA-F]{6})?$", message = "Use a colour like #2a78d6")
+            String color) {
+
+        public UpdateProjectRequest(String name, String description) {
+            this(name, description, null, null);
+        }
     }
 
     public enum Role { OWNER, MEMBER, VIEWER }
@@ -46,8 +64,11 @@ public final class ProjectDtos {
     public record RoleRequest(Role role) {
     }
 
+    public record OwnerRequest(@jakarta.validation.constraints.NotNull Long userId) {
+    }
+
     public record MemberResponse(Long id, String username, String email, String displayName, String avatarUrl,
-                                 Role role) {
+                                 Role role, java.time.LocalDate awayUntil) {
     }
 
     public record ProjectResponse(
@@ -59,7 +80,9 @@ public final class ProjectDtos {
             List<MemberResponse> members,
             boolean githubEnabled,
             boolean githubAutoDone,
-            Instant createdAt) {
+            Instant createdAt,
+            boolean kanban,
+            String color) {
 
         public static ProjectResponse of(Project project) {
             return new ProjectResponse(
@@ -74,13 +97,15 @@ public final class ProjectDtos {
                                 Role role = project.isOwner(member) ? Role.OWNER
                                         : project.isViewer(member) ? Role.VIEWER : Role.MEMBER;
                                 return new MemberResponse(summary.id(), summary.username(), summary.email(),
-                                        summary.displayName(), summary.avatarUrl(), role);
+                                        summary.displayName(), summary.avatarUrl(), role, summary.awayUntil());
                             })
                             .sorted(Comparator.comparing(MemberResponse::username, String.CASE_INSENSITIVE_ORDER))
                             .toList(),
                     project.getGithubSecret() != null,
                     project.isGithubAutoDone(),
-                    project.getCreatedAt());
+                    project.getCreatedAt(),
+                    project.isKanban(),
+                    project.getColor());
         }
     }
 }

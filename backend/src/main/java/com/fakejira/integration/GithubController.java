@@ -54,7 +54,9 @@ public class GithubController {
         this.json = json;
     }
 
-    public record GithubSettings(boolean enabled, String webhookUrl, String secret, boolean autoDone) {
+    /** One secret serves GitHub (HMAC signature), Gitea/Forgejo (HMAC signature) and GitLab (secret token). */
+    public record GithubSettings(boolean enabled, String webhookUrl, String secret, boolean autoDone, String gitlabUrl,
+                                 String giteaUrl) {
     }
 
     public record AutoDoneRequest(boolean autoDone) {
@@ -108,7 +110,8 @@ public class GithubController {
     private GithubSettings settings(Project project) {
         return new GithubSettings(project.getGithubSecret() != null,
                 mail.link("/api/integrations/github/" + project.getKey()),
-                project.getGithubSecret(), project.isGithubAutoDone());
+                project.getGithubSecret(), project.isGithubAutoDone(),
+                mail.link("/api/integrations/gitlab/" + project.getKey()), mail.link("/api/integrations/gitea/" + project.getKey()));
     }
 
     // ---------------------------------------------------------------- webhook (called by GitHub)
@@ -132,6 +135,42 @@ public class GithubController {
         JsonNode payload = json.readTree(body);
         GithubWebhookService.Result result = webhooks.handle(project, event, payload);
         return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
+    }
+
+    /** GitLab sends the secret itself in X-Gitlab-Token. */
+    @PostMapping("/api/integrations/gitlab/{key}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> gitlab(@PathVariable String key,
+                                                      @RequestHeader(value = "X-Gitlab-Event", defaultValue = "") String event,
+                                                      @RequestHeader(value = "X-Gitlab-Token", defaultValue = "") String token,
+                                                      @RequestBody byte[] body) throws IOException {
+        Project project = integrated(key);
+        if (!MessageDigest.isEqual(project.getGithubSecret().getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid token.");
+        }
+        GithubWebhookService.Result result = webhooks.handleGitlab(project, event, json.readTree(body));
+        return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
+    }
+
+    /** Gitea and Forgejo sign the body like GitHub, as plain hex in X-Gitea-Signature. */
+    @PostMapping("/api/integrations/gitea/{key}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> gitea(@PathVariable String key,
+                                                     @RequestHeader(value = "X-Gitea-Event", defaultValue = "") String event,
+                                                     @RequestHeader(value = "X-Gitea-Signature", defaultValue = "") String signature,
+                                                     @RequestBody byte[] body) throws IOException {
+        Project project = integrated(key);
+        if (!validSignature(project.getGithubSecret(), body, "sha256=" + signature)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid signature.");
+        }
+        GithubWebhookService.Result result = webhooks.handleGitea(project, event, json.readTree(body));
+        return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
+    }
+
+    private Project integrated(String key) {
+        return projects.findByKey(key.toUpperCase())
+                .filter(p -> p.getGithubSecret() != null)
+                .orElseThrow(() -> ApiException.notFound("No git integration here."));
     }
 
     static boolean validSignature(String secret, byte[] body, String header) {

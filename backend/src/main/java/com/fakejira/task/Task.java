@@ -2,6 +2,7 @@ package com.fakejira.task;
 
 import com.fakejira.board.BoardColumn;
 import com.fakejira.epic.Epic;
+import com.fakejira.release.Release;
 import com.fakejira.project.Project;
 import com.fakejira.sprint.Sprint;
 import com.fakejira.user.User;
@@ -21,6 +22,7 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -29,6 +31,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 @Entity
+// Only changed columns are written, so two people editing different fields at once do not undo each other.
+@DynamicUpdate
 @Table(name = "tasks")
 public class Task {
 
@@ -94,6 +98,11 @@ public class Task {
     @JoinColumn(name = "epic_id")
     private Epic epic;
 
+    /** The version this task ships in. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "release_id")
+    private Release release;
+
     /** Explicit board column; null means the first column of the task's status. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "board_column_id")
@@ -105,6 +114,10 @@ public class Task {
             joinColumns = @JoinColumn(name = "task_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id"))
     private Set<User> watchers = new LinkedHashSet<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "task_type", nullable = false, length = 10, columnDefinition = "varchar(10) default 'TASK'")
+    private TaskType type = TaskType.TASK;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -124,13 +137,20 @@ public class Task {
         this.reporter = reporter;
     }
 
+    /** Also called when only related rows (e.g. custom field values) changed. */
     @PreUpdate
-    void touch() {
+    public void touch() {
         updatedAt = Instant.now();
     }
 
     public String getKey() {
         return project.getKey() + "-" + number;
+    }
+
+    /** Moves the task to another project under a new number there. */
+    public void moveTo(Project target, int newNumber) {
+        this.project = target;
+        this.number = newNumber;
     }
 
     public boolean isReporter(User user) {
@@ -250,6 +270,14 @@ public class Task {
         this.epic = epic;
     }
 
+    public Release getRelease() {
+        return release;
+    }
+
+    public void setRelease(Release release) {
+        this.release = release;
+    }
+
     public BoardColumn getBoardColumn() {
         return boardColumn;
     }
@@ -272,5 +300,13 @@ public class Task {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public TaskType getType() {
+        return type;
+    }
+
+    public void setType(TaskType type) {
+        this.type = type == null ? TaskType.TASK : type;
     }
 }

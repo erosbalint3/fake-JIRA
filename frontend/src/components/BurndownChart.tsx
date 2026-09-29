@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { formatDay } from '../format';
-import type { BurndownPoint } from '../types';
+import type { BurndownPoint, ScopeChange } from '../types';
 
 const HEIGHT = 280;
 const PAD = { top: 16, right: 64, bottom: 32, left: 40 };
@@ -9,7 +9,9 @@ const PAD = { top: 16, right: 64, bottom: 32, left: 40 };
  * Sprint burndown: remaining open tasks (or story points) per day (solid) against the ideal straight line (dashed).
  * Colors come from the validated chart palette (--viz-remaining / --viz-ideal).
  */
-export function BurndownChart({ points, total, unit = 'tasks' }: { points: BurndownPoint[]; total: number; unit?: 'tasks' | 'points' }) {
+export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
+  points: BurndownPoint[]; total: number; unit?: 'tasks' | 'points'; changes?: ScopeChange[];
+}) {
   const noun = unit === 'points' ? 'points' : 'tasks';
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -55,6 +57,16 @@ export function BurndownChart({ points, total, unit = 'tasks' }: { points: Burnd
   };
 
   const hovered = hover === null ? null : series[hover];
+  // Scope changes per chart day (index), drawn as markers along the top.
+  const changesByDay = useMemo(() => {
+    const map = new Map<number, ScopeChange[]>();
+    changes.forEach((c) => {
+      const index = points.findIndex((p) => p.date === c.date);
+      if (index >= 0) map.set(index, [...(map.get(index) ?? []), c]);
+    });
+    return map;
+  }, [changes, points]);
+  const hoveredChanges = hover === null ? [] : changesByDay.get(hover) ?? [];
 
   return (
     <div className="viz-root">
@@ -62,6 +74,7 @@ export function BurndownChart({ points, total, unit = 'tasks' }: { points: Burnd
         <ul className="viz-legend" aria-label="Legend">
           <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-remaining" /></svg>Remaining {noun}</li>
           <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-ideal" /></svg>Ideal</li>
+          {changes.length > 0 && <li><span className="scope-marker-key" aria-hidden>◆</span>Scope change</li>}
         </ul>
         <button type="button" className="link small" onClick={() => setAsTable(!asTable)}>
           {asTable ? 'Show chart' : 'Show as table'}
@@ -98,6 +111,18 @@ export function BurndownChart({ points, total, unit = 'tasks' }: { points: Burnd
             ))}
 
             <path d={idealPath} className="viz-line-ideal" fill="none" />
+            {[...changesByDay.entries()].map(([index, list]) => {
+              const added = list.filter((c) => c.added).length;
+              const removed = list.length - added;
+              return (
+                <g key={index} className="scope-marker">
+                  <line x1={x(index)} x2={x(index)} y1={PAD.top} y2={PAD.top + plotH} className="viz-scope-line" />
+                  <text x={x(index)} y={PAD.top + 2} textAnchor="middle" className={`viz-scope ${added >= removed ? 'added' : 'removed'}`}>
+                    {added > 0 ? `+${added}` : ''}{added > 0 && removed > 0 ? ' ' : ''}{removed > 0 ? `−${removed}` : ''}
+                  </text>
+                </g>
+              );
+            })}
             {actual.length > 0 && <path d={actualPath} className="viz-line-remaining" fill="none" />}
             {last && (
               <>
@@ -128,6 +153,9 @@ export function BurndownChart({ points, total, unit = 'tasks' }: { points: Burnd
               <strong>{formatDay(hovered.date, true)}</strong>
               <span><i className="swatch remaining" />{hovered.remaining ?? '—'} remaining</span>
               <span><i className="swatch ideal" />{hovered.ideal.toFixed(1)} ideal</span>
+              {hoveredChanges.map((c, i) => (
+                <span key={i} className="small">{c.added ? '+ added' : '− removed'} {c.key}{c.points !== null ? ` (${c.points} pt)` : ''}</span>
+              ))}
             </div>
           )}
         </div>

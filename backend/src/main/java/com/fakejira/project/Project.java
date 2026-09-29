@@ -60,6 +60,14 @@ public class Project {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean githubAutoDone;
 
+    /** Kanban projects work without sprints. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean kanban;
+
+    /** Optional accent colour (#rrggbb) for the project icon and header. */
+    @Column(length = 7)
+    private String color;
+
     /** Next task number to hand out within this project. */
     @Column(nullable = false)
     private int nextNumber = 1;
@@ -123,6 +131,10 @@ public class Project {
         this.description = description;
     }
 
+    public void setOwner(User owner) {
+        this.owner = owner;
+    }
+
     public User getOwner() {
         return owner;
     }
@@ -149,6 +161,22 @@ public class Project {
 
     public void setGithubAutoDone(boolean githubAutoDone) {
         this.githubAutoDone = githubAutoDone;
+    }
+
+    public boolean isKanban() {
+        return kanban;
+    }
+
+    public void setKanban(boolean kanban) {
+        this.kanban = kanban;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color == null || color.isBlank() ? null : color.toLowerCase();
     }
 
     public int getNextNumber() {

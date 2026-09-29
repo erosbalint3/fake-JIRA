@@ -42,13 +42,15 @@ public class BackupService {
     private final Path attachmentsDir;
     private final int keep;
     private final String datasourceUrl;
+    private final OffsiteBackup offsite;
 
-    public BackupService(JdbcTemplate jdbc,
+    public BackupService(JdbcTemplate jdbc, OffsiteBackup offsite,
                          @Value("${app.backup.dir:./data/backups}") String backupDir,
                          @Value("${app.storage.dir:./data/attachments}") String attachmentsDir,
                          @Value("${app.backup.keep:14}") int keep,
                          @Value("${spring.datasource.url}") String datasourceUrl) {
         this.jdbc = jdbc;
+        this.offsite = offsite;
         this.backupDir = Path.of(backupDir).toAbsolutePath().normalize();
         this.attachmentsDir = Path.of(attachmentsDir).toAbsolutePath().normalize();
         this.keep = Math.max(1, keep);
@@ -83,6 +85,25 @@ public class BackupService {
                 // BACKUP TO takes a consistent snapshot while the app keeps running.
                 jdbc.execute("BACKUP TO '" + dbDump.toString().replace("'", "''") + "'");
                 dbEntry = "database.zip";
+            } else {
+                // Other databases (PostgreSQL): portable INSERT statements from one consistent read.
+                Path sqlFile = Files.createTempFile(backupDir, "db-", ".sql");
+                dbDump = sqlFile;
+                jdbc.execute((java.sql.Connection connection) -> {
+                    boolean autoCommit = connection.getAutoCommit();
+                    connection.setAutoCommit(false);
+                    connection.setTransactionIsolation(java.sql.Connection.TRANSACTION_REPEATABLE_READ);
+                    try (var writer = Files.newBufferedWriter(sqlFile)) {
+                        com.fakejira.ops.DatabaseCopier.dumpSql(connection, writer);
+                    } catch (IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    } finally {
+                        connection.commit();
+                        connection.setAutoCommit(autoCommit);
+                    }
+                    return null;
+                });
+                dbEntry = "database.sql";
             }
             try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(target))) {
                 if (dbDump != null) {
@@ -92,13 +113,18 @@ public class BackupService {
                 // Profile pictures live next to the attachments folder (see AvatarController).
                 addTree(zip, attachmentsDir.resolveSibling("avatars"), "avatars/");
                 zip.putNextEntry(new ZipEntry("README.txt"));
-                zip.write(("FakeJIRA backup " + name + "\n\nRestore: stop the app, unzip database.zip into the data folder"
-                        + " (fakejira.mv.db), copy attachments/ back to the attachments folder and avatars/ next to it,"
-                        + " then start the app.\n")
+                zip.write(("FakeJIRA backup " + name + "\n\nRestore (built-in H2 database): stop the app, unzip database.zip"
+                        + " into the data folder (fakejira.mv.db), copy attachments/ back to the attachments folder and avatars/"
+                        + " next to it, then start the app.\n\nRestore (PostgreSQL): start the app once against an empty database"
+                        + " so it creates the tables, stop it, run `psql -f database.sql` against that database, copy attachments/"
+                        + " and avatars/ back, then start the app.\n")
                         .getBytes());
                 zip.closeEntry();
             }
             prune();
+            if (offsite.isConfigured()) {
+                offsite.uploadLater(target);
+            }
             return describe(target);
         } catch (IOException e) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Backup failed: " + e.getMessage());

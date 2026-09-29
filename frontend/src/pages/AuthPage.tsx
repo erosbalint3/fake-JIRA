@@ -1,24 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, KanbanSquare, Bell, Users } from 'lucide-react';
+import { CheckCircle2, Clock, KanbanSquare, Bell, ShieldCheck, Users } from 'lucide-react';
 import { api, ApiError } from '../api';
 import type { RegistrationMode } from '../types';
 import { useAuth } from '../auth';
 import { Logo } from '../components/Logo';
+import { ProviderButtons } from '../components/ProviderButtons';
+import { usePasswordRules } from '../passwordRules';
+import { t } from '../i18n';
 
 type Mode = 'login' | 'register';
 
-const PASSWORD_RULES: [RegExp, string][] = [
-  [/.{8,}/, 'At least 8 characters'],
-  [/[A-Z]/, 'An uppercase letter'],
-  [/\d/, 'A number'],
-  [/[^A-Za-z0-9]/, 'A special character'],
-];
 
 export function AuthPage({ mode }: { mode: Mode }) {
-  const { login, register } = useAuth();
-  const navigate = useNavigate();
+  const { login, register, verifyCode } = useAuth();
   const location = useLocation();
+  const passwordRules = usePasswordRules();
+  // Google/GitHub sign-in hands over the 2FA step here.
+  const [challenge, setChallenge] = useState<string | null>(
+    () => (location.state as { challenge?: string } | null)?.challenge ?? null);
+  const [code, setCode] = useState('');
+  const navigate = useNavigate();
   const [fields, setFields] = useState({ login: '', username: '', email: '', password: '', confirm: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
@@ -50,7 +52,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
     }
     if (fields.username.trim().length < 4) found.username = 'Username must be at least 4 characters long';
     if (!/^\S+@\S+\.\S+$/.test(fields.email.trim())) found.email = 'Enter a valid email address';
-    if (PASSWORD_RULES.some(([rule]) => !rule.test(fields.password))) found.password = 'Password does not meet the requirements';
+    if (passwordRules.some((rule) => !rule.test(fields.password))) found.password = 'Password does not meet the requirements';
     if (fields.confirm !== fields.password) found.confirm = 'Passwords do not match';
     return found;
   };
@@ -64,7 +66,12 @@ export function AuthPage({ mode }: { mode: Mode }) {
     setBusy(true);
     try {
       if (mode === 'login') {
-        await login(fields.login.trim(), fields.password);
+        const result = await login(fields.login.trim(), fields.password);
+        if (result.kind === 'code') {
+          setChallenge(result.challenge);
+          setBusy(false);
+          return;
+        }
       } else if (await register(fields.username.trim(), fields.email.trim(), fields.password, inviteCode || undefined)) {
         setPending(true);
         setBusy(false);
@@ -76,6 +83,25 @@ export function AuthPage({ mode }: { mode: Mode }) {
       if (error instanceof ApiError) {
         setErrors(error.fieldErrors);
         setFormError(error.message);
+      }
+      setBusy(false);
+    }
+  };
+
+  const submitCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!challenge || !code.trim()) return;
+    setBusy(true);
+    setFormError('');
+    try {
+      await verifyCode(challenge, code.trim());
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from && from !== '/login' ? from : '/', { replace: true });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setFormError(error.fieldErrors.code ?? error.message);
+        // An expired or exhausted step means starting over.
+        if (error.status === 401) setChallenge(null);
       }
       setBusy(false);
     }
@@ -100,37 +126,59 @@ export function AuthPage({ mode }: { mode: Mode }) {
       <section className="auth-hero">
         <Logo />
         <div>
-          <h1>Plan, pick up and ship work — together.</h1>
-          <p>A lightweight task tracker for small teams. Post tasks, grab what you want to work on and move it across your board.</p>
+          <h1>{t("Plan, pick up and ship work — together.")}</h1>
+          <p>{t("A lightweight task tracker for small teams. Post tasks, grab what you want to work on and move it across your board.")}</p>
           <ul className="auth-features">
-            <li><Users size={18} /> Projects with their own members and task keys</li>
-            <li><KanbanSquare size={18} /> Sprints, drag-and-drop boards and burndown charts</li>
-            <li><CheckCircle2 size={18} /> Checklists, labels, due dates and attachments</li>
-            <li><Bell size={18} /> Live updates, @mentions and email notifications</li>
+            <li><Users size={18} /> {t("Projects with their own members and task keys")}</li>
+            <li><KanbanSquare size={18} /> {t("Sprints, drag-and-drop boards and burndown charts")}</li>
+            <li><CheckCircle2 size={18} /> {t("Checklists, labels, due dates and attachments")}</li>
+            <li><Bell size={18} /> {t("Live updates, @mentions and email notifications")}</li>
           </ul>
         </div>
-        <span className="auth-foot">FakeJIRA 3.0</span>
+        <span className="auth-foot">{t("FakeJIRA 4.0")}</span>
       </section>
 
       <section className="auth-panel">
         {pending ? (
           <div className="auth-card form">
             <Clock size={32} className="auth-icon" />
-            <h2>Almost there</h2>
+            <h2>{t("Almost there")}</h2>
             <p className="muted">
               Your account was created and is waiting for an administrator to approve it. You can sign in as soon as it's approved.
             </p>
-            <Link to="/login" className="btn btn-primary btn-block">Back to sign in</Link>
+            <Link to="/login" className="btn btn-primary btn-block">{t("Back to sign in")}</Link>
           </div>
+        ) : challenge ? (
+          <form className="auth-card form" onSubmit={submitCode} noValidate>
+            <ShieldCheck size={32} className="auth-icon" />
+            <div>
+              <h2>{t("Two-step verification")}</h2>
+              <p className="muted">{t("Enter the 6-digit code from your authenticator app, or one of your recovery codes.")}</p>
+            </div>
+            {formError && <div className="alert">{formError}</div>}
+            <label className="field">
+              <span>{t("Code")}</span>
+              <input value={code} onChange={(e) => setCode(e.target.value)} autoFocus inputMode="text"
+                autoComplete="one-time-code" placeholder="123 456" className="code-input" maxLength={12} />
+            </label>
+            <button className="btn btn-primary btn-block" disabled={busy || !code.trim()}>
+              {busy ? 'Checking…' : 'Verify'}
+            </button>
+            <button type="button" className="link small center" onClick={() => {
+              setChallenge(null);
+              setCode('');
+              setFormError('');
+            }}>{t("Back to sign in")}</button>
+          </form>
         ) : mode === 'register' && inviteOnly ? (
           <div className="auth-card form">
-            <h2>Sign-up is invite-only</h2>
+            <h2>{t("Sign-up is invite-only")}</h2>
             <p className="muted">
               {inviteCode
                 ? 'This invite link is invalid, already used or expired. Ask for a new one.'
                 : 'Ask an administrator or a project owner to send you an invite link.'}
             </p>
-            <p className="muted center">Already have an account? <Link to="/login">Sign in</Link></p>
+            <p className="muted center">{t("Already have an account?")} <Link to="/login">{t("Sign in")}</Link></p>
           </div>
         ) : (
         <form className="auth-card form" onSubmit={submit} noValidate>
@@ -147,7 +195,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </div>
           )}
           {mode === 'register' && !info?.valid && info?.registrationMode === 'APPROVAL' && (
-            <div className="notice">New accounts are reviewed by an administrator before they can sign in.</div>
+            <div className="notice">{t("New accounts are reviewed by an administrator before they can sign in.")}</div>
           )}
           {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
 
@@ -155,7 +203,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <>
               {field('login', 'Username or email', 'text', 'username')}
               {field('password', 'Password', 'password', 'current-password')}
-              <Link to="/forgot-password" className="small forgot-link">Forgot password?</Link>
+              <Link to="/forgot-password" className="small forgot-link">{t("Forgot password?")}</Link>
             </>
           ) : (
             <>
@@ -163,9 +211,9 @@ export function AuthPage({ mode }: { mode: Mode }) {
               {field('email', 'Email', 'email', 'email')}
               {field('password', 'Password', 'password', 'new-password')}
               <ul className="rules">
-                {PASSWORD_RULES.map(([rule, text]) => (
-                  <li key={text} className={rule.test(fields.password) ? 'ok' : ''}>
-                    <CheckCircle2 size={14} /> {text}
+                {passwordRules.map((rule) => (
+                  <li key={rule.label} className={rule.test(fields.password) ? 'ok' : ''}>
+                    <CheckCircle2 size={14} /> {rule.label}
                   </li>
                 ))}
               </ul>
@@ -176,14 +224,16 @@ export function AuthPage({ mode }: { mode: Mode }) {
           <button className="btn btn-primary btn-block" disabled={busy}>
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
+          <ProviderButtons invite={inviteCode} onError={setFormError}
+            verb={mode === 'login' ? 'Continue' : 'Sign up'} />
 
           <p className="muted center">
             {mode === 'login' ? (
               info?.registrationMode === 'INVITE'
                 ? <>New here? Ask for an invite link to join.</>
-                : <>New here? <Link to="/register">Create an account</Link></>
+                : <>New here? <Link to="/register">{t("Create an account")}</Link></>
             ) : (
-              <>Already have an account? <Link to="/login">Sign in</Link></>
+              <>Already have an account? <Link to="/login">{t("Sign in")}</Link></>
             )}
           </p>
         </form>

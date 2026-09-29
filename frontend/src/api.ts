@@ -2,7 +2,11 @@ import type {
   Activity, AdminUser, Attachment, Backup, BoardColumn, BulkChange, Burndown, ChecklistItem, Comment,
   CreateTaskInput, DevLink, EmailFrequency, Epic, GithubSettings, ImportResult, Invite, LinkType, Notification,
   Priority, Profile, Project, RegistrationMode, Role, SavedFilter, Scope, Sprint, Status, Task, TaskInput,
-  TaskLink, TimeEntry, TimeReport, User, VelocityEntry,
+  TaskLink, TimeEntry, TimeReport, User, VelocityEntry, TaskTemplate, RecurringTask, TaskType, Frequency,
+  Release, RetroItem, RetroKind, SprintReview, PokerState, FlowDay, CycleReport, Throughput,
+  SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
+  AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
+  PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -35,6 +39,27 @@ export const tokenStore = {
   },
 };
 
+/** True while API reads are answered from the offline copy kept by the service worker. */
+let offline = false;
+export const OFFLINE_CHANGED = 'fakejira:offline';
+export function isOffline() {
+  return offline;
+}
+function setOffline(next: boolean) {
+  if (next === offline) return;
+  offline = next;
+  window.dispatchEvent(new Event(OFFLINE_CHANGED));
+}
+
+/** Forgets the offline copy of API reads (on logout, so the next person can't browse it). */
+export function clearOfflineCache() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage('clear-api-cache');
+  } catch {
+    /* no service worker */
+  }
+}
+
 /** Called when the server rejects our token so the app can return to the login screen. */
 let onUnauthorized: () => void = () => {};
 export function setUnauthorizedHandler(handler: () => void) {
@@ -55,8 +80,14 @@ async function send(method: string, path: string, init: RequestInit = {}): Promi
       headers: { Accept: 'application/json', ...authHeaders(), ...(init.headers as Record<string, string>) },
     });
   } catch {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOffline(true);
+      throw new ApiError(0, method === 'GET' ? "You're offline and this page hasn't been saved for offline use yet."
+        : "You're offline. Changes can't be saved until you reconnect.");
+    }
     throw new ApiError(0, 'Cannot reach the server. Is the backend running?');
   }
+  setOffline(response.headers.get('X-FakeJIRA-Offline') === '1');
   if (response.status === 401 && tokenStore.get()) {
     onUnauthorized();
   }
@@ -86,9 +117,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export interface AuthResponse {
   token: string | null;
-  user: User;
+  /** Null while the two-factor step is pending. */
+  user: User | null;
   pending: boolean;
   admin: boolean;
+  /** Set when an authenticator code is needed: send it with the code to loginSecondStep. */
+  challenge: string | null;
 }
 
 export interface TaskFilters {
@@ -101,6 +135,7 @@ export interface TaskFilters {
   sprint?: string;
   assignee?: string;
   epic?: string;
+  type?: TaskType | '';
 }
 
 function query(params: Record<string, string | number | undefined | null>) {
@@ -117,7 +152,23 @@ export const api = {
     request<AuthResponse>('POST', '/auth/login', { login, password }),
   register: (username: string, email: string, password: string, inviteCode?: string) =>
     request<AuthResponse>('POST', '/auth/register', { username, email, password, inviteCode }),
-  me: () => request<{ user: User; admin: boolean }>('GET', '/auth/me'),
+  me: () => request<{ user: User; admin: boolean; mustChangePassword: boolean; language?: string }>('GET', '/auth/me'),
+  loginSecondStep: (challenge: string, code: string) => request<AuthResponse>('POST', '/auth/login/2fa', { challenge, code }),
+  logout: () => request<void>('POST', '/auth/logout'),
+  passwordPolicy: () => request<PasswordRules>('GET', '/auth/password-policy'),
+  providers: () => request<{ id: string; label: string }[]>('GET', '/auth/providers'),
+  oauthUrl: (provider: string, invite?: string) =>
+    request<{ url: string }>('POST', `/auth/oauth/${provider}/url`, { invite: invite || null }),
+  unlinkIdentity: (provider: string) => request<void>('DELETE', `/profile/identities/${provider}`),
+  sessions: () => request<SessionInfo[]>('GET', '/profile/sessions'),
+  revokeSession: (id: string) => request<void>('DELETE', `/profile/sessions/${encodeURIComponent(id)}`),
+  signOutOthers: () => request<{ signedOut: number }>('POST', '/profile/sessions/sign-out-others'),
+  twoFactorSetup: () => request<{ secret: string; otpauthUrl: string }>('POST', '/profile/2fa/setup'),
+  twoFactorEnable: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/profile/2fa/enable', { code }),
+  twoFactorDisable: (password: string, code: string) => request<void>('POST', '/profile/2fa/disable', { password, code }),
+  recoveryCodes: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/profile/2fa/recovery-codes', { code }),
+  exportData: async () => (await send('GET', '/profile/export')).blob(),
+  deleteAccount: (password: string, code: string) => request<void>('DELETE', '/profile', { password, code }),
   inviteInfo: (code: string) => request<{ valid: boolean; email: string | null; projectName: string | null;
     registrationMode: RegistrationMode }>('GET', `/auth/invite${query({ code })}`),
   forgotPassword: (email: string) => request<void>('POST', '/auth/forgot-password', { email }),
@@ -126,13 +177,20 @@ export const api = {
 
   projects: () => request<Project[]>('GET', '/projects'),
   project: (key: string) => request<Project>('GET', `/projects/${key}`),
-  createProject: (key: string, name: string, description: string) =>
-    request<Project>('POST', '/projects', { key, name, description }),
-  updateProject: (key: string, name: string, description: string) =>
-    request<Project>('PUT', `/projects/${key}`, { name, description }),
+  createProject: (key: string, name: string, description: string, template?: string) =>
+    request<Project>('POST', '/projects', { key, name, description, template: template || undefined }),
+  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string } = {}) =>
+    request<Project>('PUT', `/projects/${key}`, { name, description, ...extra }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
   addMember: (key: string, login: string, role: Role = 'MEMBER') =>
     request<Project>('POST', `/projects/${key}/members`, { login, role }),
+  transferOwnership: (key: string, userId: number) => request<Project>('PUT', `/projects/${key}/owner`, { userId }),
+  chatHooks: (key: string) => request<ChatHook[]>('GET', `/projects/${key}/chat-hooks`),
+  addChatHook: (key: string, kind: ChatHook['kind'], url: string, events: ChatEvent[]) =>
+    request<ChatHook>('POST', `/projects/${key}/chat-hooks`, { kind, url, events }),
+  updateChatHook: (id: number, events: ChatEvent[]) => request<ChatHook>('PUT', `/chat-hooks/${id}`, { events }),
+  deleteChatHook: (id: number) => request<void>('DELETE', `/chat-hooks/${id}`),
+  testChatHook: (id: number) => request<{ delivered: boolean; error: string | null }>('POST', `/chat-hooks/${id}/test`),
   setRole: (key: string, userId: number, role: Role) =>
     request<Project>('PUT', `/projects/${key}/members/${userId}/role`, { role }),
   removeMember: (key: string, userId: number) => request<void>('DELETE', `/projects/${key}/members/${userId}`),
@@ -157,6 +215,73 @@ export const api = {
   createEpic: (key: string, input: EpicInput) => request<Epic>('POST', `/projects/${key}/epics`, input),
   updateEpic: (id: number, input: EpicInput) => request<Epic>('PUT', `/epics/${id}`, input),
   deleteEpic: (id: number) => request<void>('DELETE', `/epics/${id}`),
+  setEpicDependencies: (id: number, dependsOn: number[]) => request<Epic>('PUT', `/epics/${id}/dependencies`, { dependsOn }),
+
+  releases: (key: string) => request<Release[]>('GET', `/projects/${key}/releases`),
+  createRelease: (key: string, input: ReleaseInput) => request<Release>('POST', `/projects/${key}/releases`, input),
+  updateRelease: (id: number, input: ReleaseInput) => request<Release>('PUT', `/releases/${id}`, input),
+  deleteRelease: (id: number) => request<void>('DELETE', `/releases/${id}`),
+  shipRelease: (id: number, moveUnfinishedTo: number | null) =>
+    request<Release>('POST', `/releases/${id}/release`, { moveUnfinishedTo }),
+  unshipRelease: (id: number) => request<Release>('POST', `/releases/${id}/unrelease`),
+  releaseTasks: (id: number) => request<Task[]>('GET', `/releases/${id}/tasks`),
+  releaseNotes: (id: number) => request<{ release: Release; markdown: string }>('GET', `/releases/${id}/notes`),
+  setTaskRelease: (taskId: number, releaseId: number | null) =>
+    request<Task>('PUT', `/tasks/${taskId}/release`, { releaseId }),
+
+  retro: (sprintId: number) => request<RetroItem[]>('GET', `/sprints/${sprintId}/retro`),
+  addRetroItem: (sprintId: number, kind: RetroKind, text: string) =>
+    request<RetroItem>('POST', `/sprints/${sprintId}/retro`, { kind, text }),
+  editRetroItem: (id: number, kind: RetroKind, text: string) => request<RetroItem>('PUT', `/retro/${id}`, { kind, text }),
+  deleteRetroItem: (id: number) => request<void>('DELETE', `/retro/${id}`),
+  voteRetroItem: (id: number) => request<RetroItem>('POST', `/retro/${id}/vote`),
+  retroToTask: (id: number) => request<RetroItem>('POST', `/retro/${id}/task`),
+  sprintReview: (sprintId: number) => request<SprintReview>('GET', `/sprints/${sprintId}/review`),
+
+  poker: (taskId: number) => request<PokerState>('GET', `/tasks/${taskId}/poker`),
+  startPoker: (taskId: number) => request<PokerState>('POST', `/tasks/${taskId}/poker`),
+  pokerVote: (taskId: number, value: string | null) => request<PokerState>('PUT', `/tasks/${taskId}/poker/vote`, { value }),
+  revealPoker: (taskId: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/reveal`),
+  acceptPoker: (taskId: number, points: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/accept`, { points }),
+  cancelPoker: (taskId: number) => request<void>('DELETE', `/tasks/${taskId}/poker`),
+
+  search: (q: string, limit = 200) => request<SearchResult>('GET', `/search${query({ q, limit: String(limit) })}`),
+  searchStats: (q: string, groupBy: string) => request<SearchGroup[]>('GET', `/search/stats${query({ q, groupBy })}`),
+  searchFields: () => request<SearchField[]>('GET', '/search/fields'),
+  textSearch: (q: string, limit = 30) => request<TextHit[]>('GET', `/search/text${query({ q, limit: String(limit) })}`),
+
+  teams: () => request<Team[]>('GET', '/teams'),
+  createTeam: (name: string, handle: string, description: string) =>
+    request<Team>('POST', '/teams', { name, handle, description }),
+  updateTeam: (id: number, name: string, handle: string, description: string) =>
+    request<Team>('PUT', `/teams/${id}`, { name, handle, description }),
+  deleteTeam: (id: number) => request<void>('DELETE', `/teams/${id}`),
+  addTeamMember: (id: number, login: string) => request<Team>('POST', `/teams/${id}/members`, { login }),
+  removeTeamMember: (id: number, userId: number) => request<Team>('DELETE', `/teams/${id}/members/${userId}`),
+
+  dashboards: () => request<Dashboard[]>('GET', '/dashboards'),
+  createDashboard: (name: string, widgets: Widget[]) => request<Dashboard>('POST', '/dashboards', { name, widgets }),
+  updateDashboard: (id: number, name: string, widgets: Widget[]) =>
+    request<Dashboard>('PUT', `/dashboards/${id}`, { name, widgets }),
+  deleteDashboard: (id: number) => request<void>('DELETE', `/dashboards/${id}`),
+  viewed: (taskId: number) => request<void>('POST', `/recent/${taskId}`),
+  recent: () => request<RecentTask[]>('GET', '/recent'),
+
+  calendar: (from: string, to: string, project?: string) =>
+    request<CalendarEvent[]>('GET', `/calendar${query({ from, to, project })}`),
+  calendarFeed: () => request<{ url: string | null }>('GET', '/profile/calendar-feed'),
+  resetCalendarFeed: () => request<{ url: string | null }>('POST', '/profile/calendar-feed'),
+  disableCalendarFeed: () => request<{ url: string | null }>('DELETE', '/profile/calendar-feed'),
+  setAway: (from: string | null, until: string, message: string) =>
+    request<User>('PUT', '/profile/away', { from, until, message }),
+  clearAway: () => request<User>('DELETE', '/profile/away'),
+  feed: (params: { project?: string; user?: string; before?: string; limit?: number } = {}) =>
+    request<FeedItem[]>('GET', `/activity${query({ ...params })}`),
+  projectEmail: (key: string) => request<{ address: string | null }>('GET', `/projects/${key}/email-address`),
+
+  flow: (key: string, days = 30) => request<FlowDay[]>('GET', `/projects/${key}/flow?days=${days}`),
+  cycleTime: (key: string, days = 90) => request<CycleReport>('GET', `/projects/${key}/cycle-time?days=${days}`),
+  throughput: (key: string, weeks = 12) => request<Throughput[]>('GET', `/projects/${key}/throughput?weeks=${weeks}`),
 
   columns: (key: string) => request<BoardColumn[]>('GET', `/projects/${key}/columns`),
   addColumn: (key: string, input: ColumnInput) => request<BoardColumn[]>('POST', `/projects/${key}/columns`, input),
@@ -175,6 +300,66 @@ export const api = {
   disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
 
   exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
+  customFields: (key: string) => request<CustomFieldDef[]>('GET', `/projects/${key}/fields`),
+  createCustomField: (key: string, name: string, type: CustomFieldType, options: string[]) =>
+    request<CustomFieldDef>('POST', `/projects/${key}/fields`, { name, type, options }),
+  updateCustomField: (id: number, name: string, type: CustomFieldType, options: string[]) =>
+    request<CustomFieldDef>('PUT', `/fields/${id}`, { name, type, options }),
+  deleteCustomField: (id: number) => request<void>('DELETE', `/fields/${id}`),
+  taskFields: (taskId: number) => request<CustomFieldValue[]>('GET', `/tasks/${taskId}/fields`),
+  setTaskField: (taskId: number, fieldId: number, value: string | null) =>
+    request<CustomFieldValue>('PUT', `/tasks/${taskId}/fields/${fieldId}`, { value }),
+  projectTemplates: () => request<ProjectTemplate[]>('GET', '/project-templates'),
+  projectStorage: (key: string) => request<StorageUsage>('GET', `/projects/${key}/storage`),
+  system: () => request<SystemInfo>('GET', '/admin/system'),
+  setQuotas: (projectMb: number, totalMb: number) => request<{ projectMb: number; totalMb: number }>('PUT', '/admin/quotas', { projectMb, totalMb }),
+  uploadOffsite: () => request<OffsiteStatus>('POST', '/admin/offsite/upload'),
+  checkForUpdate: () => request<SystemInfo['update']>('POST', '/admin/update-check'),
+
+  importJira: async (key: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', `/projects/${key}/import/jira`, { body: form })).json() as Promise<ImportResult>;
+  },
+  importTrello: async (key: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await send('POST', `/projects/${key}/import/trello`, { body: form })).json() as Promise<ImportResult>;
+  },
+
+  automations: (key: string) => request<AutomationRule[]>('GET', `/projects/${key}/automations`),
+  createAutomation: (key: string, input: RuleInput) => request<AutomationRule>('POST', `/projects/${key}/automations`, input),
+  updateAutomation: (id: number, input: RuleInput) => request<AutomationRule>('PUT', `/automations/${id}`, input),
+  deleteAutomation: (id: number) => request<void>('DELETE', `/automations/${id}`),
+  runAutomation: (id: number) => request<{ tasks: number }>('POST', `/automations/${id}/run`),
+  automationLog: (id: number) => request<RuleRun[]>('GET', `/automations/${id}/log`),
+
+  webhooks: (key: string) => request<OutgoingWebhook[]>('GET', `/projects/${key}/webhooks`),
+  createWebhook: (key: string, url: string, events: string[]) =>
+    request<OutgoingWebhook>('POST', `/projects/${key}/webhooks`, { url, events }),
+  updateWebhook: (id: number, url: string, events: string[], enabled: boolean) =>
+    request<OutgoingWebhook>('PUT', `/webhooks/${id}`, { url, events, enabled }),
+  rotateWebhookSecret: (id: number) => request<OutgoingWebhook>('POST', `/webhooks/${id}/secret`),
+  deleteWebhook: (id: number) => request<void>('DELETE', `/webhooks/${id}`),
+  testWebhook: (id: number) => request<WebhookDelivery>('POST', `/webhooks/${id}/test`),
+  webhookDeliveries: (id: number) => request<WebhookDelivery[]>('GET', `/webhooks/${id}/deliveries`),
+
+  apiTokens: () => request<ApiTokenInfo[]>('GET', '/profile/tokens'),
+  createApiToken: (name: string, scope: 'READ' | 'WRITE', expiresInDays: number | null) =>
+    request<ApiTokenInfo>('POST', '/profile/tokens', { name, scope, expiresInDays }),
+  revokeApiToken: (id: number) => request<void>('DELETE', `/profile/tokens/${id}`),
+
+  shares: (taskId: number) => request<ShareLinkInfo[]>('GET', `/tasks/${taskId}/shares`),
+  createShare: (taskId: number, includeComments: boolean, expiresInDays: number | null) =>
+    request<ShareLinkInfo>('POST', `/tasks/${taskId}/shares`, { includeComments, expiresInDays }),
+  revokeShare: (id: number) => request<void>('DELETE', `/shares/${id}`),
+  /** Public: no sign-in (and no token sent, so a stale session cannot get in the way). */
+  publicTask: async (token: string) => {
+    const response = await fetch(`/api/public/share/${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new ApiError(response.status, response.status === 404 ? 'This link does not exist or has expired.' : 'Could not load this task.');
+    return response.json() as Promise<PublicTask>;
+  },
+
   importCsv: async (key: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -198,6 +383,24 @@ export const api = {
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
   addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
+  replyToComment: (id: number, parentId: number, body: string) =>
+    request<Comment>('POST', `/tasks/${id}/comments`, { body, parentId }),
+  react: (id: number, commentId: number, emoji: string) =>
+    request<Comment>('PUT', `/tasks/${id}/comments/${commentId}/reactions`, { emoji }),
+  cloneTask: (id: number, subtasks: boolean) => request<Task>('POST', `/tasks/${id}/clone`, { subtasks }),
+  moveTask: (id: number, projectKey: string) => request<Task>('POST', `/tasks/${id}/move`, { projectKey }),
+  templates: (key: string) => request<TaskTemplate[]>('GET', `/projects/${key}/templates`),
+  createTemplate: (key: string, input: TemplateInput) => request<TaskTemplate>('POST', `/projects/${key}/templates`, input),
+  updateTemplate: (id: number, input: TemplateInput) => request<TaskTemplate>('PUT', `/templates/${id}`, input),
+  deleteTemplate: (id: number) => request<void>('DELETE', `/templates/${id}`),
+  recurring: (key: string) => request<RecurringTask[]>('GET', `/projects/${key}/recurring`),
+  createRecurring: (key: string, input: RecurringInput) => request<RecurringTask>('POST', `/projects/${key}/recurring`, input),
+  updateRecurring: (id: number, input: RecurringInput) => request<RecurringTask>('PUT', `/recurring/${id}`, input),
+  deleteRecurring: (id: number) => request<void>('DELETE', `/recurring/${id}`),
+  runRecurring: (id: number) => request<Task>('POST', `/recurring/${id}/run`),
+  editComment: (id: number, commentId: number, body: string) =>
+    request<Comment>('PUT', `/tasks/${id}/comments/${commentId}`, { body }),
+  deleteComment: (id: number, commentId: number) => request<void>('DELETE', `/tasks/${id}/comments/${commentId}`),
   activity: (id: number) => request<Activity[]>('GET', `/tasks/${id}/activity`),
   links: (id: number) => request<TaskLink[]>('GET', `/tasks/${id}/links`),
   addLink: (id: number, type: LinkType, targetKey: string) =>
@@ -235,7 +438,7 @@ export const api = {
   markAllRead: () => request<void>('POST', '/notifications/read-all'),
 
   profile: () => request<Profile>('GET', '/profile'),
-  updateSettings: (settings: { emailFrequency?: EmailFrequency; displayName?: string }) =>
+  updateSettings: (settings: { emailFrequency?: EmailFrequency; displayName?: string; language?: string }) =>
     request<Profile>('PUT', '/profile/settings', settings),
   uploadAvatar: async (file: File) => {
     const form = new FormData();
@@ -260,6 +463,14 @@ export const api = {
   approveUser: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/approve`),
   rejectUser: (id: number) => request<void>('DELETE', `/admin/users/${id}`),
   setAdmin: (id: number, admin: boolean) => request<AdminUser>('PUT', `/admin/users/${id}/admin`, { admin }),
+  audit: (params: { action?: string; q?: string; page?: number }) =>
+    request<AuditPage>('GET', `/admin/audit${query(params)}`),
+  resetTwoFactor: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/reset-2fa`),
+  requirePasswordChange: (id: number) => request<AdminUser>('POST', `/admin/users/${id}/require-password-change`),
+  signOutUser: (id: number) => request<{ signedOut: number }>('POST', `/admin/users/${id}/sign-out`),
+  deleteUserAccount: (id: number) => request<void>('DELETE', `/admin/users/${id}/account`),
+  adminPasswordPolicy: () => request<PasswordRules>('GET', '/admin/password-policy'),
+  setPasswordPolicy: (rules: PasswordRules) => request<PasswordRules>('PUT', '/admin/password-policy', rules),
   backups: () => request<Backup[]>('GET', '/admin/backups'),
   backupNow: () => request<Backup>('POST', '/admin/backups'),
   backupBlob: async (name: string) => (await send('GET', `/admin/backups/${encodeURIComponent(name)}`)).blob(),
@@ -273,6 +484,84 @@ export interface AdminOverview {
   /** Public URL used in email links; learned from admin visits unless APP_BASE_URL is set. */
   siteUrl: string;
   siteUrlConfigured: boolean;
+}
+
+export type TemplateInput = Omit<TaskTemplate, 'id'>;
+
+export interface RecurringInput {
+  title: string;
+  description: string;
+  type: TaskType;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  assigneeId: number | null;
+  frequency: Frequency;
+  dayOfWeek: number;
+  dayOfMonth: number;
+  dueInDays: number | null;
+  active: boolean;
+}
+
+export interface PasswordRules {
+  minLength: number;
+  upper: boolean;
+  digit: boolean;
+  special: boolean;
+}
+
+export interface SessionInfo {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+  ip: string | null;
+  device: string | null;
+  method: string;
+}
+
+export type ChatEvent = 'TASK_CREATED' | 'TASK_DONE' | 'STATUS_CHANGED' | 'COMMENT_ADDED' | 'SPRINT';
+
+export interface ChatHook {
+  id: number;
+  kind: 'SLACK' | 'DISCORD';
+  url: string;
+  events: ChatEvent[];
+  lastDeliveryAt: string | null;
+  lastError: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  createdAt: string;
+  actor: string | null;
+  action: string;
+  target: string | null;
+  details: string | null;
+  ip: string | null;
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  total: number;
+  page: number;
+  pages: number;
+  actions: string[];
+}
+
+export interface RuleInput {
+  name: string;
+  trigger: RuleTrigger;
+  triggerStatus: Status | null;
+  condition: string;
+  actions: RuleAction[];
+  enabled?: boolean;
+}
+
+export interface ReleaseInput {
+  name: string;
+  description: string;
+  releaseDate: string | null;
 }
 
 export interface EpicInput {

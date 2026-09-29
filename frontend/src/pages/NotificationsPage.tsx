@@ -7,6 +7,7 @@ import { NOTIFICATIONS_CHANGED } from '../components/Layout';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { timeAgo } from '../format';
 import type { Notification } from '../types';
+import { t } from '../i18n';
 
 export function NotificationsPage() {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ export function NotificationsPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>Notifications</h1>
+          <h1>{t("Notifications")}</h1>
           <p className="muted">{unread ? `${unread} unread` : 'You are all caught up.'}</p>
         </div>
         <button className="btn btn-soft" onClick={markAll} disabled={!unread}>
@@ -55,7 +56,7 @@ export function NotificationsPage() {
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!items && !error && <Spinner />}
       {items && items.length === 0 && (
-        <EmptyState icon={<BellOff size={28} />} title="No notifications yet">
+        <EmptyState icon={<BellOff size={28} />} title={t("No notifications yet")}>
           You will hear about it here when someone accepts, updates or comments on your tasks.
         </EmptyState>
       )}

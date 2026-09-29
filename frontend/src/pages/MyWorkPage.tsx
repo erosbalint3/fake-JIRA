@@ -8,6 +8,7 @@ import { TaskRow } from '../components/TaskRow';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { dueState } from '../format';
 import { PRIORITY_ORDER, STATUSES, STATUS_LABEL, type Task } from '../types';
+import { t } from '../i18n';
 
 /** Everything assigned to the current user across projects, overdue first. */
 export function MyWorkPage() {
@@ -39,8 +40,8 @@ export function MyWorkPage() {
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>My work</h1>
-          <p className="muted">Everything assigned to you, across all your projects.</p>
+          <h1>{t("My work")}</h1>
+          <p className="muted">{t("Everything assigned to you, across all your projects.")}</p>
         </div>
         <label className="toggle">
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
@@ -50,22 +51,22 @@ export function MyWorkPage() {
       <div className="toolbar">
         <label className="search">
           <Search size={16} />
-          <input ref={searchRef} placeholder="Search my tasks  ( / )" value={query}
-            onChange={(e) => setQuery(e.target.value)} aria-label="Search my tasks" />
+          <input ref={searchRef} placeholder={t("Search my tasks  ( / )")} value={query}
+            onChange={(e) => setQuery(e.target.value)} aria-label={t("Search my tasks")} />
         </label>
       </div>
 
       {error && <ErrorBanner message={error} onRetry={load} />}
       {!tasks && !error && <Spinner />}
       {tasks && tasks.length === 0 && (
-        <EmptyState icon={<Coffee size={28} />} title="Nothing assigned to you">
-          Pick something up from a project's <Link to="/projects">backlog</Link>.
+        <EmptyState icon={<Coffee size={28} />} title={t("Nothing assigned to you")}>
+          Pick something up from a project's <Link to="/projects">{t("backlog")}</Link>.
         </EmptyState>
       )}
 
       {overdue.length > 0 && (
         <section className="group">
-          <h2 className="group-title overdue-text">Overdue <span className="count danger">{overdue.length}</span></h2>
+          <h2 className="group-title overdue-text">{t("Overdue")} <span className="count danger">{overdue.length}</span></h2>
           <ul className="task-list">{sortTasks(overdue).map((t) => <TaskRow key={t.id} task={t} showProject />)}</ul>
         </section>
       )}

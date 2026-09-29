@@ -35,6 +35,13 @@ public class Comment {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    private Instant editedAt;
+
+    /** Set on replies; replies are one level deep. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Comment parent;
+
     protected Comment() {
     }
 
@@ -62,5 +69,22 @@ public class Comment {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Comment getParent() {
+        return parent;
+    }
+
+    public void setParent(Comment parent) {
+        this.parent = parent;
+    }
+
+    public Instant getEditedAt() {
+        return editedAt;
+    }
+
+    public void edit(String body) {
+        this.body = body;
+        this.editedAt = Instant.now();
     }
 }

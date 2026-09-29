@@ -4,6 +4,7 @@ export type Scope = 'AVAILABLE' | 'MINE' | 'REPORTED' | 'ALL';
 export type SprintState = 'PLANNED' | 'ACTIVE' | 'COMPLETED';
 
 export type Role = 'OWNER' | 'MEMBER' | 'VIEWER';
+export type TaskType = 'TASK' | 'BUG' | 'STORY' | 'SPIKE';
 export type EmailFrequency = 'OFF' | 'INSTANT' | 'DAILY' | 'WEEKLY';
 export type RegistrationMode = 'OPEN' | 'INVITE' | 'APPROVAL';
 export type LinkType = 'BLOCKS' | 'RELATES' | 'DUPLICATES';
@@ -15,6 +16,8 @@ export interface User {
   /** Display name, or the username when none is set. */
   displayName: string;
   avatarUrl: string | null;
+  /** Last day of the person's out-of-office; set only while they are away today. */
+  awayUntil?: string | null;
 }
 
 export interface Member extends User {
@@ -31,6 +34,10 @@ export interface Project {
   githubEnabled: boolean;
   githubAutoDone: boolean;
   createdAt: string;
+  /** Kanban projects have no sprints: the board shows every task. */
+  kanban: boolean;
+  /** Accent colour (#rrggbb) or null for the default. */
+  color: string | null;
 }
 
 export interface SprintRef {
@@ -62,6 +69,8 @@ export interface Epic extends EpicRef {
   doneCount: number;
   points: number;
   donePoints: number;
+  /** Epics that must finish before this one starts. */
+  dependsOn: number[];
 }
 
 export interface TaskRef {
@@ -90,6 +99,7 @@ export interface Task {
   description: string;
   priority: Priority;
   status: Status;
+  type: TaskType;
   reporter: User;
   assignee: User | null;
   sprint: SprintRef | null;
@@ -108,6 +118,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  release: ReleaseRef | null;
 }
 
 export interface TaskInput {
@@ -118,6 +129,7 @@ export interface TaskInput {
   labels: string[];
   storyPoints: number | null;
   epicId: number | null;
+  type: TaskType;
 }
 
 export interface CreateTaskInput extends TaskInput {
@@ -125,6 +137,7 @@ export interface CreateTaskInput extends TaskInput {
   assigneeId: number | null;
   sprintId: number | null;
   parentId?: number | null;
+  checklist?: string[];
 }
 
 export interface BulkChange {
@@ -136,6 +149,7 @@ export interface BulkChange {
   clearSprint?: boolean;
   epicId?: number;
   clearEpic?: boolean;
+  type?: TaskType;
   addLabels?: string[];
   removeLabels?: string[];
   delete?: boolean;
@@ -211,6 +225,8 @@ export interface AdminUser {
   admin: boolean;
   status: 'ACTIVE' | 'PENDING';
   createdAt: string;
+  twoFactor: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface Backup {
@@ -224,6 +240,8 @@ export interface GithubSettings {
   webhookUrl: string;
   secret: string | null;
   autoDone: boolean;
+  gitlabUrl: string;
+  giteaUrl: string;
 }
 
 export interface ImportResult {
@@ -237,6 +255,9 @@ export interface Comment {
   author: User;
   body: string;
   createdAt: string;
+  editedAt: string | null;
+  parentId: number | null;
+  reactions: Reaction[];
 }
 
 export interface ChecklistItem {
@@ -250,6 +271,48 @@ export interface Activity {
   actor: User;
   message: string;
   createdAt: string;
+  /** Text before/after a description change. */
+  before: string | null;
+  after: string | null;
+}
+
+export interface Reaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
+  users: string[];
+}
+
+export interface TaskTemplate {
+  id: number;
+  name: string;
+  type: TaskType;
+  title: string;
+  description: string;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  storyPoints: number | null;
+}
+
+export type Frequency = 'DAILY' | 'WEEKDAYS' | 'WEEKLY' | 'MONTHLY';
+
+export interface RecurringTask {
+  id: number;
+  title: string;
+  description: string;
+  type: TaskType;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  assignee: User | null;
+  frequency: Frequency;
+  dayOfWeek: number;
+  dayOfMonth: number;
+  dueInDays: number | null;
+  nextRun: string;
+  active: boolean;
+  lastTaskKey: string | null;
 }
 
 export interface Attachment {
@@ -277,6 +340,16 @@ export interface Profile {
   emailFrequency: EmailFrequency;
   emailAvailable: boolean;
   pushDevices: number;
+  twoFactorEnabled: boolean;
+  recoveryCodesLeft: number;
+  /** False for accounts created with Google/GitHub that never set a password. */
+  passwordSet: boolean;
+  mustChangePassword: boolean;
+  /** Connected sign-in providers, e.g. ["github"]. */
+  identities: string[];
+  away: { from: string | null; until: string | null; message: string | null };
+  calendarFeed: boolean;
+  language: string;
 }
 
 export interface BurndownPoint {
@@ -294,6 +367,122 @@ export interface Burndown {
   totalPoints: number;
   donePoints: number;
   points: BurndownPoint[];
+  /** Tasks added to or removed from the sprint after it started. */
+  changes: ScopeChange[];
+}
+
+export interface ScopeChange {
+  date: string;
+  key: string;
+  title: string;
+  points: number | null;
+  added: boolean;
+  actor: string | null;
+}
+
+export interface ReleaseRef {
+  id: number;
+  name: string;
+  released: boolean;
+}
+
+export interface Release {
+  id: number;
+  name: string;
+  description: string;
+  releaseDate: string | null;
+  released: boolean;
+  releasedAt: string | null;
+  taskCount: number;
+  doneCount: number;
+  points: number;
+  donePoints: number;
+}
+
+export type RetroKind = 'WENT_WELL' | 'TO_IMPROVE' | 'ACTION';
+
+export interface RetroItem {
+  id: number;
+  kind: RetroKind;
+  text: string;
+  author: User;
+  votes: number;
+  voted: boolean;
+  mine: boolean;
+  taskId: number | null;
+  taskKey: string | null;
+  createdAt: string;
+}
+
+export interface ReviewTask {
+  id: number;
+  key: string;
+  title: string;
+  type: TaskType | null;
+  status: Status | null;
+  points: number | null;
+  assignee: User | null;
+}
+
+export interface SprintReview {
+  sprint: Sprint;
+  committedPoints: number;
+  completedPoints: number;
+  completedTasks: number;
+  completed: ReviewTask[];
+  unfinished: ReviewTask[];
+  added: ReviewTask[];
+  removed: ReviewTask[];
+  people: { user: User; tasks: number; points: number }[];
+  markdown: string;
+}
+
+export interface PokerState {
+  active: boolean;
+  revealed: boolean;
+  startedBy: string | null;
+  startedAt: string | null;
+  deck: string[];
+  myVote: string | null;
+  votes: { user: User; voted: boolean; value: string | null }[];
+  average: number | null;
+  suggestion: string | null;
+  consensus: boolean;
+}
+
+export interface FlowDay {
+  date: string;
+  todo: number;
+  inProgress: number;
+  inReview: number;
+  done: number;
+}
+
+export interface CycleTask {
+  id: number;
+  key: string;
+  title: string;
+  type: TaskType;
+  completedAt: string;
+  leadDays: number;
+  cycleDays: number | null;
+}
+
+export interface CycleReport {
+  count: number;
+  leadAverage: number | null;
+  leadP50: number | null;
+  leadP85: number | null;
+  cycleAverage: number | null;
+  cycleP50: number | null;
+  cycleP85: number | null;
+  tasks: CycleTask[];
+}
+
+export interface Throughput {
+  weekStart: string;
+  tasks: number;
+  points: number;
 }
 
 export const PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
@@ -327,3 +516,259 @@ export const EMAIL_FREQUENCY_LABEL: Record<EmailFrequency, string> = {
   DAILY: 'Daily digest',
   WEEKLY: 'Weekly digest (Mondays)',
 };
+
+export const TASK_TYPES: TaskType[] = ['TASK', 'BUG', 'STORY', 'SPIKE'];
+export const TASK_TYPE_LABEL: Record<TaskType, string> = { TASK: 'Task', BUG: 'Bug', STORY: 'Story', SPIKE: 'Spike' };
+export const REACTIONS = ['👍', '🎉', '❤️', '😄', '👀', '✅'];
+
+export interface SearchResult {
+  total: number;
+  truncated: boolean;
+  tasks: Task[];
+}
+
+export interface SearchGroup {
+  key: string;
+  label: string;
+  count: number;
+  points: number;
+  done: number;
+}
+
+export interface SearchField {
+  name: string;
+  hint: string;
+  values: string[];
+}
+
+export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE';
+
+export interface TextHit {
+  kind: HitKind;
+  id: number;
+  taskId: number | null;
+  key: string | null;
+  title: string;
+  snippet: string | null;
+  projectKey: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  handle: string;
+  description: string;
+  members: User[];
+  member: boolean;
+  canEdit: boolean;
+}
+
+export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint';
+
+export interface Widget {
+  type: WidgetType;
+  title: string;
+  query?: string;
+  groupBy?: string;
+  project?: string;
+  limit?: number;
+}
+
+export interface Dashboard {
+  id: number;
+  name: string;
+  widgets: Widget[];
+}
+
+export interface RecentTask {
+  id: number;
+  key: string;
+  title: string;
+  status: Status;
+  type: TaskType;
+  projectKey: string;
+  viewedAt: string;
+}
+
+export type CalendarKind = 'TASK' | 'SPRINT' | 'RELEASE' | 'EPIC' | 'AWAY';
+
+export interface CalendarEvent {
+  kind: CalendarKind;
+  id: number;
+  title: string;
+  start: string;
+  end: string;
+  projectKey: string | null;
+  key: string | null;
+  status: string | null;
+  priority: Priority | null;
+  type: TaskType | null;
+  colorIndex: number | null;
+  person: User | null;
+}
+
+export interface FeedItem {
+  kind: 'change' | 'comment';
+  id: number;
+  actor: User;
+  message: string;
+  body: string | null;
+  createdAt: string;
+  task: { id: number; key: string; title: string; projectKey: string };
+}
+
+export type RuleTrigger = 'CREATED' | 'UPDATED' | 'STATUS_CHANGED' | 'ASSIGNED' | 'COMMENTED' | 'SCHEDULED';
+export type RuleActionType = 'set_status' | 'set_priority' | 'add_label' | 'remove_label' | 'set_due_in_days' | 'assign'
+  | 'comment' | 'notify' | 'move_to_active_sprint';
+
+export interface RuleAction {
+  type: RuleActionType;
+  value?: string;
+}
+
+export interface AutomationRule {
+  id: number;
+  name: string;
+  enabled: boolean;
+  trigger: RuleTrigger;
+  triggerStatus: Status | null;
+  condition: string;
+  actions: RuleAction[];
+  owner: User;
+  lastRunAt: string | null;
+  runCount: number;
+  lastError: string | null;
+  mine: boolean;
+}
+
+export interface RuleRun {
+  id: number;
+  taskId: number;
+  taskKey: string;
+  ranAt: string;
+  success: boolean;
+  message: string;
+}
+
+export interface OutgoingWebhook {
+  id: number;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  createdAt: string;
+  lastDeliveryAt: string | null;
+  lastStatus: number | null;
+  lastError: string | null;
+  /** Only right after creating it or rotating the secret. */
+  secret: string | null;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  event: string;
+  sentAt: string;
+  status: number | null;
+  attempts: number;
+  durationMs: number;
+  error: string | null;
+  payload: string;
+}
+
+export interface ApiTokenInfo {
+  id: number;
+  name: string;
+  prefix: string;
+  scope: 'READ' | 'WRITE';
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  expired: boolean;
+  /** The secret, only in the response to creating it. */
+  token: string | null;
+}
+
+export interface ShareLinkInfo {
+  id: number;
+  url: string;
+  includeComments: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+  expired: boolean;
+  views: number;
+  createdBy: string;
+}
+
+export interface PublicTask {
+  key: string;
+  title: string;
+  description: string;
+  status: Status;
+  priority: Priority;
+  type: TaskType;
+  projectName: string;
+  assignee: string | null;
+  dueDate: string | null;
+  labels: string[];
+  storyPoints: number | null;
+  checklist: { text: string; done: boolean }[];
+  subtasks: { key: string; title: string; status: Status }[];
+  comments: { author: string; body: string; createdAt: string }[];
+  updatedAt: string;
+  sharedUntil: string | null;
+}
+
+export type CustomFieldType = 'TEXT' | 'NUMBER' | 'SELECT' | 'DATE' | 'CHECKBOX' | 'URL';
+
+export interface CustomFieldDef {
+  id: number;
+  name: string;
+  type: CustomFieldType;
+  options: string[];
+  position: number;
+}
+
+export interface CustomFieldValue {
+  fieldId: number;
+  name: string;
+  type: CustomFieldType;
+  options: string[];
+  value: string | null;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface StorageUsage {
+  usedBytes: number;
+  files: number;
+  quotaBytes: number | null;
+}
+
+export interface SystemInfo {
+  version: string;
+  startedAt: string;
+  uptimeSeconds: number;
+  database: { product: string; version: string; url: string; sizeBytes: number | null; ok: boolean };
+  disk: { path: string; freeBytes: number; totalBytes: number };
+  counts: { users: number; projects: number; tasks: number; openTasks: number; comments: number; attachments: number; attachmentBytes: number };
+  jvm: { java: string; heapUsedBytes: number; heapMaxBytes: number; threads: number; processors: number };
+  features: { mail: boolean; inboundMail: boolean; offsiteBackups: boolean; metrics: boolean };
+  backups: { name: string; size: number; createdAt: string }[];
+  offsite: OffsiteStatus;
+  update: { enabled: boolean; current: string; latest: string | null; available: boolean; url: string | null; checkedAt: string | null; error: string | null };
+  quota: { projectMb: number; totalMb: number };
+  storageByProject: { key: string; name: string; bytes: number; files: number }[];
+}
+
+export interface OffsiteStatus {
+  s3: boolean;
+  s3Target: string | null;
+  webdav: boolean;
+  webdavTarget: string | null;
+  lastUploadAt: string | null;
+  lastFile: string | null;
+  lastError: string | null;
+}

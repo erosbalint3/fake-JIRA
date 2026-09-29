@@ -42,6 +42,9 @@ final class TaskSpecifications {
             if (filter.priority() != null) {
                 where.add(cb.equal(root.get("priority"), filter.priority()));
             }
+            if (filter.type() != null) {
+                where.add(cb.equal(root.get("type"), filter.type()));
+            }
             if (filter.status() != null) {
                 where.add(cb.equal(root.get("status"), filter.status()));
             }

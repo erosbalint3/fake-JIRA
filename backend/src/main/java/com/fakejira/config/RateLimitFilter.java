@@ -34,6 +34,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final List<Rule> RULES = List.of(
             new Rule("/api/auth/login", 10, Duration.ofMinutes(1)),
+            new Rule("/api/auth/login/2fa", 10, Duration.ofMinutes(1)),
             new Rule("/api/auth/register", 5, Duration.ofHours(1)),
             new Rule("/api/auth/forgot-password", 5, Duration.ofHours(1)),
             new Rule("/api/auth/reset-password", 10, Duration.ofHours(1)));
@@ -97,7 +98,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return 0;
     }
 
-    String clientIp(HttpServletRequest request) {
+    public String clientIp(HttpServletRequest request) {
         for (String header : ipHeaders) {
             String value = request.getHeader(header);
             if (value != null && !value.isBlank()) {

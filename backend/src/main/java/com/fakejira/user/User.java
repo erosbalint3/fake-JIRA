@@ -58,6 +58,50 @@ public class User {
     @Column(length = 64)
     private String avatarName;
 
+    // ---- two-factor authentication (TOTP, RFC 6238)
+    @Column(length = 64)
+    private String totpSecret;
+
+    /** Secret shown during setup, until the first code confirms it. */
+    @Column(length = 64)
+    private String totpPendingSecret;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean totpEnabled;
+
+    /** Last 30-second step a code was accepted for; a code cannot be used twice. */
+    private Long totpLastStep;
+
+    /** BCrypt hashes of unused recovery codes, separated by spaces. */
+    @Column(length = 1200)
+    private String recoveryCodes;
+
+    // ---- password policy
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean mustChangePassword;
+
+    /** False for accounts created through Google/GitHub sign-in until they set a password. */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean passwordSet = true;
+
+    private Instant deletedAt;
+
+    /** Out of office: first and last day away (inclusive), with an optional note. */
+    private java.time.LocalDate awayFrom;
+
+    private java.time.LocalDate awayUntil;
+
+    @Column(length = 200)
+    private String awayMessage;
+
+    /** Interface language: "en" or "hu". */
+    @Column(length = 5, columnDefinition = "varchar(5) default 'en'")
+    private String language = "en";
+
+    /** Secret for the personal iCal feed URL; null when the feed is off. */
+    @Column(length = 48, unique = true)
+    private String calendarToken;
+
     protected User() {
     }
 
@@ -150,5 +194,131 @@ public class User {
 
     public void setAvatarName(String avatarName) {
         this.avatarName = avatarName;
+    }
+
+    public String getTotpSecret() {
+        return totpSecret;
+    }
+
+    public String getTotpPendingSecret() {
+        return totpPendingSecret;
+    }
+
+    public void setTotpPendingSecret(String totpPendingSecret) {
+        this.totpPendingSecret = totpPendingSecret;
+    }
+
+    public boolean isTotpEnabled() {
+        return totpEnabled;
+    }
+
+    public void enableTotp(String secret, String recoveryCodeHashes) {
+        this.totpSecret = secret;
+        this.totpPendingSecret = null;
+        this.totpEnabled = true;
+        this.totpLastStep = null;
+        this.recoveryCodes = recoveryCodeHashes;
+    }
+
+    public void disableTotp() {
+        this.totpSecret = null;
+        this.totpPendingSecret = null;
+        this.totpEnabled = false;
+        this.totpLastStep = null;
+        this.recoveryCodes = null;
+    }
+
+    public Long getTotpLastStep() {
+        return totpLastStep;
+    }
+
+    public void setTotpLastStep(Long totpLastStep) {
+        this.totpLastStep = totpLastStep;
+    }
+
+    public String getRecoveryCodes() {
+        return recoveryCodes;
+    }
+
+    public void setRecoveryCodes(String recoveryCodes) {
+        this.recoveryCodes = recoveryCodes;
+    }
+
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    public boolean isPasswordSet() {
+        return passwordSet;
+    }
+
+    public void setPasswordSet(boolean passwordSet) {
+        this.passwordSet = passwordSet;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    /** Erases personal data but keeps the row, so comments and history still have an author. */
+    public void anonymize(String passwordHash) {
+        this.username = "deleted-" + id;
+        this.email = "deleted-" + id + "@deleted.invalid";
+        this.displayName = "Deleted user";
+        this.passwordHash = passwordHash;
+        this.avatarName = null;
+        this.admin = false;
+        this.status = AccountStatus.DELETED;
+        this.emailFrequency = EmailFrequency.OFF;
+        this.emailNotifications = false;
+        this.deletedAt = Instant.now();
+        this.calendarToken = null;
+        this.awayFrom = null;
+        this.awayUntil = null;
+        this.awayMessage = null;
+        disableTotp();
+    }
+
+    public java.time.LocalDate getAwayFrom() {
+        return awayFrom;
+    }
+
+    public java.time.LocalDate getAwayUntil() {
+        return awayUntil;
+    }
+
+    public String getAwayMessage() {
+        return awayMessage;
+    }
+
+    public void setAway(java.time.LocalDate from, java.time.LocalDate until, String message) {
+        this.awayFrom = from;
+        this.awayUntil = until;
+        this.awayMessage = message;
+    }
+
+    /** True when {@code day} falls in the out-of-office period. */
+    public boolean isAwayOn(java.time.LocalDate day) {
+        return awayUntil != null && !day.isAfter(awayUntil) && (awayFrom == null || !day.isBefore(awayFrom));
+    }
+
+    public String getCalendarToken() {
+        return calendarToken;
+    }
+
+    public void setCalendarToken(String calendarToken) {
+        this.calendarToken = calendarToken;
+    }
+
+    public String getLanguage() {
+        return language == null ? "en" : language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
     }
 }
