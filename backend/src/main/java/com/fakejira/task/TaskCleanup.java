@@ -1,5 +1,6 @@
 package com.fakejira.task;
 
+import com.fakejira.integration.DevLinkRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -16,24 +17,39 @@ public class TaskCleanup {
     private final TaskActivityRepository activity;
     private final AttachmentRepository attachments;
     private final AttachmentStorage storage;
+    private final TaskLinkRepository links;
+    private final TimeEntryRepository time;
+    private final DevLinkRepository devLinks;
 
     public TaskCleanup(TaskRepository tasks, CommentRepository comments, ChecklistItemRepository checklist,
-                       TaskActivityRepository activity, AttachmentRepository attachments, AttachmentStorage storage) {
+                       TaskActivityRepository activity, AttachmentRepository attachments, AttachmentStorage storage,
+                       TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks) {
         this.tasks = tasks;
         this.comments = comments;
         this.checklist = checklist;
         this.activity = activity;
         this.attachments = attachments;
         this.storage = storage;
+        this.links = links;
+        this.time = time;
+        this.devLinks = devLinks;
     }
 
+    /** Deletes the task, its subtasks and everything attached to them. */
     public void delete(Task task) {
+        for (Task subtask : tasks.findByParentIdOrderByIdAsc(task.getId())) {
+            delete(subtask);
+        }
         List<Attachment> files = attachments.findForTask(task.getId());
         List<String> storageNames = files.stream().map(Attachment::getStorageName).toList();
         attachments.deleteAll(files);
         comments.deleteForTask(task.getId());
         checklist.deleteForTask(task.getId());
         activity.deleteForTask(task.getId());
+        links.deleteForTask(task.getId());
+        time.deleteForTask(task.getId());
+        devLinks.deleteForTask(task.getId());
+        task.getWatchers().clear();
         tasks.delete(task);
         afterCommit(() -> storageNames.forEach(storage::delete));
     }

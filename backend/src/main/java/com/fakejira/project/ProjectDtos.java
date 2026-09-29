@@ -37,7 +37,17 @@ public final class ProjectDtos {
             String description) {
     }
 
-    public record AddMemberRequest(@NotBlank(message = "Enter a username or email") String login) {
+    public enum Role { OWNER, MEMBER, VIEWER }
+
+    /** {@code role} defaults to MEMBER; VIEWER gives read-only access. */
+    public record AddMemberRequest(@NotBlank(message = "Enter a username or email") String login, Role role) {
+    }
+
+    public record RoleRequest(Role role) {
+    }
+
+    public record MemberResponse(Long id, String username, String email, String displayName, String avatarUrl,
+                                 Role role) {
     }
 
     public record ProjectResponse(
@@ -46,7 +56,9 @@ public final class ProjectDtos {
             String name,
             String description,
             UserSummary owner,
-            List<UserSummary> members,
+            List<MemberResponse> members,
+            boolean githubEnabled,
+            boolean githubAutoDone,
             Instant createdAt) {
 
         public static ProjectResponse of(Project project) {
@@ -57,9 +69,17 @@ public final class ProjectDtos {
                     project.getDescription(),
                     UserSummary.of(project.getOwner()),
                     project.getMembers().stream()
-                            .map(UserSummary::of)
-                            .sorted(Comparator.comparing(UserSummary::username, String.CASE_INSENSITIVE_ORDER))
+                            .map(member -> {
+                                UserSummary summary = UserSummary.of(member);
+                                Role role = project.isOwner(member) ? Role.OWNER
+                                        : project.isViewer(member) ? Role.VIEWER : Role.MEMBER;
+                                return new MemberResponse(summary.id(), summary.username(), summary.email(),
+                                        summary.displayName(), summary.avatarUrl(), role);
+                            })
+                            .sorted(Comparator.comparing(MemberResponse::username, String.CASE_INSENSITIVE_ORDER))
                             .toList(),
+                    project.getGithubSecret() != null,
+                    project.isGithubAutoDone(),
                     project.getCreatedAt());
         }
     }

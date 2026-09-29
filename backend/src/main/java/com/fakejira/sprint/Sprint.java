@@ -48,6 +48,10 @@ public class Sprint {
     @Column(nullable = false)
     private int carriedOver;
 
+    /** Story points of the carried-over tasks at completion (for velocity). */
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int carriedOverPoints;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -124,6 +128,14 @@ public class Sprint {
 
     public void setCarriedOver(int carriedOver) {
         this.carriedOver = carriedOver;
+    }
+
+    public int getCarriedOverPoints() {
+        return carriedOverPoints;
+    }
+
+    public void setCarriedOverPoints(int carriedOverPoints) {
+        this.carriedOverPoints = carriedOverPoints;
     }
 
     public Instant getCreatedAt() {

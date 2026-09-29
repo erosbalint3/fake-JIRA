@@ -17,4 +17,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     List<User> findByUsernameContainingIgnoreCaseOrderByUsername(String username, Pageable pageable);
+
+    List<User> findByAdminTrue();
+
+    long countByAdminTrue();
+
+    List<User> findAllByOrderByCreatedAtAsc();
+
+    List<User> findByEmailFrequency(com.fakejira.user.EmailFrequency frequency);
 }

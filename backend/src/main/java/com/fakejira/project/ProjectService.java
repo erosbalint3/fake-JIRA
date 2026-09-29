@@ -1,6 +1,9 @@
 package com.fakejira.project;
 
+import com.fakejira.admin.InviteRepository;
+import com.fakejira.board.BoardColumnRepository;
 import com.fakejira.common.ApiException;
+import com.fakejira.epic.EpicRepository;
 import com.fakejira.events.LiveEvents;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.project.ProjectDtos.CreateProjectRequest;
@@ -8,6 +11,7 @@ import com.fakejira.project.ProjectDtos.ProjectResponse;
 import com.fakejira.project.ProjectDtos.UpdateProjectRequest;
 import com.fakejira.sprint.SprintRepository;
 import com.fakejira.task.TaskCleanup;
+import com.fakejira.task.SavedFilterRepository;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.user.User;
 import com.fakejira.user.UserRepository;
@@ -29,10 +33,19 @@ public class ProjectService {
     private final TaskCleanup cleanup;
     private final NotificationService notifications;
     private final LiveEvents live;
+    private final EpicRepository epics;
+    private final BoardColumnRepository columns;
+    private final SavedFilterRepository filters;
+    private final InviteRepository invites;
 
     public ProjectService(ProjectRepository projects, ProjectAccess access, UserRepository users,
                           TaskRepository tasks, SprintRepository sprints, TaskCleanup cleanup,
-                          NotificationService notifications, LiveEvents live) {
+                          NotificationService notifications, LiveEvents live, EpicRepository epics,
+                          BoardColumnRepository columns, SavedFilterRepository filters, InviteRepository invites) {
+        this.epics = epics;
+        this.columns = columns;
+        this.filters = filters;
+        this.invites = invites;
         this.projects = projects;
         this.access = access;
         this.users = users;
@@ -71,7 +84,7 @@ public class ProjectService {
         return ProjectResponse.of(project);
     }
 
-    public ProjectResponse addMember(User user, String key, String login) {
+    public ProjectResponse addMember(User user, String key, String login, ProjectDtos.Role role) {
         Project project = access.memberProject(key, user);
         access.requireOwner(project, user);
         String value = login.trim();
@@ -81,8 +94,31 @@ public class ProjectService {
             throw ApiException.conflict(member.getUsername() + " is already a member.");
         }
         project.getMembers().add(member);
+        if (role == ProjectDtos.Role.VIEWER) {
+            project.getViewers().add(member);
+        }
         notifications.notify(member, user,
                 user.getUsername() + " added you to project " + project.getKey() + " · " + project.getName(), null);
+        live.projectChanged(project);
+        return ProjectResponse.of(project);
+    }
+
+    /** Switches a member between full access and read-only (viewer). */
+    public ProjectResponse setRole(User user, String key, Long memberId, ProjectDtos.Role role) {
+        Project project = access.memberProject(key, user);
+        access.requireOwner(project, user);
+        User member = project.getMembers().stream().filter(m -> m.getId().equals(memberId)).findFirst()
+                .orElseThrow(() -> ApiException.notFound("That user is not a member of this project."));
+        if (project.isOwner(member) || role == null || role == ProjectDtos.Role.OWNER) {
+            throw ApiException.badRequest("The owner's role cannot be changed.");
+        }
+        if (role == ProjectDtos.Role.VIEWER && !project.isViewer(member)) {
+            project.getViewers().add(member);
+            // Viewers cannot own work.
+            tasks.unassignInProject(project.getId(), memberId);
+        } else if (role == ProjectDtos.Role.MEMBER) {
+            project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
+        }
         live.projectChanged(project);
         return ProjectResponse.of(project);
     }
@@ -98,6 +134,7 @@ public class ProjectService {
             throw ApiException.badRequest("The project owner cannot be removed.");
         }
         boolean removed = project.getMembers().removeIf(member -> member.getId().equals(memberId));
+        project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
         if (!removed) {
             throw ApiException.notFound("That user is not a member of this project.");
         }
@@ -109,8 +146,13 @@ public class ProjectService {
         Project project = access.memberProject(key, user);
         access.requireOwner(project, user);
         live.projectChanged(project);
-        tasks.findByProjectId(project.getId()).forEach(cleanup::delete);
+        // Subtasks are deleted together with their parent.
+        tasks.findByProjectId(project.getId()).stream().filter(task -> task.getParent() == null).forEach(cleanup::delete);
         sprints.deleteAll(sprints.findByProjectIdOrderByCreatedAtAsc(project.getId()));
+        epics.deleteAll(epics.findByProjectIdOrderByCreatedAtAsc(project.getId()));
+        columns.deleteAll(columns.findByProjectIdOrderByPositionAscIdAsc(project.getId()));
+        filters.deleteForProject(project.getId());
+        invites.deleteForProject(project.getId());
         projects.delete(project);
     }
 

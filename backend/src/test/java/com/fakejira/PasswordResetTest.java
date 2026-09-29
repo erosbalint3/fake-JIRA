@@ -83,7 +83,7 @@ class PasswordResetTest extends ApiTestSupport {
         perform(patch("/api/tasks/" + id + "/status"), bob, body("status", "IN_PROGRESS")).andExpect(status().isOk());
         verify(mailSender, after(500).never()).send(org.mockito.ArgumentMatchers.any(SimpleMailMessage.class));
 
-        perform(put("/api/profile/settings"), alice, "{\"emailNotifications\":true}").andExpect(status().isOk());
+        perform(put("/api/profile/settings"), alice, "{\"emailFrequency\":\"INSTANT\"}").andExpect(status().isOk());
         perform(patch("/api/tasks/" + id + "/status"), bob, body("status", "DONE")).andExpect(status().isOk());
         ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender, timeout(5000)).send(sent.capture());

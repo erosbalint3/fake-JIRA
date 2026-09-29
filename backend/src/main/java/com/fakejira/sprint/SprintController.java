@@ -65,6 +65,11 @@ public class SprintController {
         sprintService.delete(currentUser.from(jwt), id);
     }
 
+    @GetMapping("/api/projects/{key}/velocity")
+    public List<SprintDtos.VelocityEntry> velocity(@AuthenticationPrincipal Jwt jwt, @PathVariable String key) {
+        return sprintService.velocity(currentUser.from(jwt), key);
+    }
+
     @GetMapping("/api/sprints/{id}/burndown")
     public Burndown burndown(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         return sprintService.burndown(currentUser.from(jwt), id);

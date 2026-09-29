@@ -26,7 +26,10 @@ public final class AuthDtos {
             @Size(min = 8, max = 100, message = "Password must be at least 8 characters long")
             @Pattern(regexp = "^(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).*$",
                     message = "Password needs an uppercase letter, a number and a special character")
-            String password) {
+            String password,
+
+            /** Required when sign-up is invite-only. */
+            String inviteCode) {
     }
 
     public record LoginRequest(
@@ -58,6 +61,10 @@ public final class AuthDtos {
             String newPassword) {
     }
 
-    public record AuthResponse(String token, UserSummary user) {
+    /** {@code token} is null and {@code pending} true when the account awaits admin approval. */
+    public record AuthResponse(String token, UserSummary user, boolean pending, boolean admin) {
+    }
+
+    public record InviteInfo(boolean valid, String email, String projectName, String registrationMode) {
     }
 }

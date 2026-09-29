@@ -45,6 +45,21 @@ public class Project {
             inverseJoinColumns = @JoinColumn(name = "user_id"))
     private Set<User> members = new LinkedHashSet<>();
 
+    /** Members with read-only access (a subset of {@link #members}). */
+    @ManyToMany
+    @JoinTable(name = "project_viewers",
+            joinColumns = @JoinColumn(name = "project_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<User> viewers = new LinkedHashSet<>();
+
+    /** Secret for verifying GitHub webhook signatures; null when the integration is off. */
+    @Column(length = 64)
+    private String githubSecret;
+
+    /** Move linked tasks to Done when a pull request mentioning them is merged. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean githubAutoDone;
+
     /** Next task number to hand out within this project. */
     @Column(nullable = false)
     private int nextNumber = 1;
@@ -73,6 +88,15 @@ public class Project {
 
     public boolean hasMember(User user) {
         return members.stream().anyMatch(member -> member.getId().equals(user.getId()));
+    }
+
+    public boolean isViewer(User user) {
+        return viewers.stream().anyMatch(viewer -> viewer.getId().equals(user.getId()));
+    }
+
+    /** Members who are not read-only viewers can change things. */
+    public boolean canEdit(User user) {
+        return hasMember(user) && !isViewer(user);
     }
 
     public Long getId() {
@@ -105,6 +129,26 @@ public class Project {
 
     public Set<User> getMembers() {
         return members;
+    }
+
+    public Set<User> getViewers() {
+        return viewers;
+    }
+
+    public String getGithubSecret() {
+        return githubSecret;
+    }
+
+    public void setGithubSecret(String githubSecret) {
+        this.githubSecret = githubSecret;
+    }
+
+    public boolean isGithubAutoDone() {
+        return githubAutoDone;
+    }
+
+    public void setGithubAutoDone(boolean githubAutoDone) {
+        this.githubAutoDone = githubAutoDone;
     }
 
     public int getNextNumber() {

@@ -71,7 +71,13 @@ public class ProjectController {
     @PostMapping("/{key}/members")
     public ProjectResponse addMember(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
                                      @Valid @RequestBody AddMemberRequest request) {
-        return projectService.addMember(currentUser.from(jwt), key, request.login());
+        return projectService.addMember(currentUser.from(jwt), key, request.login(), request.role());
+    }
+
+    @PutMapping("/{key}/members/{userId}/role")
+    public ProjectResponse setRole(@AuthenticationPrincipal Jwt jwt, @PathVariable String key, @PathVariable Long userId,
+                                   @RequestBody ProjectDtos.RoleRequest request) {
+        return projectService.setRole(currentUser.from(jwt), key, userId, request.role());
     }
 
     @DeleteMapping("/{key}/members/{userId}")

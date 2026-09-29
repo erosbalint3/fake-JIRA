@@ -40,6 +40,9 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register",
                                 "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/invite", "/api/avatars/**", "/api/push/key").permitAll()
+                        // Authenticated by HMAC signature instead of a JWT.
+                        .requestMatchers(HttpMethod.POST, "/api/integrations/github/**").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
