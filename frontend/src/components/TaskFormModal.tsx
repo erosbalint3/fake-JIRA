@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
-  PRIORITIES, PRIORITY_LABEL, type CreateTaskInput, type Priority, type Sprint, type TaskInput, type User,
+  PRIORITIES, PRIORITY_LABEL, type CreateTaskInput, type Epic, type Priority, type Sprint, type TaskInput, type User,
 } from '../types';
 import { Modal } from './Modal';
 import { PriorityBadge } from './Badges';
@@ -10,7 +10,14 @@ import { MarkdownEditor } from './MarkdownEditor';
 import { LabelInput } from './LabelInput';
 
 type Mode =
-  | { kind: 'create'; projectKey?: string; sprintId?: number | null; onSubmit: (input: CreateTaskInput) => Promise<void> }
+  | {
+    kind: 'create';
+    projectKey?: string;
+    sprintId?: number | null;
+    /** Creates a subtask of this task. */
+    parent?: { id: number; key: string };
+    onSubmit: (input: CreateTaskInput) => Promise<void>;
+  }
   | { kind: 'edit'; projectKey: string; initial: TaskInput; onSubmit: (input: TaskInput) => Promise<void> };
 
 interface Props {
@@ -25,8 +32,9 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
   const initial = mode.kind === 'edit' ? mode.initial : null;
   const [projectKey, setProjectKey] = useState(mode.projectKey ?? lastKey() ?? '');
   const [form, setForm] = useState<TaskInput>(initial ?? {
-    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [],
+    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [], storyPoints: null, epicId: null,
   });
+  const [epics, setEpics] = useState<Epic[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [sprintId, setSprintId] = useState<number | null>(mode.kind === 'create' ? mode.sprintId ?? null : null);
   const [members, setMembers] = useState<User[]>([]);
@@ -39,7 +47,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
   useEffect(() => {
     if (!projectKey) return;
     const project = projects?.find((p) => p.key === projectKey);
-    setMembers(project?.members ?? []);
+    setMembers((project?.members ?? []).filter((m) => m.role !== 'VIEWER'));
+    api.epics(projectKey).then(setEpics).catch(() => setEpics([]));
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
       api.sprints(projectKey)
@@ -64,7 +73,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     const input = { ...form, title: form.title.trim(), dueDate: form.dueDate || null };
     try {
       if (mode.kind === 'create') {
-        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId });
+        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null });
       } else {
         await mode.onSubmit(input);
       }
@@ -93,6 +102,9 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     >
       <form id="task-form" className="form" onSubmit={submit} noValidate>
         {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
+        {mode.kind === 'create' && mode.parent && (
+          <p className="muted form-note">Subtask of <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
+        )}
         {mode.kind === 'create' && !mode.projectKey && (
           <label className="field">
             <span>Project</span>
@@ -156,7 +168,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
               <span>Assignee</span>
               <select value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">Unassigned</option>
-                {members.map((m) => <option key={m.id} value={m.id}>{m.username}</option>)}
+                {members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
               </select>
             </label>
           )}
@@ -164,7 +176,20 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
             <span>Due date</span>
             <input type="date" value={form.dueDate ?? ''} onChange={(e) => setForm({ ...form, dueDate: e.target.value || null })} />
           </label>
-          {mode.kind === 'create' && (
+          <label className="field">
+            <span>Story points</span>
+            <input type="number" min={0} max={100} inputMode="numeric" placeholder="–"
+              value={form.storyPoints ?? ''}
+              onChange={(e) => setForm({ ...form, storyPoints: e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) })} />
+          </label>
+          <label className="field">
+            <span>Epic</span>
+            <select value={form.epicId ?? ''} onChange={(e) => setForm({ ...form, epicId: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">{mode.kind === 'create' && mode.parent ? 'Same as parent' : 'No epic'}</option>
+              {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
+            </select>
+          </label>
+          {mode.kind === 'create' && !mode.parent && (
             <label className="field">
               <span>Sprint</span>
               <select value={sprintId ?? ''} onChange={(e) => setSprintId(e.target.value ? Number(e.target.value) : null)}>

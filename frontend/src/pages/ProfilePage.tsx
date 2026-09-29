@@ -1,25 +1,91 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, Clock, ListChecks, Mail, PenSquare } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { BellRing, Camera, CheckCircle2, Clock, ListChecks, Mail, PenSquare, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
+import { currentSubscription, disablePush, enablePush, pushSupported } from '../push';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { formatDate } from '../format';
-import type { Profile } from '../types';
+import { EMAIL_FREQUENCY_LABEL, type EmailFrequency, type Profile } from '../types';
 
 export function ProfilePage() {
-  const { logout } = useAuth();
+  const { logout, updateUser } = useAuth();
   const toast = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.profile().then(setProfile).catch((e: ApiError) => setError(e.message));
+    api.profile().then((p) => {
+      setProfile(p);
+      setDisplayName(p.user.displayName === p.user.username ? '' : p.user.displayName);
+    }).catch((e: ApiError) => setError(e.message));
+    currentSubscription().then((s) => setPushOn(!!s)).catch(() => {});
   }, []);
+
+  const apply = (next: Profile) => {
+    setProfile(next);
+    updateUser(next.user);
+  };
+
+  const saveName = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      apply(await api.updateSettings({ displayName }));
+      toast('Display name saved');
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+    }
+  };
+
+  const uploadAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast('Choose an image up to 2 MB', 'error');
+      return;
+    }
+    try {
+      const user = await api.uploadAvatar(file);
+      updateUser(user);
+      setProfile((p) => (p ? { ...p, user } : p));
+      toast('Profile picture updated');
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+    }
+  };
+
+  const removeAvatar = async () => {
+    const user = await api.removeAvatar();
+    updateUser(user);
+    setProfile((p) => (p ? { ...p, user } : p));
+  };
+
+  const togglePush = async () => {
+    setBusy(true);
+    try {
+      if (pushOn) {
+        await disablePush();
+        setPushOn(false);
+        toast('Push notifications turned off for this device');
+      } else {
+        await enablePush();
+        setPushOn(true);
+        const result = await api.pushTest();
+        toast(result.delivered ? 'Push notifications are on — check for a test notification' : 'Push notifications are on');
+      }
+      setProfile(await api.profile());
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const changePassword = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,13 +122,8 @@ export function ProfilePage() {
   const input = (key: keyof typeof passwords, label: string, autoComplete: string) => (
     <label className="field">
       <span>{label}</span>
-      <input
-        type="password"
-        autoComplete={autoComplete}
-        value={passwords[key]}
-        onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })}
-        aria-invalid={!!errors[key]}
-      />
+      <input type="password" autoComplete={autoComplete} value={passwords[key]}
+        onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })} aria-invalid={!!errors[key]} />
       {errors[key] && <small className="field-error">{errors[key]}</small>}
     </label>
   );
@@ -70,11 +131,25 @@ export function ProfilePage() {
   return (
     <div className="page">
       <section className="profile-hero panel">
-        <Avatar name={profile.user.username} size={72} />
-        <div>
-          <h1>{profile.user.username}</h1>
-          <p className="muted">{profile.user.email}</p>
-          <p className="muted small">Member since {formatDate(profile.memberSince)}</p>
+        <div className="avatar-edit">
+          <Avatar user={profile.user} size={80} />
+          <button className="avatar-edit-button" onClick={() => fileRef.current?.click()} aria-label="Change profile picture"
+            title="Change profile picture">
+            <Camera size={15} />
+          </button>
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden
+            onChange={(e) => {
+              uploadAvatar(e.target.files?.[0]);
+              e.target.value = '';
+            }} />
+        </div>
+        <div className="profile-hero-text">
+          <h1>{profile.user.displayName}</h1>
+          <p className="muted">@{profile.user.username} · {profile.user.email}</p>
+          <p className="muted small">Member since {formatDate(profile.memberSince)}{profile.admin ? ' · Admin' : ''}</p>
+          {profile.user.avatarUrl && (
+            <button className="link small" onClick={removeAvatar}><Trash2 size={13} /> Remove photo</button>
+          )}
         </div>
       </section>
 
@@ -89,26 +164,54 @@ export function ProfilePage() {
       </div>
 
       <section className="panel">
+        <h2 className="panel-title">Display name</h2>
+        <form className="inline-form" onSubmit={saveName}>
+          <input value={displayName} maxLength={60} placeholder={profile.user.username} aria-label="Display name"
+            onChange={(e) => setDisplayName(e.target.value)} />
+          <button className="btn btn-soft">Save</button>
+        </form>
+        <p className="muted small hint">Shown instead of your username. Mentions still use @{profile.user.username}.</p>
+      </section>
+
+      <section className="panel">
         <h2 className="panel-title"><Mail size={16} /> Email notifications</h2>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={profile.emailNotifications}
-            disabled={!profile.emailAvailable || busy}
+        <div className="inline-form">
+          <select value={profile.emailFrequency} disabled={!profile.emailAvailable} aria-label="Email frequency"
             onChange={async (e) => {
-              const enabled = e.target.checked;
               try {
-                setProfile(await api.updateSettings(enabled));
-                toast(enabled ? 'Email notifications on' : 'Email notifications off');
+                apply(await api.updateSettings({ emailFrequency: e.target.value as EmailFrequency }));
+                toast('Email preference saved');
               } catch (err) {
                 toast((err as ApiError).message, 'error');
               }
-            }}
-          />
-          Email me when someone assigns, mentions or updates my tasks
-        </label>
-        {!profile.emailAvailable && (
-          <p className="muted small hint">Email is not set up on this server yet. Ask the administrator to configure SMTP.</p>
+            }}>
+            {(Object.keys(EMAIL_FREQUENCY_LABEL) as EmailFrequency[]).map((f) => (
+              <option key={f} value={f}>{EMAIL_FREQUENCY_LABEL[f]}</option>
+            ))}
+          </select>
+        </div>
+        <p className="muted small hint">
+          {profile.emailAvailable
+            ? 'Get an email when someone assigns, mentions or updates your tasks — right away, or bundled into one digest.'
+            : 'Email is not set up on this server yet. Ask the administrator to configure SMTP.'}
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2 className="panel-title"><BellRing size={16} /> Push notifications</h2>
+        {pushSupported() ? (
+          <>
+            <label className="toggle">
+              <input type="checkbox" checked={pushOn} disabled={busy} onChange={togglePush} />
+              Notify me on this device, even when FakeJIRA is closed
+            </label>
+            <p className="muted small hint">
+              {profile.pushDevices > 0 ? `Enabled on ${profile.pushDevices} device${profile.pushDevices === 1 ? '' : 's'}. ` : ''}
+              On phones, first add FakeJIRA to your home screen (Share → Add to Home Screen on iOS).
+            </p>
+          </>
+        ) : (
+          <p className="muted">This browser does not support push notifications.</p>
         )}
       </section>
 
@@ -119,9 +222,7 @@ export function ProfilePage() {
           {input('next', 'New password', 'new-password')}
           {input('confirm', 'Confirm new password', 'new-password')}
           <div>
-            <button className="btn btn-primary" disabled={busy || !passwords.current || !passwords.next}>
-              Update password
-            </button>
+            <button className="btn btn-primary" disabled={busy || !passwords.current || !passwords.next}>Update password</button>
           </div>
         </form>
       </section>

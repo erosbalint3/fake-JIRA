@@ -9,8 +9,11 @@ import { LiveProvider } from './live';
 import { ProjectsProvider } from './projects';
 import { ToastProvider } from './toast';
 import { applyInitialTheme } from './theme';
+import { registerServiceWorker } from './push';
 
 applyInitialTheme();
+// Makes the app installable and receives push notifications; skipped in dev so Vite's HMR stays uncached.
+if (import.meta.env.PROD) window.addEventListener('load', () => registerServiceWorker());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

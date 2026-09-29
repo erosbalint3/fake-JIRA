@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import {
-  BarChart3, Bell, Check, ChevronsUpDown, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Menu, Moon,
-  Plus, Settings, Sun, UserRound, UserSquare2, X,
+  BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
+  Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -13,21 +13,26 @@ import { useTheme } from '../theme';
 import { useToast } from '../toast';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
+import { CommandPalette } from './CommandPalette';
 import { Modal } from './Modal';
 import { TaskFormModal } from './TaskFormModal';
+import { useProjectAccess } from '../useProject';
+import type { SavedFilter } from '../types';
 
 export const NOTIFICATIONS_CHANGED = 'fakejira:notifications-changed';
+export const FILTERS_CHANGED = 'fakejira:filters-changed';
 
 interface CreateDefaults {
   projectKey?: string;
   sprintId?: number | null;
+  parent?: { id: number; key: string };
 }
 
 const CreateTaskContext = createContext<(defaults?: CreateDefaults) => void>(() => {});
 export const useCreateTask = () => useContext(CreateTaskContext);
 
 export function Layout() {
-  const { user, logout } = useAuth();
+  const { user, admin, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const { connected } = useLive();
   const { projects, byKey, lastKey, remember } = useProjects();
@@ -41,7 +46,34 @@ export function Layout() {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [creating, setCreating] = useState<CreateDefaults | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [filters, setFilters] = useState<SavedFilter[]>([]);
   const switcherRef = useRef<HTMLDivElement>(null);
+  const { canEdit } = useProjectAccess(currentProject);
+
+  const currentKey = currentProject?.key;
+  const refreshFilters = useCallback(() => {
+    if (!currentKey) return setFilters([]);
+    api.filters(currentKey).then(setFilters).catch(() => setFilters([]));
+  }, [currentKey]);
+
+  useEffect(() => {
+    refreshFilters();
+    window.addEventListener(FILTERS_CHANGED, refreshFilters);
+    return () => window.removeEventListener(FILTERS_CHANGED, refreshFilters);
+  }, [refreshFilters]);
+
+  // Ctrl/Cmd+K opens the command palette from anywhere, even while typing.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const refreshUnread = useCallback(() => {
     api.unreadCount().then(setUnread).catch(() => {});
@@ -96,6 +128,7 @@ export function Layout() {
         b: key ? `/p/${key}/board` : '/projects',
         k: key ? `/p/${key}/backlog` : '/projects',
         r: key ? `/p/${key}/reports` : '/projects',
+        o: key ? `/p/${key}/roadmap` : '/projects',
         m: '/my-work',
         n: '/notifications',
         p: '/projects',
@@ -154,9 +187,14 @@ export function Layout() {
             )}
           </div>
 
-          <button className="btn btn-primary btn-block create-button" onClick={() => openCreate({ projectKey: currentProject?.key })}>
-            <Plus size={17} /> Create task <kbd>C</kbd>
+          <button className="search-button" onClick={() => setPaletteOpen(true)}>
+            <Search size={16} /> <span className="search-button-text">Search…</span> <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'} K</kbd>
           </button>
+          {(!currentProject || canEdit) && (
+            <button className="btn btn-primary btn-block create-button" onClick={() => openCreate({ projectKey: currentProject?.key })}>
+              <Plus size={17} /> Create task <kbd>C</kbd>
+            </button>
+          )}
 
           <nav className="nav">
             {currentProject && (
@@ -164,8 +202,20 @@ export function Layout() {
                 <span className="nav-heading">{currentProject.key}</span>
                 <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> Board</NavLink>
                 <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> Backlog</NavLink>
+                <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> Roadmap</NavLink>
                 <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> Reports</NavLink>
                 <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> Settings</NavLink>
+                {filters.length > 0 && (
+                  <>
+                    <span className="nav-heading">Saved filters</span>
+                    {filters.map((f) => (
+                      <Link key={f.id} to={`/p/${currentProject.key}/backlog?${f.query}`} className="nav-link nav-filter"
+                        title={f.shared ? `Shared by ${f.owner}` : 'Only visible to you'}>
+                        <Filter size={15} /> <span className="nav-filter-name">{f.name}</span>
+                      </Link>
+                    ))}
+                  </>
+                )}
               </>
             )}
             <span className="nav-heading">Workspace</span>
@@ -176,13 +226,14 @@ export function Layout() {
             </NavLink>
             <NavLink to="/projects" end className="nav-link"><FolderKanban size={18} /> Projects</NavLink>
             <NavLink to="/profile" className="nav-link"><UserRound size={18} /> Profile</NavLink>
+            {admin && <NavLink to="/admin" className="nav-link"><Shield size={18} /> Admin</NavLink>}
           </nav>
 
           <div className="sidebar-footer">
             <div className="me">
-              <Avatar name={user.username} size={34} />
+              <Avatar user={user} size={34} />
               <div className="me-text">
-                <strong>{user.username}</strong>
+                <strong>{user.displayName}</strong>
                 <span className="muted">{user.email}</span>
               </div>
             </div>
@@ -208,12 +259,13 @@ export function Layout() {
 
         {creating && (
           <TaskFormModal
-            title="Create task"
+            title={creating.parent ? `Add subtask to ${creating.parent.key}` : 'Create task'}
             submitLabel="Create task"
             mode={{
               kind: 'create',
               projectKey: creating.projectKey,
               sprintId: creating.sprintId,
+              parent: creating.parent,
               onSubmit: async (input) => {
                 const task = await api.createTask(input);
                 setCreating(null);
@@ -223,6 +275,10 @@ export function Layout() {
             }}
             onClose={() => setCreating(null)}
           />
+        )}
+        {paletteOpen && (
+          <CommandPalette projectKey={currentProject?.key} onClose={() => setPaletteOpen(false)}
+            onCreate={() => openCreate({ projectKey: currentProject?.key })} />
         )}
         {showHelp && (
           <Modal title="Keyboard shortcuts" onClose={() => setShowHelp(false)}>

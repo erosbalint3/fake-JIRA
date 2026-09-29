@@ -1,13 +1,13 @@
 # FakeJIRA
 
 A lightweight, Jira-style task tracker for small teams, built for a university course.
-Version 2.0 replaces the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend.
+Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend; 3.0 adds planning, team and integration features.
 
 ![Board](docs/board.png)
 
-| Backlog & sprints | Task detail | Burndown | Mobile |
-| --- | --- | --- | --- |
-| ![Backlog](docs/backlog.png) | ![Task detail](docs/task-detail.png) | ![Burndown](docs/reports.png) | ![Mobile](docs/mobile.png) |
+| Backlog & bulk edit | Task detail | Roadmap | Velocity | Command palette | Mobile |
+| --- | --- | --- | --- | --- | --- |
+| ![Backlog](docs/backlog.png) | ![Task detail](docs/task-detail.png) | ![Roadmap](docs/roadmap.png) | ![Velocity](docs/reports.png) | ![Command palette](docs/palette.png) | ![Mobile](docs/mobile.png) |
 
 ## Features
 
@@ -15,7 +15,10 @@ Version 2.0 replaces the original Android + Firebase app with a **Spring Boot** 
 - **Projects** each have their own members, backlog, board and task keys (`WEB-1`, `API-7`, …). The owner manages members and settings. Members can leave.
 - **Sprints**: plan work in the backlog by dragging tasks into a sprint (or use the dropdown), start it with dates, and complete it. Unfinished tasks go back to the backlog.
 - **Board** for the active sprint (or every task if none is running), with drag and drop, an "only my tasks" filter, due dates, labels and checklist progress on cards.
-- **Burndown chart** per sprint: remaining tasks per day against the ideal line, with a hover tooltip and a table view.
+- **Custom board columns** per project: rename, reorder, add columns (e.g. "QA" and "Code review" both mapping to In review) and set **WIP limits** — a column turns red when it holds too many cards.
+- **Story points** on tasks, a **burndown** in tasks or points, and a **velocity chart** (committed vs. completed points for the last 10 sprints, with average velocity and say/do ratio).
+- **Epics and roadmap**: group tasks into epics with start and due dates, see progress and a month-by-month timeline.
+- **Reports**: burndown, velocity and a **time report** (hours per person and per task for any date range).
 - **My work**: everything assigned to you across projects, with overdue tasks first.
 
 **Tasks**
@@ -27,15 +30,31 @@ Version 2.0 replaces the original Android + Firebase app with a **Spring Boot** 
 - **@mentions** in comments, with autocomplete; mentioned members get notified.
 - **Attachments** (up to 10 MB each): drag and drop to upload, with image previews. Files are always served as downloads.
 - **Activity history**, e.g. "changed status from To do to In progress".
+- **Subtasks** with progress, and **links** between tasks (blocks / relates to / duplicates). Tasks blocked by an unfinished task get a "Blocked" badge everywhere.
+- **Time tracking**: log work like `1h 30m` with a date and note.
+- **Watch** any task to be notified about its changes (commenters start watching automatically).
+
+**Finding and changing things fast**
+- **Command palette** (`Ctrl/⌘ K`): jump to any task by key or title, project, page or saved filter, or run an action.
+- **Saved filters**: backlog filters live in the URL; save them (private or shared with the project) and they appear in the sidebar.
+- **Bulk edit**: select tasks in the backlog (shift-click for ranges) and change status, assignee, sprint, priority, epic or labels at once, or delete them.
+- **CSV export and import** from project settings.
 
 **Staying up to date**
 - **Live updates**: boards, backlogs, tasks and notification badges refresh by themselves when someone else changes something (server-sent events).
-- **Notifications** in the app, and optionally **by email** (each user turns it on in their profile).
-- **Keyboard shortcuts**: `c` to create a task, `/` to search, `g b` / `g k` / `g r` / `g m` / `g n` / `g p` to jump to board, backlog, reports, my work, notifications and projects, and `?` for help.
+- **Notifications** in the app, **by email** (instantly, or as a **daily or weekly digest**) and as **browser push notifications**.
+- **Installable app (PWA)**: add FakeJIRA to your phone's home screen or install it from the desktop browser.
+- **GitHub integration**: mention task keys like `WEB-12` in commits, branches or pull requests and they appear on the task; optionally a merged pull request moves its tasks to Done.
+- **Keyboard shortcuts**: `c` to create a task, `/` to search, `Ctrl/⌘ K` for the command palette, `g b` / `g k` / `g o` / `g r` / `g m` / `g n` / `g p` to jump to board, backlog, roadmap, reports, my work, notifications and projects, and `?` for help.
 
 **Accounts**
 - Register and sign in with a username or email. Passwords are hashed with BCrypt, and the API uses JWT bearer tokens.
 - **Password reset** by email: single-use links, valid for one hour.
+- **Profile pictures and display names.**
+- **Project roles**: owner, member and **viewer** (read-only; viewers can still comment and watch).
+- **Sign-up control**: open, **admin approval** or **invite-only**, switchable on the Admin page. Admins and project owners create invite links.
+- **Rate limiting** of sign-in, sign-up and password reset.
+- **Admin page**: sign-up mode, pending accounts, admins, invites and **backups**.
 - Light and dark themes, and a responsive layout for phones.
 
 ## Tech stack
@@ -83,7 +102,7 @@ You can bundle the React app into the Spring Boot jar and serve everything from 
 ```bash
 cd frontend && npm install && npm run build:backend
 cd ../backend && mvn package
-java -jar target/fake-jira-2.0.0.jar      # http://localhost:8080
+java -jar target/fake-jira-3.0.0.jar      # http://localhost:8080
 ```
 
 ## Running with Docker
@@ -123,20 +142,69 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | `app.base-url` | `APP_BASE_URL` | `http://localhost:5173`. The public URL, used for links in emails. |
 | `app.storage.dir` | `APP_STORAGE_DIR` | `./data/attachments` (`/data/attachments` in Docker) |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:h2:file:./data/fakejira` |
+| `app.backup.dir` | `APP_BACKUP_DIR` | `./data/backups` (`/data/backups` in Docker) |
+| `app.backup.cron` | `APP_BACKUP_CRON` | `0 30 3 * * *` (03:30 every night). `-` turns scheduled backups off. |
+| `app.backup.keep` | `APP_BACKUP_KEEP` | `14` backups kept |
+| `app.digest.cron` | `APP_DIGEST_CRON` | `0 0 7 * * *`. Daily digests go out then; weekly ones on Mondays. |
+| `app.registration.default-mode` | `APP_REGISTRATION_DEFAULT_MODE` | `OPEN`. Initial sign-up mode (`OPEN`, `APPROVAL`, `INVITE`) until an admin changes it. |
+| `app.rate-limit.enabled` | `APP_RATE_LIMIT_ENABLED` | `true` |
+| `app.rate-limit.client-ip-headers` | `APP_RATE_LIMIT_CLIENT_IP_HEADERS` | `CF-Connecting-IP,X-Forwarded-For`. Set it empty if the app is reachable without your proxy. |
+| `app.push.subject` | `APP_PUSH_SUBJECT` | Contact for push services; defaults to the base URL. |
+| – | `TZ` | `UTC`. Time zone for backups and digests, e.g. `Europe/Budapest`. |
 | `spring.mail.host` | `SPRING_MAIL_HOST` | Empty, so email is off. Also set `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` and `APP_MAIL_FROM`. For an SMTP relay without login, set `SPRING_MAIL_SMTP_AUTH=false`. |
 
 **Email is optional.** Without SMTP, the email toggle in profiles is disabled. Password reset links are then written to the server log instead (`docker logs fakejira`), so an administrator can pass them on.
 
-### Upgrading from 2.0
+### Admins, sign-up and invites
 
-Just deploy the new version on your existing database. On first start, all existing tasks move into a project called **FakeJIRA** (key `FJ`) and keep their `FJ-<number>` keys. Every existing user becomes a member of it. Logins stay valid if `APP_JWT_SECRET` is unchanged.
+The **first account** ever created is the administrator (after upgrading, the oldest account becomes one). Admins see **Admin** in the sidebar, where they choose who can sign up:
+
+- **Open** — anyone can create an account.
+- **Admin approval** — new accounts wait until an admin approves them on the Admin page.
+- **Invite only** — only people with an invite link can sign up.
+
+Invite links work in every mode and are valid for 7 days. Admins create them on the Admin page; project owners create them in **Project settings → Invite links** (the new user joins that project). If an email address is given, the invite only works for it and is emailed when SMTP is configured.
+
+Sign-in (10/min), sign-up (5/h) and password reset (5/h) are limited per client IP, and failed sign-ins per account (20 per 15 min). Clients get `429` with a `Retry-After` header.
+
+### Backups and restore
+
+A zip with the database, attachments and profile pictures is written every night to `/data/backups` (inside the data volume); the newest 14 are kept. Admins can make one on demand and download backups from the Admin page — keep a copy off the server.
+
+To restore:
+
+```bash
+docker compose stop fakejira
+docker run --rm -v fake-jira_fakejira-data:/data -v "$PWD":/restore alpine sh -c \
+  'cd /tmp && unzip -o /restore/fakejira-backup-XXXX.zip && unzip -o database.zip -d /data \
+   && rm -rf /data/attachments /data/avatars && cp -r attachments /data/ 2>/dev/null; cp -r avatars /data/ 2>/dev/null; chown -R 100:101 /data'
+docker compose start fakejira
+```
+
+(`docker volume ls` shows the exact volume name; `100:101` is the `app` user of the image — check with `docker compose exec fakejira id`.)
+
+### GitHub integration
+
+As the project owner open **Project settings → GitHub → Connect a repository**. In the GitHub repository go to **Settings → Webhooks → Add webhook**, paste the payload URL and secret shown, pick content type `application/json` and the **Pushes** and **Pull requests** events. Task keys in commit messages, branch names and pull request titles/bodies then link commits and PRs to tasks (shown under *Development* on the task). Turn on *Move tasks to Done when a pull request is merged* to close tasks automatically. Deliveries are verified with the `X-Hub-Signature-256` HMAC.
+
+### Push notifications and installing the app
+
+Each user turns on push in **Profile → Push notifications** (per device). This needs HTTPS (fine behind Caddy/Cloudflare). On iPhone/iPad, first add FakeJIRA to the home screen (Share → Add to Home Screen), then enable push from the installed app. Keys for push (VAPID) are generated on first use and stored in the database.
+
+### Upgrading
+
+**From 2.x to 3.0:** deploy the new version on your existing database; the schema is updated automatically. The oldest account becomes admin, email notification settings carry over, and existing projects get the default four board columns. Make sure `APP_BACKUP_DIR` points into the data volume (the Dockerfile sets `/data/backups`).
+
+**From 2.0:** just deploy the new version on your existing database. On first start, all existing tasks move into a project called **FakeJIRA** (key `FJ`) and keep their `FJ-<number>` keys. Every existing user becomes a member of it. Logins stay valid if `APP_JWT_SECRET` is unchanged.
 
 ## Tests
 
 ```bash
-cd backend && mvn test          # API integration tests (projects, sprints, attachments, live events, email, upgrade)
+cd backend && mvn test          # API integration tests (projects, sprints, roles, epics, time, GitHub, push crypto, backups, rate limits, upgrade)
 cd frontend && npm run build    # type-check + production build
 ```
+
+GitHub Actions runs the backend tests, the frontend build and a Docker build on every push and pull request (`.github/workflows/ci.yml`).
 
 ## API overview
 
@@ -170,7 +238,22 @@ All endpoints except register, login and password reset need an `Authorization: 
 | GET | `/api/users?q=` | Username search (for adding members) |
 | GET | `/api/notifications`, `/api/notifications/unread-count` | Notifications |
 | POST | `/api/notifications/{id}/read`, `/api/notifications/read-all` | Mark as read |
-| GET / PUT | `/api/profile`, `/api/profile/settings`, `/api/profile/password` | Profile, email notification setting, password change |
+| GET / PUT | `/api/profile`, `/api/profile/settings`, `/api/profile/password` | Profile, display name and email frequency, password change |
+| POST / DELETE | `/api/profile/avatar` | Upload (PNG/JPEG/GIF/WebP, 2 MB) or remove your profile picture |
+| PUT | `/api/projects/{key}/members/{userId}/role` | Change a member's role (`MEMBER` / `VIEWER`) |
+| GET / POST · PUT / DELETE | `/api/projects/{key}/epics` · `/api/epics/{id}` | Epics |
+| GET / POST · PUT / DELETE · POST | `/api/projects/{key}/columns` · `/api/columns/{id}` · `/api/columns/{id}/move?direction=` | Board columns |
+| GET | `/api/projects/{key}/velocity`, `/api/projects/{key}/time?from=&to=` | Velocity and time reports |
+| GET / POST · DELETE | `/api/projects/{key}/filters` · `/api/filters/{id}` | Saved filters |
+| GET · POST | `/api/projects/{key}/export.csv` · `/api/projects/{key}/import` | CSV export / import (`multipart`, field `file`) |
+| POST | `/api/tasks/bulk` | Bulk change (`taskIds` plus the change) |
+| GET / POST / DELETE | `/api/tasks/{id}/links`, `/api/tasks/{id}/time`, `/api/tasks/{id}/watch` | Links, time entries, watching |
+| GET | `/api/tasks/{id}/subtasks`, `/api/tasks/{id}/dev`, `/api/tasks/key/{key}` | Subtasks, GitHub links, lookup by key |
+| GET / POST / PUT / DELETE | `/api/projects/{key}/github` | GitHub webhook settings (owner) |
+| POST | `/api/integrations/github/{key}` | GitHub webhook endpoint |
+| GET / POST / DELETE | `/api/invites` | Invite links |
+| GET / PUT / POST / DELETE | `/api/admin/...` | Admin: sign-up mode, users, backups |
+| GET · POST / DELETE | `/api/push/key` · `/api/push/subscribe` | Web push |
 
 ## Contact
 

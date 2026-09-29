@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, KanbanSquare, Bell, Users } from 'lucide-react';
-import { ApiError } from '../api';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Clock, KanbanSquare, Bell, Users } from 'lucide-react';
+import { api, ApiError } from '../api';
+import type { RegistrationMode } from '../types';
 import { useAuth } from '../auth';
 import { Logo } from '../components/Logo';
 
@@ -22,6 +23,20 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [params] = useSearchParams();
+  const inviteCode = params.get('invite') ?? '';
+  const [info, setInfo] = useState<{ valid: boolean; email: string | null; projectName: string | null;
+    registrationMode: RegistrationMode } | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    api.inviteInfo(inviteCode).then((next) => {
+      setInfo(next);
+      if (next.valid && next.email) setFields((f) => ({ ...f, email: f.email || next.email! }));
+    }).catch(() => setInfo(null));
+  }, [inviteCode]);
+
+  const inviteOnly = info?.registrationMode === 'INVITE' && !info.valid;
 
   const set = (key: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setFields({ ...fields, [key]: e.target.value });
@@ -48,8 +63,13 @@ export function AuthPage({ mode }: { mode: Mode }) {
     if (Object.keys(found).length) return;
     setBusy(true);
     try {
-      if (mode === 'login') await login(fields.login.trim(), fields.password);
-      else await register(fields.username.trim(), fields.email.trim(), fields.password);
+      if (mode === 'login') {
+        await login(fields.login.trim(), fields.password);
+      } else if (await register(fields.username.trim(), fields.email.trim(), fields.password, inviteCode || undefined)) {
+        setPending(true);
+        setBusy(false);
+        return;
+      }
       const from = (location.state as { from?: string } | null)?.from;
       navigate(from && from !== '/login' ? from : '/', { replace: true });
     } catch (error) {
@@ -89,10 +109,30 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <li><Bell size={18} /> Live updates, @mentions and email notifications</li>
           </ul>
         </div>
-        <span className="auth-foot">FakeJIRA 2.0</span>
+        <span className="auth-foot">FakeJIRA 3.0</span>
       </section>
 
       <section className="auth-panel">
+        {pending ? (
+          <div className="auth-card form">
+            <Clock size={32} className="auth-icon" />
+            <h2>Almost there</h2>
+            <p className="muted">
+              Your account was created and is waiting for an administrator to approve it. You can sign in as soon as it's approved.
+            </p>
+            <Link to="/login" className="btn btn-primary btn-block">Back to sign in</Link>
+          </div>
+        ) : mode === 'register' && inviteOnly ? (
+          <div className="auth-card form">
+            <h2>Sign-up is invite-only</h2>
+            <p className="muted">
+              {inviteCode
+                ? 'This invite link is invalid, already used or expired. Ask for a new one.'
+                : 'Ask an administrator or a project owner to send you an invite link.'}
+            </p>
+            <p className="muted center">Already have an account? <Link to="/login">Sign in</Link></p>
+          </div>
+        ) : (
         <form className="auth-card form" onSubmit={submit} noValidate>
           <div>
             <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
@@ -101,6 +141,14 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </p>
           </div>
 
+          {mode === 'register' && info?.valid && (
+            <div className="notice">
+              You've been invited{info.projectName ? <> to <b>{info.projectName}</b></> : ''}. Create your account to get started.
+            </div>
+          )}
+          {mode === 'register' && !info?.valid && info?.registrationMode === 'APPROVAL' && (
+            <div className="notice">New accounts are reviewed by an administrator before they can sign in.</div>
+          )}
           {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
 
           {mode === 'login' ? (
@@ -131,12 +179,15 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
           <p className="muted center">
             {mode === 'login' ? (
-              <>New here? <Link to="/register">Create an account</Link></>
+              info?.registrationMode === 'INVITE'
+                ? <>New here? Ask for an invite link to join.</>
+                : <>New here? <Link to="/register">Create an account</Link></>
             ) : (
               <>Already have an account? <Link to="/login">Sign in</Link></>
             )}
           </p>
         </form>
+        )}
       </section>
     </div>
   );

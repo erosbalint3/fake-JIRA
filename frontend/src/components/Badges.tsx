@@ -1,6 +1,6 @@
-import { CalendarClock, CheckSquare, ChevronsUp, ChevronUp, Equal, ChevronDown } from 'lucide-react';
+import { Ban, CalendarClock, CheckSquare, ChevronsUp, ChevronUp, Equal, ChevronDown, ListTree } from 'lucide-react';
 import { dueState, formatDay } from '../format';
-import { PRIORITY_LABEL, STATUS_LABEL, type Priority, type Status } from '../types';
+import { PRIORITY_LABEL, STATUS_LABEL, type EpicRef, type Priority, type Status } from '../types';
 
 const PRIORITY_ICON = {
   CRITICAL: ChevronsUp,
@@ -50,6 +50,37 @@ export function ChecklistProgress({ done, total }: { done: number; total: number
   return (
     <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={`${done} of ${total} checklist items done`}>
       <CheckSquare size={13} aria-hidden />
+      {done}/{total}
+    </span>
+  );
+}
+
+/** Epic identity: a dot in the epic's palette color plus its name in normal text. */
+export function EpicChip({ epic }: { epic: EpicRef | null }) {
+  if (!epic) return null;
+  return (
+    <span className="epic-chip" title={`Epic: ${epic.name}`}>
+      <span className="epic-dot" style={{ background: `var(--cat-${epic.colorIndex % 8})` }} aria-hidden />
+      {epic.name}
+    </span>
+  );
+}
+
+export function PointsBadge({ points }: { points: number | null }) {
+  if (points === null || points === undefined) return null;
+  return <span className="points-badge" title={`${points} story point${points === 1 ? '' : 's'}`}>{points}</span>;
+}
+
+export function BlockedBadge({ blocked }: { blocked: boolean }) {
+  if (!blocked) return null;
+  return <span className="blocked-badge" title="Blocked by an unfinished task"><Ban size={12} aria-hidden /> Blocked</span>;
+}
+
+export function SubtaskBadge({ done, total }: { done: number; total: number }) {
+  if (!total) return null;
+  return (
+    <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={`${done} of ${total} subtasks done`}>
+      <ListTree size={13} aria-hidden />
       {done}/{total}
     </span>
   );

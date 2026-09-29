@@ -102,7 +102,7 @@ export function MarkdownEditor({
                       e.preventDefault();
                       insert(member.username);
                     }}>
-                    <Avatar name={member.username} size={20} /> {member.username}
+                    <Avatar user={member} size={20} /> {member.username}
                   </button>
                 </li>
               ))}

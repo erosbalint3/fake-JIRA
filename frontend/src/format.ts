@@ -46,3 +46,24 @@ export function fileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** 90 -> "1h 30m", 45 -> "45m", 120 -> "2h". */
+export function formatMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest}m`;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+/** Parses "1h 30m", "1.5h", "90m", "90" (minutes) or "1:30"; returns null when invalid. */
+export function parseDuration(text: string): number | null {
+  const value = text.trim().toLowerCase();
+  if (!value) return null;
+  const clock = /^(\d+):([0-5]\d)$/.exec(value);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  if (/^\d+$/.test(value)) return Number(value);
+  const match = /^(?:(\d+(?:[.,]\d+)?)\s*h)?\s*(?:(\d+)\s*m)?$/.exec(value);
+  if (!match || (!match[1] && !match[2])) return null;
+  const minutes = Math.round(Number((match[1] ?? '0').replace(',', '.')) * 60) + Number(match[2] ?? 0);
+  return minutes > 0 ? minutes : null;
+}

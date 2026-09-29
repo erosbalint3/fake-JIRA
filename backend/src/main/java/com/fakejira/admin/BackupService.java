@@ -88,16 +88,13 @@ public class BackupService {
                 if (dbDump != null) {
                     addFile(zip, dbDump, dbEntry);
                 }
-                if (Files.isDirectory(attachmentsDir)) {
-                    try (Stream<Path> files = Files.walk(attachmentsDir)) {
-                        for (Path file : files.filter(Files::isRegularFile).toList()) {
-                            addFile(zip, file, "attachments/" + attachmentsDir.relativize(file));
-                        }
-                    }
-                }
+                addTree(zip, attachmentsDir, "attachments/");
+                // Profile pictures live next to the attachments folder (see AvatarController).
+                addTree(zip, attachmentsDir.resolveSibling("avatars"), "avatars/");
                 zip.putNextEntry(new ZipEntry("README.txt"));
                 zip.write(("FakeJIRA backup " + name + "\n\nRestore: stop the app, unzip database.zip into the data folder"
-                        + " (fakejira.mv.db) and copy attachments/ back to the attachments folder, then start the app.\n")
+                        + " (fakejira.mv.db), copy attachments/ back to the attachments folder and avatars/ next to it,"
+                        + " then start the app.\n")
                         .getBytes());
                 zip.closeEntry();
             }
@@ -158,6 +155,17 @@ public class BackupService {
                     Files.getLastModifiedTime(path).toInstant());
         } catch (IOException e) {
             return new BackupFile(path.getFileName().toString(), 0, Instant.EPOCH);
+        }
+    }
+
+    private static void addTree(ZipOutputStream zip, Path dir, String prefix) throws IOException {
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        try (Stream<Path> files = Files.walk(dir)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                addFile(zip, file, prefix + dir.relativize(file).toString().replace('\\', '/'));
+            }
         }
     }
 
