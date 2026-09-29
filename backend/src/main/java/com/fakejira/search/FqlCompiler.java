@@ -149,7 +149,8 @@ public final class FqlCompiler {
                 case "status" -> statuses(clause);
                 case "priority" -> priorities(clause);
                 case "type" -> clause.values().forEach(this::type);
-                case "due", "created", "updated", "resolved" -> clause.values().forEach(this::date);
+                case "due" -> clause.values().forEach(this::date);
+                case "created", "updated", "resolved" -> clause.values().stream().filter(v -> hours(v) == null).forEach(this::date);
                 case "points" -> clause.values().forEach(this::number);
                 case "assignee", "reporter", "watcher" -> clause.values().forEach(this::users);
                 default -> {
@@ -540,6 +541,20 @@ public final class FqlCompiler {
             Predicate any = cb.or(c.values().stream().map(v -> day(cb, path, date(v), instant)).toArray(Predicate[]::new));
             return c.op() == Op.IN ? any : cb.or(cb.not(any), cb.isNull(path));
         }
+        if (instant) {
+            Instant exact = hours(c.values().get(0));
+            if (exact != null) {
+                Path<Instant> p = (Path<Instant>) path;
+                return switch (c.op()) {
+                    case GT -> cb.greaterThan(p, exact);
+                    case GE, EQ -> cb.greaterThanOrEqualTo(p, exact);
+                    case LT -> cb.lessThan(p, exact);
+                    case LE -> cb.lessThanOrEqualTo(p, exact);
+                    case NE -> cb.or(cb.lessThan(p, exact), cb.isNull(p));
+                    default -> throw new FqlException("~ does not work with dates.", c.position());
+                };
+            }
+        }
         LocalDate day = date(c.values().get(0));
         if (instant) {
             Path<Instant> p = (Path<Instant>) path;
@@ -575,6 +590,18 @@ public final class FqlCompiler {
         Path<Instant> p = (Path<Instant>) path;
         return cb.and(cb.greaterThanOrEqualTo(p, day.atStartOfDay(zone).toInstant()),
                 cb.lessThan(p, day.plusDays(1).atStartOfDay(zone).toInstant()));
+    }
+
+    private static final Pattern HOURS = Pattern.compile("^([+-]?)(\\d+)h$", Pattern.CASE_INSENSITIVE);
+
+    /** A relative time in hours (-4h) for timestamp fields, else null. */
+    static Instant hours(Value v) {
+        Matcher m = HOURS.matcher(v.text());
+        if (!m.matches()) {
+            return null;
+        }
+        long amount = Long.parseLong(m.group(2)) * ("-".equals(m.group(1)) ? -1 : 1);
+        return Instant.now().plus(java.time.Duration.ofHours(amount));
     }
 
     /** 2026-10-01, today, now, yesterday, tomorrow, -7d, +2w, 3m, startOfWeek, endOfMonth… */

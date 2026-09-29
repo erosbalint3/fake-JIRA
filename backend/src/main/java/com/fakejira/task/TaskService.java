@@ -37,6 +37,8 @@ import java.util.TreeSet;
 @Transactional
 public class TaskService {
 
+    private final TaskEvents taskEvents;
+
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH);
 
     private final TaskRepository tasks;
@@ -57,7 +59,8 @@ public class TaskService {
     public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
                        EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
                        NotificationService notifications, LiveEvents live, ChatNotifier chat,
-                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope) {
+                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope, TaskEvents taskEvents) {
+        this.taskEvents = taskEvents;
         this.aliases = aliases;
         this.scope = scope;
         this.chat = chat;
@@ -179,6 +182,7 @@ public class TaskService {
         }
         live.taskChanged(task);
         chat.created(task, user);
+        taskEvents.publish(TaskEvent.Kind.CREATED, task, user);
         return support.response(task);
     }
 
@@ -236,6 +240,8 @@ public class TaskService {
             support.notifyParticipants(task, user, "updated");
             tasks.saveAndFlush(task);
             live.taskChanged(task);
+            taskEvents.publish(TaskEvent.Kind.UPDATED, task, user, "changes",
+                    String.join("; ", descriptionChanged ? concat(changes, "updated the description") : changes));
         }
         return support.response(task);
     }
@@ -271,6 +277,7 @@ public class TaskService {
         }
         support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
         chat.statusChanged(task, user, task.getStatus().label(), status.label());
+        TaskStatus from = task.getStatus();
         scope.statusChanged(task, task.getStatus(), status);
         task.setStatus(status);
         // A column pinned to another status no longer fits; fall back to the first column of the new status.
@@ -280,6 +287,7 @@ public class TaskService {
         support.notifyParticipants(task, user, "moved to " + status.label().toLowerCase(Locale.ROOT));
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.STATUS_CHANGED, task, user, "from", from.name(), "to", status.name());
     }
 
     public TaskResponse assign(User user, Long id, Long assigneeId) {
@@ -308,6 +316,8 @@ public class TaskService {
         }
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", previous == null ? "" : previous.getUsername(),
+                "to", next == null ? "" : next.getUsername());
     }
 
     public TaskResponse accept(User user, Long id) {
@@ -322,6 +332,7 @@ public class TaskService {
         notifications.notify(task.getReporter(), user, task, "accepted");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", "", "to", user.getUsername());
         return support.response(task);
     }
 
@@ -337,6 +348,7 @@ public class TaskService {
         notifications.notify(task.getReporter(), user, task, "released");
         tasks.saveAndFlush(task);
         live.taskChanged(task);
+        taskEvents.publish(TaskEvent.Kind.ASSIGNED, task, user, "from", user.getUsername(), "to", "");
         return support.response(task);
     }
 
@@ -365,6 +377,7 @@ public class TaskService {
             throw ApiException.forbidden("Only the reporter or the project owner can delete this task.");
         }
         notifications.notify(task.getAssignee(), user, task, "deleted");
+        taskEvents.publish(TaskEvent.Kind.DELETED, task, user);
         Project project = task.getProject();
         Long taskId = task.getId();
         Task parent = task.getParent();
@@ -488,5 +501,11 @@ public class TaskService {
             }
         }
         return result;
+    }
+
+    private static List<String> concat(List<String> list, String extra) {
+        List<String> all = new ArrayList<>(list);
+        all.add(extra);
+        return all;
     }
 }

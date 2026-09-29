@@ -55,7 +55,9 @@ public class TaskSupport {
     }
 
     public void record(Task task, User actor, String message) {
-        activity.save(new TaskActivity(task, actor, message));
+        String rule = TaskEvents.currentRule();
+        String text = rule == null ? message : message + " (rule “" + rule + "”)";
+        activity.save(new TaskActivity(task, actor, text.length() > 300 ? text.substring(0, 299) + "…" : text));
     }
 
     /** Records a change and keeps the text before and after it (e.g. the description). */

@@ -73,6 +73,9 @@ app:
     keep: ${APP_BACKUP_KEEP:14}
   digest:
     cron: ${APP_DIGEST_CRON:0 0 7 * * *}
+  automation:
+    # How often scheduled automation rules (SLA escalation, stale tasks) check their conditions.
+    cron: ${APP_AUTOMATION_CRON:0 */5 * * * *}
   push:
     # VAPID "sub" claim; defaults to the app's https base URL.
     subject: ${APP_PUSH_SUBJECT:}

@@ -43,9 +43,10 @@ public class SecurityConfig {
                                 "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/avatars/**",
                                 "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
-                        .requestMatchers(HttpMethod.POST, "/api/integrations/github/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/integrations/github/**", "/api/integrations/gitlab/**",
+                                "/api/integrations/gitea/**").permitAll()
                         // Secret-token URLs: the personal calendar feed and the inbound email webhook.
-                        .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
@@ -76,8 +77,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey jwtSecretKey, SessionService sessions) {
-        return new AppJwtDecoder(jwtSecretKey, sessions);
+    JwtDecoder jwtDecoder(SecretKey jwtSecretKey, SessionService sessions, com.fakejira.apitoken.ApiTokenService apiTokens) {
+        return new AppJwtDecoder(jwtSecretKey, sessions, apiTokens);
     }
 
     @Bean

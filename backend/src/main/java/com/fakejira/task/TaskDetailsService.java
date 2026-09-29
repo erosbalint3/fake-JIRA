@@ -48,12 +48,15 @@ public class TaskDetailsService {
     private final CommentReactionRepository reactions;
 
     private final com.fakejira.team.TeamRepository teams;
+    private final TaskEvents taskEvents;
 
     public TaskDetailsService(TaskSupport support, TaskService taskService, CommentRepository comments,
                               ChecklistItemRepository checklist, TaskActivityRepository activity,
                               TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks,
                               NotificationService notifications, LiveEvents live, ChatNotifier chat,
-                              CommentReactionRepository reactions, com.fakejira.team.TeamRepository teams) {
+                              CommentReactionRepository reactions, com.fakejira.team.TeamRepository teams,
+                              TaskEvents taskEvents) {
+        this.taskEvents = taskEvents;
         this.teams = teams;
         this.reactions = reactions;
         this.support = support;
@@ -147,6 +150,8 @@ public class TaskDetailsService {
         }
         live.taskChanged(task);
         chat.commented(task, user, comment.getBody());
+        taskEvents.publish(TaskEvent.Kind.COMMENTED, task, user, "comment", comment.getBody(),
+                "commentId", String.valueOf(comment.getId()));
         return CommentResponse.of(comment);
     }
 

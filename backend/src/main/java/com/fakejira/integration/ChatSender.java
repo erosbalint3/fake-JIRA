@@ -126,7 +126,7 @@ public class ChatSender {
         }
         if (uri.getHost() == null || !("https".equalsIgnoreCase(uri.getScheme())
                 || (allowPrivate && "http".equalsIgnoreCase(uri.getScheme())))) {
-            throw ApiException.badRequest("Use the https:// webhook URL from Slack or Discord.");
+            throw ApiException.badRequest("Use an https:// URL.");
         }
         if (allowPrivate) {
             return;
