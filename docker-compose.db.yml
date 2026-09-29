@@ -1,0 +1,14 @@
+# Optional: network access to the live database for tools like DBeaver or DataGrip.
+# Needs SPRING_DATASOURCE_PASSWORD in .env (the app refuses to open the port without it).
+# The port is published on the server's loopback interface only; from another PC use
+# an SSH tunnel:  ssh -L 9092:localhost:9092 you@server
+# then connect to jdbc:h2:tcp://localhost:9092/fakejira (user sa).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.db.yml up -d --build
+#   (with Caddy in Docker: -f docker-compose.yml -f docker-compose.caddy.yml -f docker-compose.db.yml)
+services:
+  fakejira:
+    environment:
+      APP_DB_TCP_PORT: "9092"
+    ports:
+      - "127.0.0.1:${FAKEJIRA_DB_PORT:-9092}:9092"

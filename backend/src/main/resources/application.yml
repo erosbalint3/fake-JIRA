@@ -7,6 +7,8 @@ spring:
   datasource:
     url: jdbc:h2:file:./data/fakejira;AUTO_SERVER=TRUE
     username: sa
+    # Set SPRING_DATASOURCE_PASSWORD to password-protect the database; an existing
+    # database without a password is switched over on the next start.
     password: ""
   jpa:
     hibernate:
@@ -60,6 +62,10 @@ app:
   push:
     # VAPID "sub" claim; defaults to the app's https base URL.
     subject: ${APP_PUSH_SUBJECT:}
+  db-tcp:
+    # Network access to the live H2 database for tools like DBeaver, e.g. 9092. Off when empty;
+    # needs SPRING_DATASOURCE_PASSWORD. Connect with jdbc:h2:tcp://HOST:PORT/fakejira
+    port: ${APP_DB_TCP_PORT:}
   jwt:
     # Set APP_JWT_SECRET (32+ chars) in production so sessions survive restarts.
     secret: ${APP_JWT_SECRET:}
