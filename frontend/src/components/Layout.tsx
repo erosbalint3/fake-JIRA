@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
   Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
+  Package,
 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -54,6 +55,21 @@ export function Layout() {
   const { canEdit } = useProjectAccess(currentProject);
 
   const currentKey = currentProject?.key;
+  // The project's accent colour applies while working inside it.
+  const accent = match ? byKey(match.params.key)?.color ?? null : null;
+  useEffect(() => {
+    const root = document.documentElement.style;
+    const vars = ['--accent', '--accent-hover', '--accent-soft', '--accent-text'];
+    if (!accent) {
+      vars.forEach((v) => root.removeProperty(v));
+      return;
+    }
+    root.setProperty('--accent', accent);
+    root.setProperty('--accent-hover', `color-mix(in srgb, ${accent} 82%, black)`);
+    root.setProperty('--accent-soft', `color-mix(in srgb, ${accent} 16%, var(--surface))`);
+    root.setProperty('--accent-text', `color-mix(in srgb, ${accent} 80%, var(--text))`);
+    return () => vars.forEach((v) => root.removeProperty(v));
+  }, [accent]);
   const refreshFilters = useCallback(() => {
     if (!currentKey) return setFilters([]);
     api.filters(currentKey).then(setFilters).catch(() => setFilters([]));
@@ -205,6 +221,7 @@ export function Layout() {
                 <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> Board</NavLink>
                 <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> Backlog</NavLink>
                 <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> Roadmap</NavLink>
+                <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> Releases</NavLink>
                 <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> Reports</NavLink>
                 <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> Settings</NavLink>
                 {filters.length > 0 && (

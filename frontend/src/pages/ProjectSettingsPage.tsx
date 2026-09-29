@@ -102,6 +102,42 @@ export function ProjectSettingsPage() {
         </form>
       </section>
 
+      <section className="panel">
+        <h2 className="panel-title">Workflow and look</h2>
+        <div className="form narrow">
+          <div className="segmented" role="radiogroup" aria-label="Planning mode">
+            {([false, true] as const).map((kanban) => (
+              <label key={String(kanban)} className={project.kanban === kanban ? 'active' : ''}>
+                <input type="radio" name="mode" checked={project.kanban === kanban} disabled={!isOwner || busy}
+                  onChange={() => run(() => api.updateProject(key, project.name, project.description, { kanban }),
+                    kanban ? 'Switched to Kanban' : 'Switched to Scrum')} />
+                {kanban ? 'Kanban' : 'Scrum'}
+              </label>
+            ))}
+          </div>
+          <p className="muted small">{project.kanban
+            ? 'Kanban: no sprints. The board shows all work continuously; use WIP limits and the flow reports.'
+            : 'Scrum: plan work in time-boxed sprints with burndown and velocity reports.'}</p>
+          <div className="field">
+            <span>Accent colour</span>
+            <div className="color-row">
+              {['', '#2a78d6', '#0e7c66', '#7c3aed', '#c2410c', '#be185d', '#475569'].map((color) => (
+                <button key={color || 'default'} type="button" disabled={!isOwner || busy}
+                  className={`color-swatch ${(project.color ?? '') === color ? 'picked' : ''}`}
+                  style={color ? { background: color } : undefined}
+                  aria-label={color ? `Accent ${color}` : 'Default accent'} aria-pressed={(project.color ?? '') === color}
+                  onClick={() => run(() => api.updateProject(key, project.name, project.description, { color }), 'Colour updated')}>
+                  {!color && 'A'}
+                </button>
+              ))}
+              <input type="color" aria-label="Custom accent colour" disabled={!isOwner || busy} value={project.color ?? '#2a78d6'}
+                onChange={(e) => run(() => api.updateProject(key, project.name, project.description, { color: e.target.value }), 'Colour updated')} />
+            </div>
+            <span className="muted small">Used for the project's accent while you work in it.</span>
+          </div>
+        </div>
+      </section>
+
       <MembersSection project={project} isOwner={isOwner} busy={busy} run={run}
         onRemove={(member) => setConfirm({ kind: 'remove', member })}
         onTransfer={(member) => setConfirm({ kind: 'transfer', member })} />

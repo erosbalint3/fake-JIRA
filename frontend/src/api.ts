@@ -3,6 +3,7 @@ import type {
   CreateTaskInput, DevLink, EmailFrequency, Epic, GithubSettings, ImportResult, Invite, LinkType, Notification,
   Priority, Profile, Project, RegistrationMode, Role, SavedFilter, Scope, Sprint, Status, Task, TaskInput,
   TaskLink, TimeEntry, TimeReport, User, VelocityEntry, TaskTemplate, RecurringTask, TaskType, Frequency,
+  Release, RetroItem, RetroKind, SprintReview, PokerState, FlowDay, CycleReport, Throughput,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -148,8 +149,8 @@ export const api = {
   project: (key: string) => request<Project>('GET', `/projects/${key}`),
   createProject: (key: string, name: string, description: string) =>
     request<Project>('POST', '/projects', { key, name, description }),
-  updateProject: (key: string, name: string, description: string) =>
-    request<Project>('PUT', `/projects/${key}`, { name, description }),
+  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string } = {}) =>
+    request<Project>('PUT', `/projects/${key}`, { name, description, ...extra }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
   addMember: (key: string, login: string, role: Role = 'MEMBER') =>
     request<Project>('POST', `/projects/${key}/members`, { login, role }),
@@ -184,6 +185,39 @@ export const api = {
   createEpic: (key: string, input: EpicInput) => request<Epic>('POST', `/projects/${key}/epics`, input),
   updateEpic: (id: number, input: EpicInput) => request<Epic>('PUT', `/epics/${id}`, input),
   deleteEpic: (id: number) => request<void>('DELETE', `/epics/${id}`),
+  setEpicDependencies: (id: number, dependsOn: number[]) => request<Epic>('PUT', `/epics/${id}/dependencies`, { dependsOn }),
+
+  releases: (key: string) => request<Release[]>('GET', `/projects/${key}/releases`),
+  createRelease: (key: string, input: ReleaseInput) => request<Release>('POST', `/projects/${key}/releases`, input),
+  updateRelease: (id: number, input: ReleaseInput) => request<Release>('PUT', `/releases/${id}`, input),
+  deleteRelease: (id: number) => request<void>('DELETE', `/releases/${id}`),
+  shipRelease: (id: number, moveUnfinishedTo: number | null) =>
+    request<Release>('POST', `/releases/${id}/release`, { moveUnfinishedTo }),
+  unshipRelease: (id: number) => request<Release>('POST', `/releases/${id}/unrelease`),
+  releaseTasks: (id: number) => request<Task[]>('GET', `/releases/${id}/tasks`),
+  releaseNotes: (id: number) => request<{ release: Release; markdown: string }>('GET', `/releases/${id}/notes`),
+  setTaskRelease: (taskId: number, releaseId: number | null) =>
+    request<Task>('PUT', `/tasks/${taskId}/release`, { releaseId }),
+
+  retro: (sprintId: number) => request<RetroItem[]>('GET', `/sprints/${sprintId}/retro`),
+  addRetroItem: (sprintId: number, kind: RetroKind, text: string) =>
+    request<RetroItem>('POST', `/sprints/${sprintId}/retro`, { kind, text }),
+  editRetroItem: (id: number, kind: RetroKind, text: string) => request<RetroItem>('PUT', `/retro/${id}`, { kind, text }),
+  deleteRetroItem: (id: number) => request<void>('DELETE', `/retro/${id}`),
+  voteRetroItem: (id: number) => request<RetroItem>('POST', `/retro/${id}/vote`),
+  retroToTask: (id: number) => request<RetroItem>('POST', `/retro/${id}/task`),
+  sprintReview: (sprintId: number) => request<SprintReview>('GET', `/sprints/${sprintId}/review`),
+
+  poker: (taskId: number) => request<PokerState>('GET', `/tasks/${taskId}/poker`),
+  startPoker: (taskId: number) => request<PokerState>('POST', `/tasks/${taskId}/poker`),
+  pokerVote: (taskId: number, value: string | null) => request<PokerState>('PUT', `/tasks/${taskId}/poker/vote`, { value }),
+  revealPoker: (taskId: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/reveal`),
+  acceptPoker: (taskId: number, points: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/accept`, { points }),
+  cancelPoker: (taskId: number) => request<void>('DELETE', `/tasks/${taskId}/poker`),
+
+  flow: (key: string, days = 30) => request<FlowDay[]>('GET', `/projects/${key}/flow?days=${days}`),
+  cycleTime: (key: string, days = 90) => request<CycleReport>('GET', `/projects/${key}/cycle-time?days=${days}`),
+  throughput: (key: string, weeks = 12) => request<Throughput[]>('GET', `/projects/${key}/throughput?weeks=${weeks}`),
 
   columns: (key: string) => request<BoardColumn[]>('GET', `/projects/${key}/columns`),
   addColumn: (key: string, input: ColumnInput) => request<BoardColumn[]>('POST', `/projects/${key}/columns`, input),
@@ -389,6 +423,12 @@ export interface AuditPage {
   page: number;
   pages: number;
   actions: string[];
+}
+
+export interface ReleaseInput {
+  name: string;
+  description: string;
+  releaseDate: string | null;
 }
 
 export interface EpicInput {

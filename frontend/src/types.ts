@@ -32,6 +32,10 @@ export interface Project {
   githubEnabled: boolean;
   githubAutoDone: boolean;
   createdAt: string;
+  /** Kanban projects have no sprints: the board shows every task. */
+  kanban: boolean;
+  /** Accent colour (#rrggbb) or null for the default. */
+  color: string | null;
 }
 
 export interface SprintRef {
@@ -63,6 +67,8 @@ export interface Epic extends EpicRef {
   doneCount: number;
   points: number;
   donePoints: number;
+  /** Epics that must finish before this one starts. */
+  dependsOn: number[];
 }
 
 export interface TaskRef {
@@ -110,6 +116,7 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  release: ReleaseRef | null;
 }
 
 export interface TaskInput {
@@ -353,6 +360,122 @@ export interface Burndown {
   totalPoints: number;
   donePoints: number;
   points: BurndownPoint[];
+  /** Tasks added to or removed from the sprint after it started. */
+  changes: ScopeChange[];
+}
+
+export interface ScopeChange {
+  date: string;
+  key: string;
+  title: string;
+  points: number | null;
+  added: boolean;
+  actor: string | null;
+}
+
+export interface ReleaseRef {
+  id: number;
+  name: string;
+  released: boolean;
+}
+
+export interface Release {
+  id: number;
+  name: string;
+  description: string;
+  releaseDate: string | null;
+  released: boolean;
+  releasedAt: string | null;
+  taskCount: number;
+  doneCount: number;
+  points: number;
+  donePoints: number;
+}
+
+export type RetroKind = 'WENT_WELL' | 'TO_IMPROVE' | 'ACTION';
+
+export interface RetroItem {
+  id: number;
+  kind: RetroKind;
+  text: string;
+  author: User;
+  votes: number;
+  voted: boolean;
+  mine: boolean;
+  taskId: number | null;
+  taskKey: string | null;
+  createdAt: string;
+}
+
+export interface ReviewTask {
+  id: number;
+  key: string;
+  title: string;
+  type: TaskType | null;
+  status: Status | null;
+  points: number | null;
+  assignee: User | null;
+}
+
+export interface SprintReview {
+  sprint: Sprint;
+  committedPoints: number;
+  completedPoints: number;
+  completedTasks: number;
+  completed: ReviewTask[];
+  unfinished: ReviewTask[];
+  added: ReviewTask[];
+  removed: ReviewTask[];
+  people: { user: User; tasks: number; points: number }[];
+  markdown: string;
+}
+
+export interface PokerState {
+  active: boolean;
+  revealed: boolean;
+  startedBy: string | null;
+  startedAt: string | null;
+  deck: string[];
+  myVote: string | null;
+  votes: { user: User; voted: boolean; value: string | null }[];
+  average: number | null;
+  suggestion: string | null;
+  consensus: boolean;
+}
+
+export interface FlowDay {
+  date: string;
+  todo: number;
+  inProgress: number;
+  inReview: number;
+  done: number;
+}
+
+export interface CycleTask {
+  id: number;
+  key: string;
+  title: string;
+  type: TaskType;
+  completedAt: string;
+  leadDays: number;
+  cycleDays: number | null;
+}
+
+export interface CycleReport {
+  count: number;
+  leadAverage: number | null;
+  leadP50: number | null;
+  leadP85: number | null;
+  cycleAverage: number | null;
+  cycleP50: number | null;
+  cycleP85: number | null;
+  tasks: CycleTask[];
+}
+
+export interface Throughput {
+  weekStart: string;
+  tasks: number;
+  points: number;
 }
 
 export const PRIORITIES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];

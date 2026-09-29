@@ -10,6 +10,7 @@ import { useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
 import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
+import { PokerPanel } from '../components/task/PokerPanel';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
@@ -31,7 +32,7 @@ import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { fileSize, formatDate, formatMinutes, timeAgo } from '../format';
 import {
   PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Activity, type Attachment, type ChecklistItem, type Comment,
-  type DevLink, type Epic, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
+  type DevLink, type Epic, type Release, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
   type User,
 } from '../types';
 
@@ -73,6 +74,7 @@ export function TaskDetailPage() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [devLinks, setDevLinks] = useState<DevLink[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
+  const [releases, setReleases] = useState<Release[]>([]);
   const [watching, setWatching] = useState(false);
   const [watchers, setWatchers] = useState<User[]>([]);
   const openCreate = useCreateTask();
@@ -105,6 +107,7 @@ export function TaskDetailPage() {
     if (!task) return;
     api.sprints(task.projectKey).then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED'))).catch(() => {});
     api.epics(task.projectKey).then(setEpics).catch(() => {});
+    api.releases(task.projectKey).then(setReleases).catch(() => {});
   }, [task?.projectKey]);
 
   useLiveRefresh((m) => m.type === 'task' && m.data.taskId === taskId, () => {
@@ -528,6 +531,23 @@ export function TaskDetailPage() {
                 {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
               </select>
             </dd>
+            <dt>Release</dt>
+            <dd>
+              <select value={task.release?.id ?? ''} disabled={busy || !canEdit} aria-label="Release"
+                onChange={(e) => {
+                  const previous = task.release?.id ?? null;
+                  run(() => api.setTaskRelease(task.id, e.target.value ? Number(e.target.value) : null),
+                    e.target.value ? 'Release updated' : 'Removed from release', () => api.setTaskRelease(task.id, previous));
+                }}>
+                <option value="">No release</option>
+                {task.release && !releases.some((r) => r.id === task.release!.id) && (
+                  <option value={task.release.id}>{task.release.name}</option>
+                )}
+                {releases.filter((r) => !r.released || r.id === task.release?.id).map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}{r.released ? ' (released)' : ''}</option>
+                ))}
+              </select>
+            </dd>
             <dt>Labels</dt>
             <dd>
               <button className="labels-button" disabled={!canEdit} onClick={() => setEditingLabels(task.labels)} aria-label="Edit labels">
@@ -543,6 +563,7 @@ export function TaskDetailPage() {
             <dt>Updated</dt>
             <dd>{timeAgo(task.updatedAt)}</dd>
           </dl>
+          {!task.parent && <PokerPanel task={task} canEdit={canEdit} onAccepted={load} />}
         </aside>
       </div>
 

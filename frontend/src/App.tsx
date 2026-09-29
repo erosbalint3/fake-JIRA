@@ -19,6 +19,8 @@ const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ defa
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage').then((m) => ({ default: m.RoadmapPage })));
 const ProjectSettingsPage = lazy(() => import('./pages/ProjectSettingsPage').then((m) => ({ default: m.ProjectSettingsPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SprintPage = lazy(() => import('./pages/SprintPage').then((m) => ({ default: m.SprintPage })));
+const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then((m) => ({ default: m.ReleasesPage })));
 const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -73,6 +75,8 @@ export function App() {
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
         <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
         <Route path="/p/:key/reports" element={<ReportsPage />} />
+        <Route path="/p/:key/releases" element={<ReleasesPage />} />
+        <Route path="/p/:key/sprints/:id" element={<SprintPage />} />
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />

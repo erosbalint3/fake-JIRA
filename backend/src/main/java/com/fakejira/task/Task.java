@@ -22,6 +22,7 @@ import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,6 +31,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 @Entity
+// Only changed columns are written, so two people editing different fields at once do not undo each other.
+@DynamicUpdate
 @Table(name = "tasks")
 public class Task {
 

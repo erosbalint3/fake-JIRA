@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { Bookmark, CalendarRange, Eye, Inbox, MoreHorizontal, Plus, Search, Zap } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
@@ -15,6 +15,7 @@ import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDay, todayIso } from '../format';
 import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, type Sprint, type Task, TASK_TYPES, TASK_TYPE_LABEL,
+  type VelocityEntry,
 } from '../types';
 
 type SprintDialog = { kind: 'edit' | 'start'; sprint: Sprint } | { kind: 'create' } | null;
@@ -55,15 +56,18 @@ export function BacklogPage() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dialog, setDialog] = useState<SprintDialog>(null);
   const [confirm, setConfirm] = useState<{ kind: 'complete' | 'delete'; sprint: Sprint } | null>(null);
+  const [velocity, setVelocity] = useState<VelocityEntry[]>([]);
 
   const load = useCallback(() => {
     if (!project) return;
     setError('');
-    Promise.all([api.tasks({ project: key }), api.sprints(key), api.epics(key)])
-      .then(([t, s, e]) => {
+    Promise.all([api.tasks({ project: key }), api.sprints(key), api.epics(key),
+      project.kanban ? Promise.resolve([]) : api.velocity(key)])
+      .then(([t, s, e, v]) => {
         setTasks(t);
         setSprints(s);
         setEpics(e);
+        setVelocity(v);
         setSelected((current) => current.filter((id) => t.some((task) => task.id === id)));
       })
       .catch((e: ApiError) => setError(e.message));
@@ -107,11 +111,17 @@ export function BacklogPage() {
   if (!loading && !project) return <NotFoundPage />;
   if (!project) return <div className="page"><Spinner /></div>;
 
-  const openSprints = sprints.filter((s) => s.state !== 'COMPLETED')
+  const kanban = project.kanban;
+  const openSprints = kanban ? [] : sprints.filter((s) => s.state !== 'COMPLETED')
     .sort((a, b) => (a.state === 'ACTIVE' ? -1 : b.state === 'ACTIVE' ? 1 : a.id - b.id));
   const hasActive = openSprints.some((s) => s.state === 'ACTIVE');
   const backlog = visible.filter((t) => !t.sprint && (showDone || t.status !== 'DONE'));
   const filtered = !!(query || priority || label || assignee || epicFilter || typeFilter);
+  // Planning helper: what the team usually finishes, from the last three completed sprints.
+  const recent = velocity.slice(-3);
+  const averageVelocity = recent.length
+    ? Math.round(recent.reduce((sum, v) => sum + v.completedPoints, 0) / recent.length) : null;
+  const completedSprints = kanban ? [] : sprints.filter((s) => s.state === 'COMPLETED').sort((a, b) => b.id - a.id);
   const ordered = [...openSprints.flatMap((s) => visible.filter((t) => t.sprint?.id === s.id)), ...backlog];
 
   /** Click toggles one row; shift-click selects the range since the last click. */
@@ -243,14 +253,18 @@ export function BacklogPage() {
         <div>
           <span className="eyebrow">{project.name}</span>
           <h1>Backlog</h1>
-          <p className="muted">Plan sprints by dragging tasks between sections.</p>
+          <p className="muted">{kanban
+            ? 'Kanban: every open task is on the board. Order the queue by priority here.'
+            : 'Plan sprints by dragging tasks between sections.'}</p>
         </div>
         <div className="header-actions">
           {canEdit ? (
             <>
-              <button className="btn btn-ghost" onClick={() => setDialog({ kind: 'create' })}>
-                <CalendarRange size={17} /> Create sprint
-              </button>
+              {!kanban && (
+                <button className="btn btn-ghost" onClick={() => setDialog({ kind: 'create' })}>
+                  <CalendarRange size={17} /> Create sprint
+                </button>
+              )}
               <button className="btn btn-primary" onClick={() => openCreate({ projectKey: key })}>
                 <Plus size={18} /> Create task
               </button>
@@ -304,6 +318,14 @@ export function BacklogPage() {
       {tasks && openSprints.map((sprint) => {
         const items = visible.filter((t) => t.sprint?.id === sprint.id);
         const done = items.filter((t) => t.status === 'DONE').length;
+        const planned = items.reduce((sum, t) => sum + (t.storyPoints ?? 0), 0);
+        const unestimated = items.filter((t) => t.storyPoints === null).length;
+        const overCapacity = averageVelocity !== null && planned > averageVelocity * 1.1;
+        const perPerson = new Map<string, number>();
+        items.forEach((t) => {
+          const name = t.assignee?.displayName ?? 'Unassigned';
+          perPerson.set(name, (perPerson.get(name) ?? 0) + (t.storyPoints ?? 0));
+        });
         return (
           <section key={sprint.id} className={`sprint-section ${dropTarget === `s${sprint.id}` ? 'drop-target' : ''}`}
             {...dropProps(`s${sprint.id}`, sprint.id)}>
@@ -327,6 +349,9 @@ export function BacklogPage() {
                 {sprint.state === 'ACTIVE' && (
                   <button className="btn btn-soft btn-sm" onClick={() => setConfirm({ kind: 'complete', sprint })}>Complete sprint</button>
                 )}
+                {sprint.state === 'ACTIVE' && (
+                  <Link className="btn btn-ghost btn-sm" to={`/p/${key}/sprints/${sprint.id}`}>Review & retro</Link>
+                )}
                 <SprintMenu
                   onEdit={() => setDialog({ kind: 'edit', sprint })}
                   onDelete={sprint.state === 'PLANNED' ? () => setConfirm({ kind: 'delete', sprint }) : undefined}
@@ -335,6 +360,20 @@ export function BacklogPage() {
               </div>}
             </header>
             {sprint.goal && <p className="sprint-goal muted">{sprint.goal}</p>}
+            {items.length > 0 && (
+              <div className={`capacity ${overCapacity ? 'over' : ''}`} aria-label="Sprint capacity">
+                <strong>{planned} pts planned</strong>
+                {averageVelocity !== null
+                  ? <span>· team average {averageVelocity} pts{overCapacity ? ' — more than the team usually finishes' : ''}</span>
+                  : <span className="muted">· complete a sprint to see the team's velocity</span>}
+                {unestimated > 0 && <span className="muted">· {unestimated} unestimated</span>}
+                <span className="capacity-people">
+                  {[...perPerson.entries()].sort((a, b) => b[1] - a[1]).map(([name, pts]) => (
+                    <span key={name} className="chip">{name} {pts}</span>
+                  ))}
+                </span>
+              </div>
+            )}
             {items.length ? <ul className="task-list">{items.map(row)}</ul>
               : <div className="column-empty">{filtered ? 'No matching tasks.' : 'Drag tasks here to plan this sprint.'}</div>}
           </section>
@@ -362,6 +401,20 @@ export function BacklogPage() {
         </section>
       )}
 
+      {tasks && completedSprints.length > 0 && (
+        <section className="past-sprints">
+          <h2 className="section-title">Completed sprints</h2>
+          <ul>
+            {completedSprints.slice(0, 8).map((s) => (
+              <li key={s.id}>
+                <Link to={`/p/${key}/sprints/${s.id}`}>{s.name}</Link>
+                {s.completedAt && <span className="muted small"> · completed {formatDay(s.completedAt.slice(0, 10))}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {selected.length > 0 && (
         <BulkBar selected={selected} tasks={tasks ?? []} members={project.members} sprints={sprints} epics={epics}
           onClear={() => setSelected([])} onDone={() => {
@@ -377,7 +430,10 @@ export function BacklogPage() {
           }} />
       )}
       {dialog && (
-        <SprintDialogModal dialog={dialog} projectKey={key} onClose={() => setDialog(null)} onDone={(message) => {
+        <SprintDialogModal dialog={dialog} projectKey={key} averageVelocity={averageVelocity}
+          plannedPoints={dialog.kind === 'create' ? 0 : (tasks ?? []).filter((t) => t.sprint?.id === dialog.sprint.id)
+            .reduce((sum, t) => sum + (t.storyPoints ?? 0), 0)}
+          onClose={() => setDialog(null)} onDone={(message) => {
           setDialog(null);
           toast(message);
           load();
@@ -439,9 +495,11 @@ function addDays(day: string, days: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function SprintDialogModal({ dialog, projectKey, onClose, onDone }: {
+function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints, onClose, onDone }: {
   dialog: NonNullable<SprintDialog>;
   projectKey: string;
+  averageVelocity: number | null;
+  plannedPoints: number;
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
@@ -489,6 +547,14 @@ function SprintDialogModal({ dialog, projectKey, onClose, onDone }: {
     }>
       <form id="sprint-form" className="form" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
+        {dialog.kind === 'start' && (
+          <p className={`capacity ${averageVelocity !== null && plannedPoints > averageVelocity * 1.1 ? 'over' : ''}`}>
+            <strong>{plannedPoints} pts planned.</strong>{' '}
+            {averageVelocity !== null
+              ? `The team finished ${averageVelocity} pts per sprint on average recently.`
+              : 'No velocity yet: this is the first sprint.'}
+          </p>
+        )}
         <label className="field">
           <span>Name</span>
           <input value={name} maxLength={80} placeholder={dialog.kind === 'create' ? 'Leave empty for an automatic name' : ''}
