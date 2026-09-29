@@ -142,6 +142,8 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | `app.base-url` | `APP_BASE_URL` | Empty. The public URL (e.g. `https://jira.example.com`) used for links in emails and invites. When empty, the address an admin opens the app at is used; set it anyway so links are right from the start. |
 | `app.storage.dir` | `APP_STORAGE_DIR` | `./data/attachments` (`/data/attachments` in Docker) |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:h2:file:./data/fakejira` |
+| `spring.datasource.password` | `SPRING_DATASOURCE_PASSWORD` | Empty. Password of the database user `sa`; an existing password-less database is switched to it on the next start. |
+| `app.db-tcp.port` | `APP_DB_TCP_PORT` | Empty (off). Port for network access to the database, see below. |
 | `app.backup.dir` | `APP_BACKUP_DIR` | `./data/backups` (`/data/backups` in Docker) |
 | `app.backup.cron` | `APP_BACKUP_CRON` | `0 30 3 * * *` (03:30 every night). `-` turns scheduled backups off. |
 | `app.backup.keep` | `APP_BACKUP_KEEP` | `14` backups kept |
@@ -166,6 +168,29 @@ The **first account** ever created is the administrator (after upgrading, the ol
 Invite links work in every mode and are valid for 7 days. Admins create them on the Admin page; project owners create them in **Project settings → Invite links** (the new user joins that project). If an email address is given, the invite only works for it and is emailed when SMTP is configured.
 
 Sign-in (10/min), sign-up (5/h) and password reset (5/h) are limited per client IP, and failed sign-ins per account (20 per 15 min). Clients get `429` with a `Retry-After` header.
+
+### Connecting to the database from another PC
+
+The app stores its data in an embedded H2 database (`/data/fakejira.mv.db` in the Docker volume). To browse it live with DBeaver, DataGrip or the H2 console:
+
+1. Set a database password in `.env`: `SPRING_DATASOURCE_PASSWORD=<something long>`. On the next start the existing database is switched to it. Keep it afterwards — removing or changing it in `.env` locks the app out (to change it, run `ALTER USER SA SET PASSWORD '<new>'` over the connection first, then update `.env`).
+2. Start with the database override, which sets `APP_DB_TCP_PORT=9092` and publishes it on the server's loopback interface only:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.db.yml up -d --build
+   # with Caddy in Docker:
+   docker compose -f docker-compose.yml -f docker-compose.caddy.yml -f docker-compose.db.yml up -d --build
+   ```
+
+3. From the other PC open an SSH tunnel and connect through it:
+
+   ```bash
+   ssh -L 9092:localhost:9092 you@your-server
+   ```
+
+   JDBC URL `jdbc:h2:tcp://localhost:9092/fakejira`, user `sa`, the password from step 1, H2 driver 2.3.x.
+
+The app refuses to open the port while the database has no password, and remote clients cannot create new databases. Changes made directly in the database skip the app's permission checks, activity history and live updates, so make a backup before editing data by hand.
 
 ### Backups and restore
 
