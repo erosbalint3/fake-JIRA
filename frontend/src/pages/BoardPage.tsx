@@ -8,7 +8,7 @@ import { useToast } from '../toast';
 import { useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import {
-  BlockedBadge, ChecklistProgress, DueBadge, EpicChip, Labels, PointsBadge, PriorityBadge, SubtaskBadge,
+  BlockedBadge, ChecklistProgress, DueBadge, EpicChip, Labels, PointsBadge, PriorityBadge, SubtaskBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
@@ -67,17 +67,23 @@ export function BoardPage() {
   if (!loading && !project) return <NotFoundPage />;
   if (!project) return <div className="page"><Spinner /></div>;
 
-  const move = async (task: Task, column: BoardColumn) => {
-    if (columnOf(task, columns)?.id === column.id) return;
+  const move = async (task: Task, column: BoardColumn, isUndo = false) => {
+    const from = columnOf(task, columns);
+    if (from?.id === column.id) return;
     const inTarget = shown.filter((t) => columnOf(t, columns)?.id === column.id).length;
     const previous = tasks;
     setTasks((current) => current?.map((t) => (t.id === task.id ? { ...t, status: column.status, columnId: column.id } : t)) ?? null);
     try {
       await api.moveToColumn(task.id, column.id);
+      const undo = !isUndo && from ? {
+        action: { label: 'Undo', onClick: () => move({ ...task, status: column.status, columnId: column.id }, from, true) },
+      } : {};
       if (column.wipLimit && inTarget + 1 > column.wipLimit) {
-        toast(`${column.name} is over its limit of ${column.wipLimit}`, 'error');
+        toast(`${column.name} is over its limit of ${column.wipLimit}`, 'error', undo);
       } else if (column.status === 'DONE') {
-        toast(`${task.key} done — nice work!`);
+        toast(`${task.key} done — nice work!`, 'success', undo);
+      } else if (!isUndo) {
+        toast(`${task.key} moved to ${column.name}`, 'success', undo);
       }
     } catch (e) {
       setTasks(previous);
@@ -191,6 +197,7 @@ export function BoardPage() {
                         <SubtaskBadge done={task.subtaskDone} total={task.subtaskTotal} />
                       </div>
                       <footer className="card-footer">
+                        <TypeIcon type={task.type} />
                         <PriorityBadge priority={task.priority} compact />
                         <span className="task-key">{task.key}</span>
                         <PointsBadge points={task.storyPoints} />

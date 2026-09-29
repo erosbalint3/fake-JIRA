@@ -1,5 +1,38 @@
-import ReactMarkdown from 'react-markdown';
+import { useEffect, useState } from 'react';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { api } from '../api';
+
+/** Object URLs of attachment images already loaded in this tab. */
+const loaded = new Map<number, Promise<string>>();
+
+/** An image stored as a task attachment; fetched with the sign-in token since it is not public. */
+function AttachmentImage({ id, alt }: { id: number; alt: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let promise = loaded.get(id);
+    if (!promise) {
+      promise = api.attachmentBlob(id).then((blob) => URL.createObjectURL(blob));
+      loaded.set(id, promise);
+      promise.catch(() => loaded.delete(id));
+    }
+    let active = true;
+    promise.then((url) => active && setSrc(url)).catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (failed) return <span className="muted small">[image unavailable: {alt || `attachment ${id}`}]</span>;
+  if (!src) return <span className="img-loading" aria-label={`Loading ${alt}`} />;
+  return (
+    <a href={src} target="_blank" rel="noopener noreferrer">
+      <img src={src} alt={alt} loading="lazy" />
+    </a>
+  );
+}
 
 /**
  * Renders user-written Markdown (GitHub flavour). Raw HTML is not rendered,
@@ -10,10 +43,17 @@ export default function MarkdownRenderer({ children, className = '' }: { childre
     <div className={`markdown ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        // attachment:<id> points at an uploaded image; everything else goes through the safe default.
+        urlTransform={(url) => (/^attachment:\d+$/.test(url) ? url : defaultUrlTransform(url))}
         components={{
           a: ({ href, children: text }) => (
             <a href={href} target="_blank" rel="noopener noreferrer nofollow">{text}</a>
           ),
+          img: ({ src, alt }) => {
+            const match = typeof src === 'string' ? /^attachment:(\d+)$/.exec(src) : null;
+            if (match) return <AttachmentImage id={Number(match[1])} alt={alt ?? ''} />;
+            return src ? <img src={String(src)} alt={alt ?? ''} loading="lazy" referrerPolicy="no-referrer" /> : null;
+          },
         }}
       >
         {highlightMentions(children)}

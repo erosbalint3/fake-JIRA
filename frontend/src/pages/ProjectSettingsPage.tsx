@@ -11,6 +11,8 @@ import { useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import { ConfirmDialog } from '../components/Modal';
 import { ChatHooksSection } from '../components/ChatHooksSection';
+import { RecurringSection } from '../components/settings/RecurringSection';
+import { TemplatesSection } from '../components/settings/TemplatesSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -105,6 +107,8 @@ export function ProjectSettingsPage() {
         onTransfer={(member) => setConfirm({ kind: 'transfer', member })} />
       {isOwner && <InvitesSection project={project} />}
       <ColumnsSection project={project} canEdit={canEdit} />
+      <TemplatesSection projectKey={project.key} canEdit={canEdit} />
+      <RecurringSection projectKey={project.key} members={project.members} canEdit={canEdit} />
       {isOwner && <GithubSection project={project} onChange={refresh} />}
       {isOwner && <ChatHooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />

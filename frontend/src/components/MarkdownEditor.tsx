@@ -14,16 +14,49 @@ interface Props {
   onSubmitShortcut?: () => void;
   label?: string;
   invalid?: boolean;
+  /** Enables pasting/dropping images: uploads one and resolves to the Markdown that shows it. */
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
-/** Textarea with a Write / Preview toggle and @mention autocomplete. */
+/** Textarea with a Write / Preview toggle, @mention autocomplete and (optionally) image paste. */
 export function MarkdownEditor({
-  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid,
+  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage,
 }: Props) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
+  const [uploading, setUploading] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  /** Inserts a placeholder at the caret, uploads, then swaps in the image Markdown. */
+  const uploadImages = (files: File[]) => {
+    if (!onUploadImage) return false;
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return false;
+    const at = ref.current?.selectionStart ?? valueRef.current.length;
+    images.forEach((file, index) => {
+      const marker = `![Uploading ${file.name || 'image'}${index ? ` ${index + 1}` : ''}…]()`;
+      const current = valueRef.current;
+      const insertAt = Math.min(at, current.length);
+      const next = `${current.slice(0, insertAt)}${marker}\n${current.slice(insertAt)}`;
+      valueRef.current = next;
+      onChange(next);
+      setUploading((n) => n + 1);
+      onUploadImage(file)
+        .then((markdown) => {
+          valueRef.current = valueRef.current.replace(marker, markdown);
+          onChange(valueRef.current);
+        })
+        .catch(() => {
+          valueRef.current = valueRef.current.replace(`${marker}\n`, '').replace(marker, '');
+          onChange(valueRef.current);
+        })
+        .finally(() => setUploading((n) => n - 1));
+    });
+    return true;
+  };
 
   const mention = useMemo(() => {
     const before = value.slice(0, caret);
@@ -73,7 +106,9 @@ export function MarkdownEditor({
           onClick={() => setTab('write')}>Write</button>
         <button type="button" role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'active' : ''}
           onClick={() => setTab('preview')}>Preview</button>
-        <span className="md-hint">Markdown supported</span>
+        <span className="md-hint">
+          {uploading > 0 ? 'Uploading image…' : onUploadImage ? 'Markdown · paste or drop images' : 'Markdown supported'}
+        </span>
       </div>
       {tab === 'write' ? (
         <div className="md-write">
@@ -92,6 +127,18 @@ export function MarkdownEditor({
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              if (uploadImages(Array.from(e.clipboardData.files))) e.preventDefault();
+            }}
+            onDragOver={(e) => {
+              if (onUploadImage && Array.from(e.dataTransfer.items).some((i) => i.type.startsWith('image/'))) e.preventDefault();
+            }}
+            onDrop={(e) => {
+              if (uploadImages(Array.from(e.dataTransfer.files))) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
           />
           {mention && (
             <ul className="mention-menu" role="listbox">

@@ -2,10 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
-  PRIORITIES, PRIORITY_LABEL, type CreateTaskInput, type Epic, type Priority, type Sprint, type TaskInput, type User,
+  PRIORITIES, PRIORITY_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type CreateTaskInput, type TaskTemplate, type Epic, type Priority, type Sprint, type TaskInput, type User,
 } from '../types';
 import { Modal } from './Modal';
-import { PriorityBadge } from './Badges';
+import { PriorityBadge, TypeIcon } from './Badges';
+import { draftStore } from '../drafts';
 import { MarkdownEditor } from './MarkdownEditor';
 import { LabelInput } from './LabelInput';
 
@@ -25,15 +26,23 @@ interface Props {
   submitLabel: string;
   mode: Mode;
   onClose: () => void;
+  /** Lets images be pasted into the description (editing an existing task). */
+  uploadImage?: (file: File) => Promise<string>;
 }
 
-export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
+export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }: Props) {
   const { projects, lastKey } = useProjects();
   const initial = mode.kind === 'edit' ? mode.initial : null;
   const [projectKey, setProjectKey] = useState(mode.projectKey ?? lastKey() ?? '');
-  const [form, setForm] = useState<TaskInput>(initial ?? {
-    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [], storyPoints: null, epicId: null,
-  });
+  const empty: TaskInput = {
+    title: '', description: '', priority: 'MEDIUM', dueDate: null, labels: [], storyPoints: null, epicId: null, type: 'TASK',
+  };
+  // New top-level tasks keep a draft per project, so a refresh or accidental close loses nothing.
+  const draftKey = mode.kind === 'create' && !mode.parent ? `new-task:${projectKey || 'any'}` : null;
+  const [form, setForm] = useState<TaskInput>(() => initial ?? (draftKey ? draftStore.get<TaskInput>(draftKey) : null) ?? empty);
+  const [restored, setRestored] = useState(() => !initial && !!draftKey && !!draftStore.get<TaskInput>(draftKey));
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [checklist, setChecklist] = useState<string[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [sprintId, setSprintId] = useState<number | null>(mode.kind === 'create' ? mode.sprintId ?? null : null);
@@ -51,11 +60,32 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     api.epics(projectKey).then(setEpics).catch(() => setEpics([]));
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
+      api.templates(projectKey).then(setTemplates).catch(() => setTemplates([]));
       api.sprints(projectKey)
         .then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED')))
         .catch(() => setSprints([]));
     }
   }, [projectKey, projects, mode.kind]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const timer = window.setTimeout(() => {
+      if (form.title.trim() || form.description.trim()) draftStore.set(draftKey, form);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [form, draftKey]);
+
+  const applyTemplate = (id: string) => {
+    const template = templates.find((t) => String(t.id) === id);
+    if (!template) return;
+    setForm({
+      ...form, type: template.type, priority: template.priority, storyPoints: template.storyPoints,
+      title: form.title.trim() ? form.title : template.title,
+      description: form.description.trim() ? form.description : template.description,
+      labels: [...new Set([...form.labels, ...template.labels])],
+    });
+    setChecklist(template.checklist);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -73,7 +103,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     const input = { ...form, title: form.title.trim(), dueDate: form.dueDate || null };
     try {
       if (mode.kind === 'create') {
-        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null });
+        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist });
+        if (draftKey) draftStore.clear(draftKey);
       } else {
         await mode.onSubmit(input);
       }
@@ -102,6 +133,22 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
     >
       <form id="task-form" className="form" onSubmit={submit} noValidate>
         {formError && !Object.keys(errors).length && <div className="alert">{formError}</div>}
+        {restored && (
+          <p className="notice small">Restored your unsaved task. <button type="button" className="link" onClick={() => {
+            if (draftKey) draftStore.clear(draftKey);
+            setForm(empty);
+            setRestored(false);
+          }}>Discard it</button></p>
+        )}
+        {mode.kind === 'create' && templates.length > 0 && (
+          <label className="field">
+            <span>Template</span>
+            <select defaultValue="" onChange={(e) => applyTemplate(e.target.value)}>
+              <option value="">Blank task</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
         {mode.kind === 'create' && mode.parent && (
           <p className="muted form-note">Subtask of <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
         )}
@@ -139,11 +186,24 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
             maxLength={5000}
             rows={6}
             label="Description"
+            onUploadImage={uploadImage}
             placeholder="Add context, acceptance criteria, links… Markdown and @mentions work."
             invalid={!!errors.description}
           />
           {errors.description && <small className="field-error">{errors.description}</small>}
         </div>
+        <fieldset className="field">
+          <span>Type</span>
+          <div className="segmented types">
+            {TASK_TYPES.map((type) => (
+              <label key={type} className={form.type === type ? 'active' : ''}>
+                <input type="radio" name="type" value={type} checked={form.type === type}
+                  onChange={() => setForm({ ...form, type })} />
+                <TypeIcon type={type} /> {TASK_TYPE_LABEL[type]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <fieldset className="field">
           <span>Priority</span>
           <div className="segmented">
@@ -199,6 +259,19 @@ export function TaskFormModal({ title, submitLabel, mode, onClose }: Props) {
             </label>
           )}
         </div>
+        {checklist.length > 0 && (
+          <div className="field">
+            <span>Checklist from template</span>
+            <ul className="template-checklist">
+              {checklist.map((item, i) => (
+                <li key={`${item}-${i}`}>{item}
+                  <button type="button" className="icon-button sm" aria-label={`Remove ${item}`}
+                    onClick={() => setChecklist(checklist.filter((_, j) => j !== i))}>×</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="field">
           <span>Labels</span>
           <LabelInput value={form.labels} onChange={(labels) => setForm({ ...form, labels })} suggestions={labelSuggestions} />

@@ -14,7 +14,8 @@ import { TaskRow } from '../components/TaskRow';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDay, todayIso } from '../format';
-import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, type Sprint, type Task } from '../types';
+import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, type Sprint, type Task, TASK_TYPES, TASK_TYPE_LABEL,
+} from '../types';
 
 type SprintDialog = { kind: 'edit' | 'start'; sprint: Sprint } | { kind: 'create' } | null;
 
@@ -27,6 +28,8 @@ export function BacklogPage() {
   useFocusSearch(searchRef);
 
   const [tasks, setTasks] = useState<Task[] | null>(null);
+  // Tasks whose delete can still be undone.
+  const [hidden, setHidden] = useState<number[] | null>(null);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [error, setError] = useState('');
   // Filters live in the URL so they can be bookmarked, shared and saved.
@@ -36,6 +39,7 @@ export function BacklogPage() {
   const priority = (params.get('priority') ?? '') as Priority | '';
   const label = params.get('label') ?? '';
   const epicFilter = params.get('epic') ?? '';
+  const typeFilter = params.get('type') ?? '';
   const setFilter = (name: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value) next.set(name, value);
@@ -80,15 +84,17 @@ export function BacklogPage() {
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (tasks ?? [])
+      .filter((t) => !hidden?.includes(t.id))
       .filter((t) => !q || t.title.toLowerCase().includes(q) || t.key.toLowerCase().includes(q)
         || t.description.toLowerCase().includes(q))
       .filter((t) => !priority || t.priority === priority)
       .filter((t) => !label || t.labels.includes(label))
       .filter((t) => !epicFilter || (epicFilter === 'none' ? !t.epic : t.epic?.id === Number(epicFilter)))
+      .filter((t) => !typeFilter || t.type === typeFilter)
       .filter((t) => !assignee
         || (assignee === 'none' ? !t.assignee : t.assignee?.id === Number(assignee === 'me' ? user?.id : assignee)))
       .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || a.id - b.id);
-  }, [tasks, query, priority, label, assignee, epicFilter, user]);
+  }, [tasks, query, priority, label, assignee, epicFilter, typeFilter, user, hidden]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -105,7 +111,7 @@ export function BacklogPage() {
     .sort((a, b) => (a.state === 'ACTIVE' ? -1 : b.state === 'ACTIVE' ? 1 : a.id - b.id));
   const hasActive = openSprints.some((s) => s.state === 'ACTIVE');
   const backlog = visible.filter((t) => !t.sprint && (showDone || t.status !== 'DONE'));
-  const filtered = !!(query || priority || label || assignee || epicFilter);
+  const filtered = !!(query || priority || label || assignee || epicFilter || typeFilter);
   const ordered = [...openSprints.flatMap((s) => visible.filter((t) => t.sprint?.id === s.id)), ...backlog];
 
   /** Click toggles one row; shift-click selects the range since the last click. */
@@ -167,9 +173,41 @@ export function BacklogPage() {
     onDrop: (e: DragEvent) => onDrop(e, sprintId),
   });
 
+  /** Saves an in-place edit optimistically; the toast offers undo. */
+  const patch = async (task: Task, change: Partial<Task>, save: (t: Task) => Promise<Task>, undo: () => Promise<Task>,
+    message: string) => {
+    setTasks((current) => current?.map((t) => (t.id === task.id ? { ...t, ...change } : t)) ?? null);
+    try {
+      const saved = await save(task);
+      setTasks((current) => current?.map((t) => (t.id === saved.id ? saved : t)) ?? null);
+      toast(message, 'success', { action: { label: 'Undo', onClick: () => undo().then(load).catch(load) } });
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+      load();
+    }
+  };
+
+  const inputOf = (t: Task) => ({
+    title: t.title, description: t.description, priority: t.priority, dueDate: t.dueDate, labels: t.labels,
+    storyPoints: t.storyPoints, epicId: t.epic?.id ?? null, type: t.type,
+  });
+
+  const inline = canEdit && project ? {
+    members: project.members,
+    onRename: (t: Task, title: string) => patch(t, { title }, () => api.updateTask(t.id, { ...inputOf(t), title }),
+      () => api.updateTask(t.id, inputOf(t)), `${t.key} renamed`),
+    onPoints: (t: Task, storyPoints: number | null) => patch(t, { storyPoints },
+      () => api.updateTask(t.id, { ...inputOf(t), storyPoints }), () => api.updateTask(t.id, inputOf(t)),
+      storyPoints === null ? `${t.key} estimate removed` : `${t.key} estimated at ${storyPoints}`),
+    onAssign: (t: Task, userId: number | null) => patch(t,
+      { assignee: project.members.find((m) => m.id === userId) ?? null },
+      () => api.assign(t.id, userId), () => api.assign(t.id, t.assignee?.id ?? null),
+      userId ? `${t.key} assigned` : `${t.key} unassigned`),
+  } : undefined;
+
   const row = (task: Task) => (
     <TaskRow key={task.id} task={task} className={dragging === task.id ? 'dragging' : ''}
-      selected={selected.includes(task.id)}
+      selected={selected.includes(task.id)} inline={inline}
       onToggleSelect={canEdit ? (shift) => toggleSelect(task, shift) : undefined}
       rowProps={{
         draggable: canEdit,
@@ -240,6 +278,10 @@ export function BacklogPage() {
         <select value={label} onChange={(e) => setFilter('label', e.target.value)} aria-label="Label">
           <option value="">Any label</option>
           {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+        </select>
+        <select value={typeFilter} onChange={(e) => setFilter('type', e.target.value)} aria-label="Type">
+          <option value="">Any type</option>
+          {TASK_TYPES.map((t) => <option key={t} value={t}>{TASK_TYPE_LABEL[t]}</option>)}
         </select>
         <select value={epicFilter} onChange={(e) => setFilter('epic', e.target.value)} aria-label="Epic">
           <option value="">Any epic</option>
@@ -321,10 +363,10 @@ export function BacklogPage() {
       )}
 
       {selected.length > 0 && (
-        <BulkBar selected={selected} members={project.members} sprints={sprints} epics={epics}
+        <BulkBar selected={selected} tasks={tasks ?? []} members={project.members} sprints={sprints} epics={epics}
           onClear={() => setSelected([])} onDone={() => {
             load();
-          }} />
+          }} onHide={setHidden} />
       )}
       {savingFilter && (
         <SaveFilterModal projectKey={key} query={params.toString()} onClose={() => setSavingFilter(false)}

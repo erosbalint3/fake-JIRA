@@ -4,6 +4,7 @@ export type Scope = 'AVAILABLE' | 'MINE' | 'REPORTED' | 'ALL';
 export type SprintState = 'PLANNED' | 'ACTIVE' | 'COMPLETED';
 
 export type Role = 'OWNER' | 'MEMBER' | 'VIEWER';
+export type TaskType = 'TASK' | 'BUG' | 'STORY' | 'SPIKE';
 export type EmailFrequency = 'OFF' | 'INSTANT' | 'DAILY' | 'WEEKLY';
 export type RegistrationMode = 'OPEN' | 'INVITE' | 'APPROVAL';
 export type LinkType = 'BLOCKS' | 'RELATES' | 'DUPLICATES';
@@ -90,6 +91,7 @@ export interface Task {
   description: string;
   priority: Priority;
   status: Status;
+  type: TaskType;
   reporter: User;
   assignee: User | null;
   sprint: SprintRef | null;
@@ -118,6 +120,7 @@ export interface TaskInput {
   labels: string[];
   storyPoints: number | null;
   epicId: number | null;
+  type: TaskType;
 }
 
 export interface CreateTaskInput extends TaskInput {
@@ -125,6 +128,7 @@ export interface CreateTaskInput extends TaskInput {
   assigneeId: number | null;
   sprintId: number | null;
   parentId?: number | null;
+  checklist?: string[];
 }
 
 export interface BulkChange {
@@ -136,6 +140,7 @@ export interface BulkChange {
   clearSprint?: boolean;
   epicId?: number;
   clearEpic?: boolean;
+  type?: TaskType;
   addLabels?: string[];
   removeLabels?: string[];
   delete?: boolean;
@@ -240,6 +245,8 @@ export interface Comment {
   body: string;
   createdAt: string;
   editedAt: string | null;
+  parentId: number | null;
+  reactions: Reaction[];
 }
 
 export interface ChecklistItem {
@@ -253,6 +260,48 @@ export interface Activity {
   actor: User;
   message: string;
   createdAt: string;
+  /** Text before/after a description change. */
+  before: string | null;
+  after: string | null;
+}
+
+export interface Reaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
+  users: string[];
+}
+
+export interface TaskTemplate {
+  id: number;
+  name: string;
+  type: TaskType;
+  title: string;
+  description: string;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  storyPoints: number | null;
+}
+
+export type Frequency = 'DAILY' | 'WEEKDAYS' | 'WEEKLY' | 'MONTHLY';
+
+export interface RecurringTask {
+  id: number;
+  title: string;
+  description: string;
+  type: TaskType;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  assignee: User | null;
+  frequency: Frequency;
+  dayOfWeek: number;
+  dayOfMonth: number;
+  dueInDays: number | null;
+  nextRun: string;
+  active: boolean;
+  lastTaskKey: string | null;
 }
 
 export interface Attachment {
@@ -337,3 +386,7 @@ export const EMAIL_FREQUENCY_LABEL: Record<EmailFrequency, string> = {
   DAILY: 'Daily digest',
   WEEKLY: 'Weekly digest (Mondays)',
 };
+
+export const TASK_TYPES: TaskType[] = ['TASK', 'BUG', 'STORY', 'SPIKE'];
+export const TASK_TYPE_LABEL: Record<TaskType, string> = { TASK: 'Task', BUG: 'Bug', STORY: 'Story', SPIKE: 'Spike' };
+export const REACTIONS = ['👍', '🎉', '❤️', '😄', '👀', '✅'];

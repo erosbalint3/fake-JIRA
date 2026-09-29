@@ -2,7 +2,7 @@ import type {
   Activity, AdminUser, Attachment, Backup, BoardColumn, BulkChange, Burndown, ChecklistItem, Comment,
   CreateTaskInput, DevLink, EmailFrequency, Epic, GithubSettings, ImportResult, Invite, LinkType, Notification,
   Priority, Profile, Project, RegistrationMode, Role, SavedFilter, Scope, Sprint, Status, Task, TaskInput,
-  TaskLink, TimeEntry, TimeReport, User, VelocityEntry,
+  TaskLink, TimeEntry, TimeReport, User, VelocityEntry, TaskTemplate, RecurringTask, TaskType, Frequency,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -104,6 +104,7 @@ export interface TaskFilters {
   sprint?: string;
   assignee?: string;
   epic?: string;
+  type?: TaskType | '';
 }
 
 function query(params: Record<string, string | number | undefined | null>) {
@@ -224,6 +225,21 @@ export const api = {
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
   addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
+  replyToComment: (id: number, parentId: number, body: string) =>
+    request<Comment>('POST', `/tasks/${id}/comments`, { body, parentId }),
+  react: (id: number, commentId: number, emoji: string) =>
+    request<Comment>('PUT', `/tasks/${id}/comments/${commentId}/reactions`, { emoji }),
+  cloneTask: (id: number, subtasks: boolean) => request<Task>('POST', `/tasks/${id}/clone`, { subtasks }),
+  moveTask: (id: number, projectKey: string) => request<Task>('POST', `/tasks/${id}/move`, { projectKey }),
+  templates: (key: string) => request<TaskTemplate[]>('GET', `/projects/${key}/templates`),
+  createTemplate: (key: string, input: TemplateInput) => request<TaskTemplate>('POST', `/projects/${key}/templates`, input),
+  updateTemplate: (id: number, input: TemplateInput) => request<TaskTemplate>('PUT', `/templates/${id}`, input),
+  deleteTemplate: (id: number) => request<void>('DELETE', `/templates/${id}`),
+  recurring: (key: string) => request<RecurringTask[]>('GET', `/projects/${key}/recurring`),
+  createRecurring: (key: string, input: RecurringInput) => request<RecurringTask>('POST', `/projects/${key}/recurring`, input),
+  updateRecurring: (id: number, input: RecurringInput) => request<RecurringTask>('PUT', `/recurring/${id}`, input),
+  deleteRecurring: (id: number) => request<void>('DELETE', `/recurring/${id}`),
+  runRecurring: (id: number) => request<Task>('POST', `/recurring/${id}/run`),
   editComment: (id: number, commentId: number, body: string) =>
     request<Comment>('PUT', `/tasks/${id}/comments/${commentId}`, { body }),
   deleteComment: (id: number, commentId: number) => request<void>('DELETE', `/tasks/${id}/comments/${commentId}`),
@@ -310,6 +326,23 @@ export interface AdminOverview {
   /** Public URL used in email links; learned from admin visits unless APP_BASE_URL is set. */
   siteUrl: string;
   siteUrlConfigured: boolean;
+}
+
+export type TemplateInput = Omit<TaskTemplate, 'id'>;
+
+export interface RecurringInput {
+  title: string;
+  description: string;
+  type: TaskType;
+  priority: Priority;
+  labels: string[];
+  checklist: string[];
+  assigneeId: number | null;
+  frequency: Frequency;
+  dayOfWeek: number;
+  dayOfMonth: number;
+  dueInDays: number | null;
+  active: boolean;
 }
 
 export interface PasswordRules {
