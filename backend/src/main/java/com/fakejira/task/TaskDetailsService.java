@@ -45,11 +45,14 @@ public class TaskDetailsService {
     private final NotificationService notifications;
     private final LiveEvents live;
     private final ChatNotifier chat;
+    private final CommentReactionRepository reactions;
 
     public TaskDetailsService(TaskSupport support, TaskService taskService, CommentRepository comments,
                               ChecklistItemRepository checklist, TaskActivityRepository activity,
                               TaskLinkRepository links, TimeEntryRepository time, DevLinkRepository devLinks,
-                              NotificationService notifications, LiveEvents live, ChatNotifier chat) {
+                              NotificationService notifications, LiveEvents live, ChatNotifier chat,
+                              CommentReactionRepository reactions) {
+        this.reactions = reactions;
         this.support = support;
         this.taskService = taskService;
         this.comments = comments;
@@ -65,15 +68,68 @@ public class TaskDetailsService {
 
     // ---------------------------------------------------------------- comments
 
+    /** Emoji people can react with. */
+    static final List<String> REACTIONS = List.of("👍", "🎉", "❤️", "😄", "👀", "✅");
+
     @Transactional(readOnly = true)
     public List<CommentResponse> comments(User user, Long taskId) {
         support.memberTask(taskId, user);
-        return comments.findForTask(taskId).stream().map(CommentResponse::of).toList();
+        Map<Long, List<CommentReaction>> byComment = new HashMap<>();
+        for (CommentReaction r : reactions.findForTask(taskId)) {
+            byComment.computeIfAbsent(r.getComment().getId(), k -> new java.util.ArrayList<>()).add(r);
+        }
+        return comments.findForTask(taskId).stream()
+                .map(c -> CommentResponse.of(c, summarize(byComment.getOrDefault(c.getId(), List.of()), user)))
+                .toList();
+    }
+
+    private static List<TaskDtos.ReactionSummary> summarize(List<CommentReaction> list, User viewer) {
+        Map<String, List<CommentReaction>> byEmoji = new java.util.LinkedHashMap<>();
+        for (String emoji : REACTIONS) {
+            List<CommentReaction> matching = list.stream().filter(r -> r.getEmoji().equals(emoji)).toList();
+            if (!matching.isEmpty()) {
+                byEmoji.put(emoji, matching);
+            }
+        }
+        return byEmoji.entrySet().stream().map(e -> new TaskDtos.ReactionSummary(e.getKey(), e.getValue().size(),
+                e.getValue().stream().anyMatch(r -> r.getUser().getId().equals(viewer.getId())),
+                e.getValue().stream().map(r -> r.getUser().getName()).toList())).toList();
+    }
+
+    /** Adds or removes the user's reaction. Viewers can react too. */
+    public CommentResponse toggleReaction(User user, Long taskId, Long commentId, String emoji) {
+        Task task = support.memberTask(taskId, user);
+        if (!REACTIONS.contains(emoji)) {
+            throw ApiException.badRequest("That reaction is not available.");
+        }
+        Comment comment = commentOf(task, commentId);
+        reactions.findByCommentIdAndUserIdAndEmoji(commentId, user.getId(), emoji)
+                .ifPresentOrElse(reactions::delete, () -> reactions.save(new CommentReaction(comment, user, emoji)));
+        reactions.flush();
+        live.taskChanged(task);
+        return CommentResponse.of(comment, summarize(reactions.findForComment(commentId), user));
     }
 
     public CommentResponse addComment(User user, Long taskId, String body) {
+        return addComment(user, taskId, body, null);
+    }
+
+    public CommentResponse addComment(User user, Long taskId, String body, Long parentId) {
         Task task = support.editableTask(taskId, user);
-        Comment comment = comments.save(new Comment(task, user, body.trim()));
+        Comment parent = null;
+        if (parentId != null) {
+            parent = commentOf(task, parentId);
+            // Replies stay one level deep: answering a reply joins the same thread.
+            if (parent.getParent() != null) {
+                parent = parent.getParent();
+            }
+        }
+        Comment created = new Comment(task, user, body.trim());
+        created.setParent(parent);
+        Comment comment = comments.save(created);
+        if (parent != null && !parent.getAuthor().getId().equals(user.getId())) {
+            notifications.notify(parent.getAuthor(), user, task, "replied to your comment on");
+        }
 
         Map<Long, User> mentioned = mentionedMembers(task, comment.getBody(), Set.of());
         mentioned.values().forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
@@ -117,6 +173,11 @@ public class TaskDetailsService {
         if (author && !task.getProject().canEdit(user)) {
             throw ApiException.forbidden("Viewers cannot change this project.");
         }
+        for (Comment reply : comments.findByParentId(comment.getId())) {
+            reactions.deleteForComment(reply.getId());
+            comments.delete(reply);
+        }
+        reactions.deleteForComment(comment.getId());
         comments.delete(comment);
         live.taskChanged(task);
     }

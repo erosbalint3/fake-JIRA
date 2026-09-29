@@ -14,5 +14,11 @@ public record TaskFilter(
         String sprint,
         String assignee,
         /** Epic id or "none". */
-        String epic) {
+        String epic,
+        TaskType type) {
+
+    public TaskFilter(String project, TaskScope scope, String q, TaskPriority priority, TaskStatus status, String label,
+                      String sprint, String assignee, String epic) {
+        this(project, scope, q, priority, status, label, sprint, assignee, epic, null);
+    }
 }

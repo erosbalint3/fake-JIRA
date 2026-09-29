@@ -106,6 +106,10 @@ public class Task {
             inverseJoinColumns = @JoinColumn(name = "user_id"))
     private Set<User> watchers = new LinkedHashSet<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "task_type", nullable = false, length = 10, columnDefinition = "varchar(10) default 'TASK'")
+    private TaskType type = TaskType.TASK;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -131,6 +135,12 @@ public class Task {
 
     public String getKey() {
         return project.getKey() + "-" + number;
+    }
+
+    /** Moves the task to another project under a new number there. */
+    public void moveTo(Project target, int newNumber) {
+        this.project = target;
+        this.number = newNumber;
     }
 
     public boolean isReporter(User user) {
@@ -272,5 +282,13 @@ public class Task {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public TaskType getType() {
+        return type;
+    }
+
+    public void setType(TaskType type) {
+        this.type = type == null ? TaskType.TASK : type;
     }
 }

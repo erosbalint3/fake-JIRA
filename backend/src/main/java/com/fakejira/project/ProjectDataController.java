@@ -12,6 +12,7 @@ import com.fakejira.task.TaskPriority;
 import com.fakejira.task.TaskRepository;
 import com.fakejira.task.TaskService;
 import com.fakejira.task.TaskStatus;
+import com.fakejira.task.TaskType;
 import com.fakejira.task.TimeEntry;
 import com.fakejira.task.TimeEntryRepository;
 import com.fakejira.user.User;
@@ -117,7 +118,7 @@ public class ProjectDataController {
 
     // ---------------------------------------------------------------- CSV export
 
-    static final List<String> COLUMNS = List.of("Key", "Title", "Description", "Status", "Priority", "Assignee",
+    static final List<String> COLUMNS = List.of("Key", "Type", "Title", "Description", "Status", "Priority", "Assignee",
             "Reporter", "Labels", "Due date", "Story points", "Sprint", "Epic", "Parent", "Time spent (minutes)",
             "Created", "Updated");
 
@@ -136,7 +137,7 @@ public class ProjectDataController {
         StringBuilder csv = new StringBuilder("﻿").append(Csv.row(COLUMNS));
         for (Task task : list) {
             csv.append(Csv.row(Arrays.asList(
-                    task.getKey(), task.getTitle(), task.getDescription(), task.getStatus().label(),
+                    task.getKey(), task.getType().label(), task.getTitle(), task.getDescription(), task.getStatus().label(),
                     task.getPriority().label(),
                     task.getAssignee() == null ? "" : task.getAssignee().getUsername(),
                     task.getReporter().getUsername(),
@@ -217,6 +218,8 @@ public class ProjectDataController {
                 }
                 TaskPriority priority = parseEnum(TaskPriority.class, cell(row, header, "priority"), TaskPriority.MEDIUM, "priority");
                 TaskStatus status = parseEnum(TaskStatus.class, cell(row, header, "status"), TaskStatus.TODO, "status");
+                TaskType type = parseEnum(TaskType.class, firstNonBlank(cell(row, header, "type"), cell(row, header, "issue type")),
+                        TaskType.TASK, "type");
                 Long assigneeId = null;
                 String assignee = cell(row, header, "assignee");
                 if (!assignee.isBlank()) {
@@ -255,7 +258,7 @@ public class ProjectDataController {
                 }
                 var created = taskService.create(user, new CreateTaskRequest(project.getKey(), title.trim(), description,
                         priority, due, labels.size() > 10 ? labels.subList(0, 10) : labels, assigneeId, null, points,
-                        epicId, null));
+                        epicId, null, type, List.of()));
                 if (status != TaskStatus.TODO) {
                     taskService.changeStatus(user, created.id(), status);
                 }

@@ -58,6 +58,11 @@ public class TaskSupport {
         activity.save(new TaskActivity(task, actor, message));
     }
 
+    /** Records a change and keeps the text before and after it (e.g. the description). */
+    public void recordChange(Task task, User actor, String message, String before, String after) {
+        activity.save(new TaskActivity(task, actor, message, before, after));
+    }
+
     /** Reporter, assignee and watchers, without duplicates. */
     public Set<User> participants(Task task) {
         Map<Long, User> byId = new LinkedHashMap<>();

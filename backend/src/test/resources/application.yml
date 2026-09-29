@@ -14,5 +14,7 @@ app:
     enabled: false
   backup:
     cron: "-"
+  recurring:
+    cron: "-"
   digest:
     cron: "-"

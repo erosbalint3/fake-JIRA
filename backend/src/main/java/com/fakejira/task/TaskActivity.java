@@ -36,7 +36,28 @@ public class TaskActivity {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** Text before and after a description change, for showing what changed. */
+    @Column(length = 5000)
+    private String beforeText;
+
+    @Column(length = 5000)
+    private String afterText;
+
     protected TaskActivity() {
+    }
+
+    public TaskActivity(Task task, User actor, String message, String beforeText, String afterText) {
+        this(task, actor, message);
+        this.beforeText = beforeText;
+        this.afterText = afterText;
+    }
+
+    public String getBeforeText() {
+        return beforeText;
+    }
+
+    public String getAfterText() {
+        return afterText;
     }
 
     public TaskActivity(Task task, User actor, String message) {
