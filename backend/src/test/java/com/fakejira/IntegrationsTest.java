@@ -40,8 +40,8 @@ class IntegrationsTest extends ApiTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".csv")))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertThat(csv).startsWith("﻿Key,Title,Description");
-        assertThat(csv).contains(key + "-1,\"'=HYPERLINK(\"\"http://evil\"\")\",\"line one\nline, two\",To do,Medium");
+        assertThat(csv).startsWith("﻿Key,Type,Title,Description");
+        assertThat(csv).contains(key + "-1,Task,\"'=HYPERLINK(\"\"http://evil\"\")\",\"line one\nline, two\",To do,Medium");
 
         String upload = "Title,Description,Status,Priority,Assignee,Labels,Due date,Story points,Epic\r\n"
                 + "Imported one,\"multi\nline\",In progress,High," + bob.username() + ",a;b,2026-12-01,5,Launch\r\n"

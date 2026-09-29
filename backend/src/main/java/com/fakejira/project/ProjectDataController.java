@@ -119,7 +119,7 @@ public class ProjectDataController {
     // ---------------------------------------------------------------- CSV export
 
     static final List<String> COLUMNS = List.of("Key", "Type", "Title", "Description", "Status", "Priority", "Assignee",
-            "Reporter", "Labels", "Due date", "Story points", "Sprint", "Epic", "Parent", "Time spent (minutes)",
+            "Reporter", "Labels", "Due date", "Story points", "Sprint", "Epic", "Release", "Parent", "Time spent (minutes)",
             "Created", "Updated");
 
     @GetMapping("/api/projects/{key}/export.csv")
@@ -146,6 +146,7 @@ public class ProjectDataController {
                     task.getStoryPoints() == null ? "" : task.getStoryPoints().toString(),
                     task.getSprint() == null ? "" : task.getSprint().getName(),
                     task.getEpic() == null ? "" : task.getEpic().getName(),
+                    task.getRelease() == null ? "" : task.getRelease().getName(),
                     task.getParent() == null ? "" : task.getParent().getKey(),
                     String.valueOf(minutes.getOrDefault(task.getId(), 0)),
                     task.getCreatedAt().toString(),

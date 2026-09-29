@@ -88,6 +88,17 @@ public class ProjectService {
         access.requireOwner(project, user);
         project.setName(request.name().trim());
         project.setDescription(trim(request.description()));
+        if (request.kanban() != null && request.kanban() != project.isKanban()) {
+            if (request.kanban() && sprints.findByProjectIdOrderByCreatedAtAsc(project.getId()).stream()
+                    .anyMatch(s -> s.getState() == com.fakejira.sprint.SprintState.ACTIVE)) {
+                throw ApiException.badRequest("Complete the active sprint before switching to Kanban.");
+            }
+            project.setKanban(request.kanban());
+            audit.record(user, "project.mode", project.getKey(), request.kanban() ? "kanban" : "scrum");
+        }
+        if (request.color() != null) {
+            project.setColor(request.color());
+        }
         live.projectChanged(project);
         return ProjectResponse.of(project);
     }
@@ -174,7 +185,9 @@ public class ProjectService {
         tasks.findByProjectId(project.getId()).stream().filter(task -> task.getParent() == null).forEach(cleanup::delete);
         events.publishEvent(new ProjectDeleting(project.getId()));
         sprints.deleteAll(sprints.findByProjectIdOrderByCreatedAtAsc(project.getId()));
-        epics.deleteAll(epics.findByProjectIdOrderByCreatedAtAsc(project.getId()));
+        var projectEpics = epics.findByProjectIdOrderByCreatedAtAsc(project.getId());
+        projectEpics.forEach(epic -> epic.getDependsOn().clear());
+        epics.deleteAll(projectEpics);
         columns.deleteAll(columns.findByProjectIdOrderByPositionAscIdAsc(project.getId()));
         filters.deleteForProject(project.getId());
         invites.deleteForProject(project.getId());

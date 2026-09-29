@@ -7,6 +7,7 @@ import com.fakejira.epic.Epic;
 import com.fakejira.epic.EpicRepository;
 import com.fakejira.events.LiveEvents;
 import com.fakejira.integration.ChatNotifier;
+import com.fakejira.sprint.SprintScope;
 import com.fakejira.notification.NotificationService;
 import com.fakejira.project.Project;
 import com.fakejira.project.ProjectAccess;
@@ -51,12 +52,14 @@ public class TaskService {
     private final ChatNotifier chat;
     private final ChecklistItemRepository checklistItems;
     private final TaskKeyAliasRepository aliases;
+    private final SprintScope scope;
 
     public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
                        EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
                        NotificationService notifications, LiveEvents live, ChatNotifier chat,
-                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases) {
+                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope) {
         this.aliases = aliases;
+        this.scope = scope;
         this.chat = chat;
         this.checklistItems = checklistItems;
         this.tasks = tasks;
@@ -156,6 +159,8 @@ public class TaskService {
             task.setAssignee(editor(project, request.assigneeId()));
         }
         tasks.save(task);
+        scope.statusChanged(task, null, task.getStatus());
+        scope.sprintChanged(task, null, user);
         if (request.checklist() != null) {
             int position = 0;
             for (String text : request.checklist()) {
@@ -266,6 +271,7 @@ public class TaskService {
         }
         support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
         chat.statusChanged(task, user, task.getStatus().label(), status.label());
+        scope.statusChanged(task, task.getStatus(), status);
         task.setStatus(status);
         // A column pinned to another status no longer fits; fall back to the first column of the new status.
         if (task.getBoardColumn() != null && task.getBoardColumn().getStatus() != status) {
@@ -344,7 +350,9 @@ public class TaskService {
         Sprint target = sprintId == null ? null : openSprint(task.getProject(), sprintId);
         Long current = task.getSprint() == null ? null : task.getSprint().getId();
         if (!Objects.equals(current, sprintId)) {
+            Sprint before = task.getSprint();
             task.setSprint(target);
+            scope.sprintChanged(task, before, user);
             support.record(task, user, target == null ? "moved the task to the backlog" : "moved the task to " + target.getName());
             tasks.saveAndFlush(task);
             live.taskChanged(task);

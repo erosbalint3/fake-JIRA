@@ -8,11 +8,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /** A larger goal grouping several tasks, shown on the roadmap. */
 @Entity
@@ -40,6 +44,12 @@ public class Epic {
     private LocalDate startDate;
 
     private LocalDate dueDate;
+
+    /** Epics that must be finished before this one can start. */
+    @ManyToMany
+    @JoinTable(name = "epic_dependencies", joinColumns = @JoinColumn(name = "epic_id"),
+            inverseJoinColumns = @JoinColumn(name = "depends_on_id"))
+    private Set<Epic> dependsOn = new LinkedHashSet<>();
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -106,5 +116,9 @@ public class Epic {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Set<Epic> getDependsOn() {
+        return dependsOn;
     }
 }

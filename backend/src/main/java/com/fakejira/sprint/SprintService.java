@@ -7,6 +7,7 @@ import com.fakejira.project.Project;
 import com.fakejira.project.ProjectAccess;
 import com.fakejira.sprint.SprintDtos.Burndown;
 import com.fakejira.sprint.SprintDtos.BurndownPoint;
+import com.fakejira.sprint.SprintDtos.ScopeChange;
 import com.fakejira.sprint.SprintDtos.SprintRequest;
 import com.fakejira.sprint.SprintDtos.SprintResponse;
 import com.fakejira.sprint.SprintDtos.VelocityEntry;
@@ -38,11 +39,16 @@ public class SprintService {
     private final ProjectAccess access;
     private final LiveEvents live;
     private final ChatNotifier chat;
+    private final SprintScope scope;
+    private final SprintChangeRepository changes;
     private final Clock clock;
 
     public SprintService(SprintRepository sprints, TaskRepository tasks, TaskSupport taskSupport,
-                         ProjectAccess access, LiveEvents live, ChatNotifier chat) {
+                         ProjectAccess access, LiveEvents live, ChatNotifier chat, SprintScope scope,
+                         SprintChangeRepository changes) {
         this.chat = chat;
+        this.scope = scope;
+        this.changes = changes;
         this.sprints = sprints;
         this.tasks = tasks;
         this.taskSupport = taskSupport;
@@ -59,6 +65,7 @@ public class SprintService {
 
     public SprintResponse create(User user, String projectKey, SprintRequest request) {
         Project project = access.editorProject(projectKey, user);
+        requireScrum(project);
         String name = blank(request.name())
                 ? project.getKey() + " Sprint " + (sprints.countByProjectId(project.getId()) + 1)
                 : request.name().trim();
@@ -89,6 +96,7 @@ public class SprintService {
         if (sprint.getState() != SprintState.PLANNED) {
             throw ApiException.badRequest("Only planned sprints can be started.");
         }
+        requireScrum(sprint.getProject());
         sprints.findFirstByProjectIdAndState(sprint.getProject().getId(), SprintState.ACTIVE).ifPresent(active -> {
             throw ApiException.conflict(active.getName() + " is still active. Complete it first.");
         });
@@ -114,6 +122,7 @@ public class SprintService {
         int carriedPoints = 0;
         for (Task task : tasks.findBySprintId(sprint.getId())) {
             if (task.getStatus() != TaskStatus.DONE) {
+                scope.carriedOver(task, sprint);
                 task.setSprint(null);
                 taskSupport.record(task, user, "moved the task to the backlog when " + sprint.getName() + " was completed");
                 carried++;
@@ -153,10 +162,40 @@ public class SprintService {
         }
         ZoneId zone = clock.getZone();
         List<Task> sprintTasks = tasks.findBySprintId(sprint.getId());
-        int total = sprintTasks.size() + sprint.getCarriedOver();
-        int totalPoints = sprintTasks.stream().mapToInt(SprintService::points).sum() + sprint.getCarriedOverPoints();
+        List<SprintChange> log = changes.findBySprintIdOrderByChangedAtAsc(sprint.getId());
+        // Work that was in the sprint at some point: current tasks, tasks carried over at the end, and tasks
+        // taken out mid-sprint. Each counts only while it was in the sprint.
+        java.util.Map<Long, Instant> addedAt = new java.util.HashMap<>();
+        java.util.Map<Long, Instant> removedAt = new java.util.HashMap<>();
+        java.util.Map<Long, Integer> removedPoints = new java.util.HashMap<>();
+        boolean carriedLogged = false;
+        for (SprintChange change : log) {
+            if (change.isAdded()) {
+                addedAt.put(change.getTaskId(), change.getChangedAt());
+                removedAt.remove(change.getTaskId());
+            } else {
+                removedAt.put(change.getTaskId(), change.getChangedAt());
+                removedPoints.put(change.getTaskId(), change.getPoints() == null ? 0 : change.getPoints());
+                carriedLogged |= change.isCarried();
+            }
+        }
+        java.util.Set<Long> current = new java.util.HashSet<>();
+        sprintTasks.forEach(t -> current.add(t.getId()));
+        removedAt.keySet().removeAll(current);
+        // Sprints completed before carried-over tasks were logged only have totals.
+        int legacyCarried = carriedLogged ? 0 : sprint.getCarriedOver();
+        int legacyCarriedPoints = carriedLogged ? 0 : sprint.getCarriedOverPoints();
+
+        int total = sprintTasks.size() + removedAt.size() + legacyCarried;
+        int totalPoints = sprintTasks.stream().mapToInt(SprintService::points).sum()
+                + removedPoints.entrySet().stream().filter(e -> removedAt.containsKey(e.getKey())).mapToInt(java.util.Map.Entry::getValue).sum()
+                + legacyCarriedPoints;
         List<Task> done = sprintTasks.stream().filter(task -> task.getStatus() == TaskStatus.DONE).toList();
         int donePoints = done.stream().mapToInt(SprintService::points).sum();
+        List<ScopeChange> scopeChanges = log.stream().filter(c -> !c.isCarried())
+                .map(c -> new ScopeChange(c.getChangedAt().atZone(zone).toLocalDate(), c.getTaskKey(), c.getTaskTitle(),
+                        c.getPoints(), c.isAdded(), c.getActor()))
+                .toList();
 
         LocalDate start = sprint.getStartDate();
         LocalDate end = sprint.getEndDate();
@@ -171,23 +210,54 @@ public class SprintService {
                 : today();
         long days = Math.max(1, ChronoUnit.DAYS.between(start, end));
 
+        // The ideal line starts from the work committed on the first day.
+        Instant firstDayEnd = start.plusDays(1).atStartOfDay(zone).toInstant();
+        int committed = remainingAt(firstDayEnd, sprintTasks, addedAt, removedAt, removedPoints, legacyCarried, legacyCarriedPoints, false, true);
+        int committedPoints = remainingAt(firstDayEnd, sprintTasks, addedAt, removedAt, removedPoints, legacyCarried, legacyCarriedPoints, true, true);
         List<BurndownPoint> points = new ArrayList<>();
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             Instant endOfDay = day.plusDays(1).atStartOfDay(zone).toInstant();
             Integer remaining = null;
             Integer remainingPoints = null;
             if (!day.isAfter(lastActual)) {
-                List<Task> finished = done.stream()
-                        .filter(task -> task.getCompletedAt() != null && task.getCompletedAt().isBefore(endOfDay))
-                        .toList();
-                remaining = total - finished.size();
-                remainingPoints = totalPoints - finished.stream().mapToInt(SprintService::points).sum();
+                remaining = remainingAt(endOfDay, sprintTasks, addedAt, removedAt, removedPoints, legacyCarried, legacyCarriedPoints, false);
+                remainingPoints = remainingAt(endOfDay, sprintTasks, addedAt, removedAt, removedPoints, legacyCarried, legacyCarriedPoints, true);
             }
             double fraction = 1.0 - (double) ChronoUnit.DAYS.between(start, day) / days;
-            points.add(new BurndownPoint(day, remaining, round(total * fraction), remainingPoints,
-                    round(totalPoints * fraction)));
+            points.add(new BurndownPoint(day, remaining, round(committed * fraction), remainingPoints,
+                    round(committedPoints * fraction)));
         }
-        return new Burndown(SprintResponse.of(sprint), total, done.size(), totalPoints, donePoints, points);
+        return new Burndown(SprintResponse.of(sprint), total, done.size(), totalPoints, donePoints, points, scopeChanges);
+    }
+
+    /** Open work (tasks, or points) in the sprint at {@code at}. */
+    private static int remainingAt(Instant at, List<Task> sprintTasks, java.util.Map<Long, Instant> addedAt,
+                                   java.util.Map<Long, Instant> removedAt, java.util.Map<Long, Integer> removedPoints,
+                                   int legacyCarried, int legacyCarriedPoints, boolean countPoints) {
+        return remainingAt(at, sprintTasks, addedAt, removedAt, removedPoints, legacyCarried, legacyCarriedPoints,
+                countPoints, false);
+    }
+
+    /** Work in the sprint at {@code at}; {@code scopeOnly} also counts finished work (the committed scope). */
+    private static int remainingAt(Instant at, List<Task> sprintTasks, java.util.Map<Long, Instant> addedAt,
+                                   java.util.Map<Long, Instant> removedAt, java.util.Map<Long, Integer> removedPoints,
+                                   int legacyCarried, int legacyCarriedPoints, boolean countPoints, boolean scopeOnly) {
+        int open = countPoints ? legacyCarriedPoints : legacyCarried;
+        for (Task task : sprintTasks) {
+            Instant added = addedAt.get(task.getId());
+            boolean inSprint = added == null || added.isBefore(at);
+            boolean finished = !scopeOnly && task.getStatus() == TaskStatus.DONE && task.getCompletedAt() != null && task.getCompletedAt().isBefore(at);
+            if (inSprint && !finished) {
+                open += countPoints ? points(task) : 1;
+            }
+        }
+        for (var entry : removedAt.entrySet()) {
+            Instant added = addedAt.get(entry.getKey());
+            if ((added == null || added.isBefore(at)) && !entry.getValue().isBefore(at)) {
+                open += countPoints ? removedPoints.getOrDefault(entry.getKey(), 0) : 1;
+            }
+        }
+        return open;
     }
 
     /** Committed vs completed points and tasks for the last 10 completed sprints, oldest first. */
@@ -216,6 +286,12 @@ public class SprintService {
 
     private static double round(double value) {
         return Math.max(0, Math.round(value * 100) / 100.0);
+    }
+
+    private static void requireScrum(Project project) {
+        if (project.isKanban()) {
+            throw ApiException.badRequest(project.getKey() + " uses Kanban; switch it to Scrum to plan sprints.");
+        }
     }
 
     private Sprint editableSprint(Long id, User user) {

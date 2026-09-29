@@ -34,7 +34,18 @@ public final class ProjectDtos {
             String name,
 
             @Size(max = 1000, message = "Description must be at most 1000 characters")
-            String description) {
+            String description,
+
+            /** Kanban projects have no sprints: a continuous board and flow reports. Unchanged when null. */
+            Boolean kanban,
+
+            /** Accent colour like #2a78d6; empty clears it. Unchanged when null. */
+            @jakarta.validation.constraints.Pattern(regexp = "^(#[0-9a-fA-F]{6})?$", message = "Use a colour like #2a78d6")
+            String color) {
+
+        public UpdateProjectRequest(String name, String description) {
+            this(name, description, null, null);
+        }
     }
 
     public enum Role { OWNER, MEMBER, VIEWER }
@@ -62,7 +73,9 @@ public final class ProjectDtos {
             List<MemberResponse> members,
             boolean githubEnabled,
             boolean githubAutoDone,
-            Instant createdAt) {
+            Instant createdAt,
+            boolean kanban,
+            String color) {
 
         public static ProjectResponse of(Project project) {
             return new ProjectResponse(
@@ -83,7 +96,9 @@ public final class ProjectDtos {
                             .toList(),
                     project.getGithubSecret() != null,
                     project.isGithubAutoDone(),
-                    project.getCreatedAt());
+                    project.getCreatedAt(),
+                    project.isKanban(),
+                    project.getColor());
         }
     }
 }

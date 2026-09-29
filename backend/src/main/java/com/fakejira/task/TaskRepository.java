@@ -26,6 +26,8 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
 
     List<Task> findByEpicId(Long epicId);
 
+    List<Task> findByReleaseId(Long releaseId);
+
     List<Task> findByBoardColumnId(Long columnId);
 
     java.util.Optional<Task> findByProjectIdAndNumber(Long projectId, Integer number);

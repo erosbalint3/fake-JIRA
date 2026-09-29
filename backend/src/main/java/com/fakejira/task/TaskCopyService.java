@@ -27,10 +27,15 @@ public class TaskCopyService {
     private final ProjectAccess access;
     private final ProjectRepository projects;
     private final LiveEvents live;
+    private final com.fakejira.sprint.SprintScope scope;
+    private final StatusChangeRepository statuses;
 
     public TaskCopyService(TaskService taskService, TaskSupport support, TaskRepository tasks,
                            ChecklistItemRepository checklist, TaskKeyAliasRepository aliases, ProjectAccess access,
-                           ProjectRepository projects, LiveEvents live) {
+                           ProjectRepository projects, LiveEvents live, com.fakejira.sprint.SprintScope scope,
+                           StatusChangeRepository statuses) {
+        this.scope = scope;
+        this.statuses = statuses;
         this.taskService = taskService;
         this.support = support;
         this.tasks = tasks;
@@ -98,7 +103,10 @@ public class TaskCopyService {
     private void moveOne(Task task, Project target) {
         aliases.save(new TaskKeyAlias(task.getKey(), task));
         task.moveTo(target, target.allocateNumber());
+        var before = task.getSprint();
         task.setSprint(null);
+        scope.sprintChanged(task, before, null);
+        statuses.moveTask(task.getId(), target.getId());
         task.setEpic(null);
         task.setBoardColumn(null);
         if (task.getAssignee() != null && !target.canEdit(task.getAssignee())) {

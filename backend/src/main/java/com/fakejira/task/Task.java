@@ -2,6 +2,7 @@ package com.fakejira.task;
 
 import com.fakejira.board.BoardColumn;
 import com.fakejira.epic.Epic;
+import com.fakejira.release.Release;
 import com.fakejira.project.Project;
 import com.fakejira.sprint.Sprint;
 import com.fakejira.user.User;
@@ -93,6 +94,11 @@ public class Task {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "epic_id")
     private Epic epic;
+
+    /** The version this task ships in. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "release_id")
+    private Release release;
 
     /** Explicit board column; null means the first column of the task's status. */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -258,6 +264,14 @@ public class Task {
 
     public void setEpic(Epic epic) {
         this.epic = epic;
+    }
+
+    public Release getRelease() {
+        return release;
+    }
+
+    public void setRelease(Release release) {
+        this.release = release;
     }
 
     public BoardColumn getBoardColumn() {

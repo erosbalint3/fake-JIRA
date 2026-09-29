@@ -194,6 +194,12 @@ public final class TaskDtos {
         }
     }
 
+    public record ReleaseRef(Long id, String name, boolean released) {
+        public static ReleaseRef of(com.fakejira.release.Release release) {
+            return release == null ? null : new ReleaseRef(release.getId(), release.getName(), release.isReleased());
+        }
+    }
+
     public record EpicRef(Long id, String name, int colorIndex) {
         public static EpicRef of(Epic epic) {
             return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex());
@@ -236,7 +242,8 @@ public final class TaskDtos {
             boolean blocked,
             Instant createdAt,
             Instant updatedAt,
-            Instant completedAt) {
+            Instant completedAt,
+            ReleaseRef release) {
 
         public static TaskResponse of(Task task, int checklistTotal, int checklistDone, int subtaskTotal,
                                       int subtaskDone, int timeSpentMinutes, boolean blocked) {
@@ -268,7 +275,8 @@ public final class TaskDtos {
                     blocked,
                     task.getCreatedAt(),
                     task.getUpdatedAt(),
-                    task.getCompletedAt());
+                    task.getCompletedAt(),
+                    ReleaseRef.of(task.getRelease()));
         }
     }
 
