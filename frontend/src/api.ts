@@ -4,6 +4,7 @@ import type {
   Priority, Profile, Project, RegistrationMode, Role, SavedFilter, Scope, Sprint, Status, Task, TaskInput,
   TaskLink, TimeEntry, TimeReport, User, VelocityEntry, TaskTemplate, RecurringTask, TaskType, Frequency,
   Release, RetroItem, RetroKind, SprintReview, PokerState, FlowDay, CycleReport, Throughput,
+  SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -214,6 +215,40 @@ export const api = {
   revealPoker: (taskId: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/reveal`),
   acceptPoker: (taskId: number, points: number) => request<PokerState>('POST', `/tasks/${taskId}/poker/accept`, { points }),
   cancelPoker: (taskId: number) => request<void>('DELETE', `/tasks/${taskId}/poker`),
+
+  search: (q: string, limit = 200) => request<SearchResult>('GET', `/search${query({ q, limit: String(limit) })}`),
+  searchStats: (q: string, groupBy: string) => request<SearchGroup[]>('GET', `/search/stats${query({ q, groupBy })}`),
+  searchFields: () => request<SearchField[]>('GET', '/search/fields'),
+  textSearch: (q: string, limit = 30) => request<TextHit[]>('GET', `/search/text${query({ q, limit: String(limit) })}`),
+
+  teams: () => request<Team[]>('GET', '/teams'),
+  createTeam: (name: string, handle: string, description: string) =>
+    request<Team>('POST', '/teams', { name, handle, description }),
+  updateTeam: (id: number, name: string, handle: string, description: string) =>
+    request<Team>('PUT', `/teams/${id}`, { name, handle, description }),
+  deleteTeam: (id: number) => request<void>('DELETE', `/teams/${id}`),
+  addTeamMember: (id: number, login: string) => request<Team>('POST', `/teams/${id}/members`, { login }),
+  removeTeamMember: (id: number, userId: number) => request<Team>('DELETE', `/teams/${id}/members/${userId}`),
+
+  dashboards: () => request<Dashboard[]>('GET', '/dashboards'),
+  createDashboard: (name: string, widgets: Widget[]) => request<Dashboard>('POST', '/dashboards', { name, widgets }),
+  updateDashboard: (id: number, name: string, widgets: Widget[]) =>
+    request<Dashboard>('PUT', `/dashboards/${id}`, { name, widgets }),
+  deleteDashboard: (id: number) => request<void>('DELETE', `/dashboards/${id}`),
+  viewed: (taskId: number) => request<void>('POST', `/recent/${taskId}`),
+  recent: () => request<RecentTask[]>('GET', '/recent'),
+
+  calendar: (from: string, to: string, project?: string) =>
+    request<CalendarEvent[]>('GET', `/calendar${query({ from, to, project })}`),
+  calendarFeed: () => request<{ url: string | null }>('GET', '/profile/calendar-feed'),
+  resetCalendarFeed: () => request<{ url: string | null }>('POST', '/profile/calendar-feed'),
+  disableCalendarFeed: () => request<{ url: string | null }>('DELETE', '/profile/calendar-feed'),
+  setAway: (from: string | null, until: string, message: string) =>
+    request<User>('PUT', '/profile/away', { from, until, message }),
+  clearAway: () => request<User>('DELETE', '/profile/away'),
+  feed: (params: { project?: string; user?: string; before?: string; limit?: number } = {}) =>
+    request<FeedItem[]>('GET', `/activity${query({ ...params })}`),
+  projectEmail: (key: string) => request<{ address: string | null }>('GET', `/projects/${key}/email-address`),
 
   flow: (key: string, days = 30) => request<FlowDay[]>('GET', `/projects/${key}/flow?days=${days}`),
   cycleTime: (key: string, days = 90) => request<CycleReport>('GET', `/projects/${key}/cycle-time?days=${days}`),

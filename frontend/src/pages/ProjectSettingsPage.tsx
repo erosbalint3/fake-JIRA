@@ -148,6 +148,7 @@ export function ProjectSettingsPage() {
       {isOwner && <GithubSection project={project} onChange={refresh} />}
       {isOwner && <ChatHooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />
+      {canEdit && <EmailInSection projectKey={project.key} />}
 
       <section className="panel danger-zone">
         <div>
@@ -274,7 +275,8 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
           <li key={member.id}>
             <Avatar user={member} size={32} />
             <div className="member-text">
-              <strong>{member.displayName}{member.id === user?.id && <span className="muted"> (you)</span>}</strong>
+              <strong>{member.displayName}{member.id === user?.id && <span className="muted"> (you)</span>}
+                {member.awayUntil && <span className="away-badge" title={`Away until ${member.awayUntil}`}>away</span>}</strong>
               <span className="muted small">@{member.username} · {member.email}</span>
             </div>
             {member.role === 'OWNER' ? (
@@ -608,6 +610,28 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+/** When inbound mail is configured: the address that turns emails into tasks. */
+function EmailInSection({ projectKey }: { projectKey: string }) {
+  const toast = useToast();
+  const [address, setAddress] = useState<string | null>(null);
+  useEffect(() => {
+    api.projectEmail(projectKey).then((r) => setAddress(r.address)).catch(() => setAddress(null));
+  }, [projectKey]);
+  if (!address) return null;
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Create tasks by email</h2>
+      <p className="muted small hint">Members can email this address: the subject becomes the title and the text the description.
+        Replying to a notification email adds a comment.</p>
+      <div className="copy-field">
+        <input readOnly value={address} aria-label="Project email address" onFocus={(e) => e.target.select()} />
+        <button className="btn btn-soft btn-sm" onClick={() => navigator.clipboard.writeText(address)
+          .then(() => toast('Address copied')).catch(() => toast('Could not copy', 'error'))}>Copy</button>
+      </div>
     </section>
   );
 }

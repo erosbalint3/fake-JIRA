@@ -29,7 +29,7 @@ import { MarkdownEditor } from '../components/MarkdownEditor';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { TaskFormModal } from '../components/TaskFormModal';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
-import { fileSize, formatDate, formatMinutes, timeAgo } from '../format';
+import { fileSize, formatDate, formatDay, formatMinutes, timeAgo } from '../format';
 import {
   PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Activity, type Attachment, type ChecklistItem, type Comment,
   type DevLink, type Epic, type Release, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
@@ -102,6 +102,9 @@ export function TaskDetailPage() {
   }, [taskId]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!Number.isNaN(taskId)) api.viewed(taskId).catch(() => {});
+  }, [taskId]);
 
   useEffect(() => {
     if (!task) return;
@@ -479,12 +482,21 @@ export function TaskDetailPage() {
               <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label="Assignee"
                 onChange={(e) => {
                   const previous = task.assignee?.id ?? null;
+                  const next = assignable.find((m) => m.id === Number(e.target.value));
                   run(() => api.assign(task.id, e.target.value ? Number(e.target.value) : null),
-                    e.target.value ? 'Assignee updated' : 'Unassigned', () => api.assign(task.id, previous));
+                    !e.target.value ? 'Unassigned' : next?.awayUntil ? `Assigned — note: ${next.displayName} is away until ${formatDay(next.awayUntil)}`
+                      : 'Assignee updated', () => api.assign(task.id, previous));
                 }}>
                 <option value="">Unassigned</option>
-                {assignable.map((m) => <option key={m.id} value={m.id}>{m.displayName}{m.id === user.id ? ' (me)' : ''}</option>)}
+                {assignable.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}{m.id === user.id ? ' (me)' : ''}{m.awayUntil ? ` — away until ${formatDay(m.awayUntil)}` : ''}
+                  </option>
+                ))}
               </select>
+              {task.assignee?.awayUntil && (
+                <span className="away-note small">Away until {formatDay(task.assignee.awayUntil)}</span>
+              )}
             </dd>
             <dt>Priority</dt>
             <dd>

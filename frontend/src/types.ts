@@ -16,6 +16,8 @@ export interface User {
   /** Display name, or the username when none is set. */
   displayName: string;
   avatarUrl: string | null;
+  /** Last day of the person's out-of-office; set only while they are away today. */
+  awayUntil?: string | null;
 }
 
 export interface Member extends User {
@@ -343,6 +345,8 @@ export interface Profile {
   mustChangePassword: boolean;
   /** Connected sign-in providers, e.g. ["github"]. */
   identities: string[];
+  away: { from: string | null; until: string | null; message: string | null };
+  calendarFeed: boolean;
 }
 
 export interface BurndownPoint {
@@ -513,3 +517,99 @@ export const EMAIL_FREQUENCY_LABEL: Record<EmailFrequency, string> = {
 export const TASK_TYPES: TaskType[] = ['TASK', 'BUG', 'STORY', 'SPIKE'];
 export const TASK_TYPE_LABEL: Record<TaskType, string> = { TASK: 'Task', BUG: 'Bug', STORY: 'Story', SPIKE: 'Spike' };
 export const REACTIONS = ['👍', '🎉', '❤️', '😄', '👀', '✅'];
+
+export interface SearchResult {
+  total: number;
+  truncated: boolean;
+  tasks: Task[];
+}
+
+export interface SearchGroup {
+  key: string;
+  label: string;
+  count: number;
+  points: number;
+  done: number;
+}
+
+export interface SearchField {
+  name: string;
+  hint: string;
+  values: string[];
+}
+
+export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE';
+
+export interface TextHit {
+  kind: HitKind;
+  id: number;
+  taskId: number | null;
+  key: string | null;
+  title: string;
+  snippet: string | null;
+  projectKey: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  handle: string;
+  description: string;
+  members: User[];
+  member: boolean;
+  canEdit: boolean;
+}
+
+export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint';
+
+export interface Widget {
+  type: WidgetType;
+  title: string;
+  query?: string;
+  groupBy?: string;
+  project?: string;
+  limit?: number;
+}
+
+export interface Dashboard {
+  id: number;
+  name: string;
+  widgets: Widget[];
+}
+
+export interface RecentTask {
+  id: number;
+  key: string;
+  title: string;
+  status: Status;
+  type: TaskType;
+  projectKey: string;
+  viewedAt: string;
+}
+
+export type CalendarKind = 'TASK' | 'SPRINT' | 'RELEASE' | 'EPIC' | 'AWAY';
+
+export interface CalendarEvent {
+  kind: CalendarKind;
+  id: number;
+  title: string;
+  start: string;
+  end: string;
+  projectKey: string | null;
+  key: string | null;
+  status: string | null;
+  priority: Priority | null;
+  type: TaskType | null;
+  colorIndex: number | null;
+  person: User | null;
+}
+
+export interface FeedItem {
+  kind: 'change' | 'comment';
+  id: number;
+  actor: User;
+  message: string;
+  body: string | null;
+  createdAt: string;
+  task: { id: number; key: string; title: string; projectKey: string };
+}

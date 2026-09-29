@@ -3,8 +3,9 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
   Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
-  Package,
+  Package, LayoutDashboard, SearchCode, CalendarDays, Activity, Users,
 } from 'lucide-react';
+import { filterPath } from '../filters';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useLive, useLiveRefresh } from '../live';
@@ -150,6 +151,9 @@ export function Layout() {
         m: '/my-work',
         n: '/notifications',
         p: '/projects',
+        d: '/dashboard',
+        s: '/search',
+        c: '/calendar',
       };
       navigate(paths[target]);
     },
@@ -228,7 +232,7 @@ export function Layout() {
                   <>
                     <span className="nav-heading">Saved filters</span>
                     {filters.map((f) => (
-                      <Link key={f.id} to={`/p/${currentProject.key}/backlog?${f.query}`} className="nav-link nav-filter"
+                      <Link key={f.id} to={filterPath(currentProject.key, f.query)} className="nav-link nav-filter"
                         title={f.shared ? `Shared by ${f.owner}` : 'Only visible to you'}>
                         <Filter size={15} /> <span className="nav-filter-name">{f.name}</span>
                       </Link>
@@ -238,12 +242,17 @@ export function Layout() {
               </>
             )}
             <span className="nav-heading">Workspace</span>
+            <NavLink to="/dashboard" className="nav-link"><LayoutDashboard size={18} /> Dashboard</NavLink>
             <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> My work</NavLink>
+            <NavLink to="/search" className="nav-link"><SearchCode size={18} /> Search</NavLink>
+            <NavLink to="/calendar" className="nav-link"><CalendarDays size={18} /> Calendar</NavLink>
+            <NavLink to="/activity" className="nav-link"><Activity size={18} /> Activity</NavLink>
             <NavLink to="/notifications" className="nav-link">
               <Bell size={18} /> Notifications
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
             <NavLink to="/projects" end className="nav-link"><FolderKanban size={18} /> Projects</NavLink>
+            <NavLink to="/teams" className="nav-link"><Users size={18} /> Teams</NavLink>
             <NavLink to="/profile" className="nav-link"><UserRound size={18} /> Profile</NavLink>
             {admin && <NavLink to="/admin" className="nav-link"><Shield size={18} /> Admin</NavLink>}
           </nav>

@@ -1,7 +1,11 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Users } from 'lucide-react';
+import { api } from '../api';
 import { Avatar } from './Avatar';
 import { Markdown } from './Markdown';
-import type { User } from '../types';
+import type { Team, User } from '../types';
+
+let teamsCache: Promise<Team[]> | null = null;
 
 interface Props {
   value: string;
@@ -58,14 +62,25 @@ export function MarkdownEditor({
     return true;
   };
 
+  // Teams can be @mentioned too (everyone in the team who is in the project gets notified).
+  const [teams, setTeams] = useState<Team[]>([]);
+  useEffect(() => {
+    if (members.length === 0) return;
+    teamsCache ??= api.teams().catch(() => []);
+    teamsCache.then(setTeams);
+  }, [members.length]);
+
   const mention = useMemo(() => {
     const before = value.slice(0, caret);
     const match = /(^|\s)@([A-Za-z0-9._-]{0,40})$/.exec(before);
     if (!match) return null;
     const query = match[2].toLowerCase();
-    const options = members.filter((m) => m.username.toLowerCase().startsWith(query)).slice(0, 6);
+    const teamOptions: User[] = teams.map((t) => ({
+      id: -t.id, username: t.handle, email: '', displayName: `${t.name} · team of ${t.members.length}`, avatarUrl: null,
+    }));
+    const options = [...members, ...teamOptions].filter((m) => m.username.toLowerCase().startsWith(query)).slice(0, 8);
     return options.length ? { start: before.length - match[2].length, options } : null;
-  }, [value, caret, members]);
+  }, [value, caret, members, teams]);
 
   const insert = (username: string) => {
     if (!mention) return;
@@ -149,7 +164,9 @@ export function MarkdownEditor({
                       e.preventDefault();
                       insert(member.username);
                     }}>
-                    <Avatar user={member} size={20} /> {member.username}
+                    {member.id < 0 ? <span className="team-chip"><Users size={13} /></span> : <Avatar user={member} size={20} />}
+                    {member.username}
+                    {member.id < 0 && <span className="muted small">{member.displayName}</span>}
                   </button>
                 </li>
               ))}

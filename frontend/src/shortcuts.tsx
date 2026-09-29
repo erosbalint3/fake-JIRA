@@ -13,6 +13,9 @@ export const SHORTCUTS: [string, string][] = [
   ['g then m', 'Go to my work'],
   ['g then n', 'Go to notifications'],
   ['g then p', 'Go to projects'],
+  ['g then d', 'Go to dashboard'],
+  ['g then s', 'Go to search'],
+  ['g then c', 'Go to calendar'],
   ['?', 'Show keyboard shortcuts'],
 ];
 
@@ -25,7 +28,7 @@ function isTyping(target: EventTarget | null) {
 /** Global single-key shortcuts; ignored while typing or when a dialog is open. */
 export function useShortcuts(handlers: {
   create: () => void;
-  go: (target: 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p') => void;
+  go: (target: 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p' | 'd' | 's' | 'c') => void;
   help: () => void;
 }) {
   const latest = useRef(handlers);
@@ -37,7 +40,7 @@ export function useShortcuts(handlers: {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       if (document.querySelector('.modal')) return;
       const key = event.key;
-      if (pendingG && Date.now() - pendingG < 1200 && 'bkromnp'.includes(key) && key.length === 1) {
+      if (pendingG && Date.now() - pendingG < 1200 && 'bkromnpdsc'.includes(key) && key.length === 1) {
         event.preventDefault();
         pendingG = 0;
         latest.current.go(key as 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p');

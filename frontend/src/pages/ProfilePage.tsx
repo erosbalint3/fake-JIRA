@@ -7,6 +7,7 @@ import { useToast } from '../toast';
 import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ConnectedAccounts } from '../components/profile/ConnectedAccounts';
+import { AwayPanel } from '../components/profile/AwayPanel';
 import { DataPanel } from '../components/profile/DataPanel';
 import { PasswordForm } from '../components/profile/PasswordForm';
 import { SessionsPanel } from '../components/profile/SessionsPanel';
@@ -202,6 +203,7 @@ export function ProfilePage() {
         )}
         <PasswordForm hasPassword={profile.passwordSet} onDone={reload} />
       </section>
+      <AwayPanel profile={profile} onChange={reload} />
       <TwoFactorPanel profile={profile} onChange={reload} />
       <ConnectedAccounts linked={profile.identities} passwordSet={profile.passwordSet} onChange={reload} />
       <SessionsPanel />
