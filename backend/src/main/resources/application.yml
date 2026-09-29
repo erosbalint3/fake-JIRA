@@ -73,6 +73,12 @@ app:
     keep: ${APP_BACKUP_KEEP:14}
   digest:
     cron: ${APP_DIGEST_CRON:0 0 7 * * *}
+  migrate-from:
+    # Moving to PostgreSQL: point this at the old database (e.g. jdbc:h2:file:./data/fakejira) while starting
+    # the app with the new SPRING_DATASOURCE_URL; data is copied once into the empty new database.
+    url: ${APP_MIGRATE_FROM_URL:}
+    username: ${APP_MIGRATE_FROM_USERNAME:sa}
+    password: ${APP_MIGRATE_FROM_PASSWORD:}
   automation:
     # How often scheduled automation rules (SLA escalation, stale tasks) check their conditions.
     cron: ${APP_AUTOMATION_CRON:0 */5 * * * *}

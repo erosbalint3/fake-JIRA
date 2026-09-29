@@ -18,3 +18,5 @@ app:
     cron: "-"
   digest:
     cron: "-"
+  automation:
+    cron: "-"
