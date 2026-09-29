@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowDown, ArrowUp, Copy, Crown, Download, GitBranch, Link2, Plus, RefreshCw, Trash2, Upload, UserMinus, UserPlus,
 } from 'lucide-react';
-import { api, ApiError, saveBlob, type ColumnInput } from '../api';
+import { api, ApiError, githubWebhookUrl, inviteLink, saveBlob, type ColumnInput } from '../api';
 import { useAuth } from '../auth';
 import { useProjects } from '../projects';
 import { useToast } from '../toast';
@@ -267,7 +267,7 @@ function InvitesSection({ project }: { project: Project }) {
       const invite = await api.createInvite(email.trim() || null, project.key);
       setEmail('');
       load();
-      await copy(invite.link, toast);
+      await copy(inviteLink(invite.code), toast);
     } catch (e) {
       toast((e as ApiError).message, 'error');
     } finally {
@@ -296,7 +296,7 @@ function InvitesSection({ project }: { project: Project }) {
                 <strong>{invite.email ?? 'Anyone with the link'}</strong>
                 <span className="muted small">Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
               </div>
-              <button className="icon-button sm" aria-label="Copy invite link" title="Copy link" onClick={() => copy(invite.link, toast)}>
+              <button className="icon-button sm" aria-label="Copy invite link" title="Copy link" onClick={() => copy(inviteLink(invite.code), toast)}>
                 <Copy size={15} />
               </button>
               <button className="icon-button sm" aria-label="Revoke invite" title="Revoke"
@@ -444,8 +444,8 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
           <label className="field">
             <span>Payload URL</span>
             <div className="copy-field">
-              <input readOnly value={settings.webhookUrl} onFocus={(e) => e.target.select()} />
-              <button type="button" className="icon-button" aria-label="Copy payload URL" onClick={() => copy(settings.webhookUrl, toast)}>
+              <input readOnly value={githubWebhookUrl(project.key)} onFocus={(e) => e.target.select()} />
+              <button type="button" className="icon-button" aria-label="Copy payload URL" onClick={() => copy(githubWebhookUrl(project.key), toast)}>
                 <Copy size={16} />
               </button>
             </div>
