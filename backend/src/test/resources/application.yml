@@ -20,3 +20,5 @@ app:
     cron: "-"
   automation:
     cron: "-"
+  update-check:
+    enabled: false

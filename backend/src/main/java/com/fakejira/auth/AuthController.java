@@ -49,7 +49,7 @@ public class AuthController {
     }
 
     /** {@code mustChangePassword}: an admin requires a new password before anything else. */
-    public record MeResponse(UserSummary user, boolean admin, boolean mustChangePassword) {
+    public record MeResponse(UserSummary user, boolean admin, boolean mustChangePassword, String language) {
     }
 
     /** 201 with a token, or 202 without one when the account needs admin approval. */
@@ -108,6 +108,6 @@ public class AuthController {
             // Without APP_BASE_URL, links in emails and invites use the address admins open the app at.
             mail.rememberSiteUrl(request);
         }
-        return new MeResponse(UserSummary.of(user), user.isAdmin(), user.isMustChangePassword());
+        return new MeResponse(UserSummary.of(user), user.isAdmin(), user.isMustChangePassword(), user.getLanguage());
     }
 }

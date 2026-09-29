@@ -94,6 +94,10 @@ public class User {
     @Column(length = 200)
     private String awayMessage;
 
+    /** Interface language: "en" or "hu". */
+    @Column(length = 5, columnDefinition = "varchar(5) default 'en'")
+    private String language = "en";
+
     /** Secret for the personal iCal feed URL; null when the feed is off. */
     @Column(length = 48, unique = true)
     private String calendarToken;
@@ -308,5 +312,13 @@ public class User {
 
     public void setCalendarToken(String calendarToken) {
         this.calendarToken = calendarToken;
+    }
+
+    public String getLanguage() {
+        return language == null ? "en" : language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
     }
 }

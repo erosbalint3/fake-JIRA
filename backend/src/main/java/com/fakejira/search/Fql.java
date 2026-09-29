@@ -228,7 +228,9 @@ public final class Fql {
                 expect(Kind.RPAREN, "Missing closing parenthesis.");
                 return inner;
             }
-            if (t.kind() != Kind.WORD || RESERVED.contains(t.text().toLowerCase(Locale.ROOT))) {
+            // Custom fields with spaces are written in quotes: "Customer name" = acme.
+            if ((t.kind() != Kind.WORD && t.kind() != Kind.STRING)
+                    || t.kind() == Kind.WORD && RESERVED.contains(t.text().toLowerCase(Locale.ROOT))) {
                 throw new FqlException(t.kind() == Kind.END ? "The query ends too early: expected a clause."
                         : "Expected a field name, found '" + t.text() + "'.", t.position());
             }

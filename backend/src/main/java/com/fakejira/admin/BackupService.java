@@ -42,13 +42,15 @@ public class BackupService {
     private final Path attachmentsDir;
     private final int keep;
     private final String datasourceUrl;
+    private final OffsiteBackup offsite;
 
-    public BackupService(JdbcTemplate jdbc,
+    public BackupService(JdbcTemplate jdbc, OffsiteBackup offsite,
                          @Value("${app.backup.dir:./data/backups}") String backupDir,
                          @Value("${app.storage.dir:./data/attachments}") String attachmentsDir,
                          @Value("${app.backup.keep:14}") int keep,
                          @Value("${spring.datasource.url}") String datasourceUrl) {
         this.jdbc = jdbc;
+        this.offsite = offsite;
         this.backupDir = Path.of(backupDir).toAbsolutePath().normalize();
         this.attachmentsDir = Path.of(attachmentsDir).toAbsolutePath().normalize();
         this.keep = Math.max(1, keep);
@@ -120,6 +122,9 @@ public class BackupService {
                 zip.closeEntry();
             }
             prune();
+            if (offsite.isConfigured()) {
+                offsite.uploadLater(target);
+            }
             return describe(target);
         } catch (IOException e) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Backup failed: " + e.getMessage());

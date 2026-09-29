@@ -25,7 +25,14 @@ public final class ProjectDtos {
             String name,
 
             @Size(max = 1000, message = "Description must be at most 1000 characters")
-            String description) {
+            String description,
+
+            /** blank (default), scrum, kanban, bugs or marketing; see ProjectTemplates. */
+            String template) {
+
+        public CreateProjectRequest(String key, String name, String description) {
+            this(key, name, description, null);
+        }
     }
 
     public record UpdateProjectRequest(

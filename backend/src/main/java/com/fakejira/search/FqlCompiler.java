@@ -79,12 +79,20 @@ public final class FqlCompiler {
     private final User user;
     private final ZoneId zone;
     private final Function<String, Set<Long>> teamMembers;
+    private final java.util.function.Predicate<String> customField;
 
     /** {@code teamMembers} resolves {@code membersOf(name)}; it throws or returns null for unknown teams. */
     public FqlCompiler(User user, ZoneId zone, Function<String, Set<Long>> teamMembers) {
+        this(user, zone, teamMembers, name -> false);
+    }
+
+    /** {@code customField} tells whether a name is a custom field in one of the user's projects. */
+    public FqlCompiler(User user, ZoneId zone, Function<String, Set<Long>> teamMembers,
+                       java.util.function.Predicate<String> customField) {
         this.user = user;
         this.zone = zone;
         this.teamMembers = teamMembers;
+        this.customField = customField;
     }
 
     public static String canonical(String field) {
@@ -140,6 +148,12 @@ public final class FqlCompiler {
             check(not.inner());
         } else if (node instanceof Clause clause) {
             String field = canonical(clause.field());
+            if (!FIELDS.containsKey(field) && customField.test(clause.field())) {
+                if (Set.of(Op.GT, Op.GE, Op.LT, Op.LE).contains(clause.op())) {
+                    throw new FqlException("Custom fields support =, !=, ~, IN and IS EMPTY.", clause.position());
+                }
+                return;
+            }
             if (!FIELDS.containsKey(field)) {
                 throw new FqlException("Unknown field '" + clause.field() + "'. Try: " + String.join(", ",
                         FIELDS.keySet().stream().sorted().toList()) + ".", clause.position());
@@ -209,7 +223,7 @@ public final class FqlCompiler {
             case "resolved" -> dateField(c, cb, root.get("completedAt"), true);
             case "points" -> numberField(c, cb, root.get("storyPoints"));
             case "parent" -> parent(c, root, cb);
-            default -> throw new FqlException("Unknown field '" + c.field() + "'.", c.position());
+            default -> custom(c, root, cb, query);
         };
     }
 
@@ -499,6 +513,26 @@ public final class FqlCompiler {
         }
         Predicate match = cb.or(any.toArray(Predicate[]::new));
         return c.op() == Op.EQ || c.op() == Op.IN ? match : cb.or(cb.not(match), cb.isNull(parent.get("id")));
+    }
+
+    /** A custom field's value (compared as text, case-insensitively). */
+    private Predicate custom(Clause c, Root<Task> root, CriteriaBuilder cb, jakarta.persistence.criteria.CriteriaQuery<?> query) {
+        Subquery<Long> sub = query.subquery(Long.class);
+        Root<com.fakejira.field.CustomFieldValue> v = sub.from(com.fakejira.field.CustomFieldValue.class);
+        Expression<String> value = cb.lower(v.get("value"));
+        Predicate match = switch (c.op()) {
+            case CONTAINS, NOT_CONTAINS -> cb.like(value, "%" + escape(c.values().get(0).lower()) + "%", '\\');
+            case EMPTY, NOT_EMPTY -> cb.conjunction();
+            default -> value.in(c.values().stream().map(Value::lower)
+                    .map(x -> x.equals("yes") ? "true" : x).toList());
+        };
+        sub.select(v.get("id")).where(cb.equal(v.get("task"), root),
+                cb.equal(cb.lower(v.get("field").get("name")), c.field().toLowerCase(Locale.ROOT)), match);
+        Predicate exists = cb.exists(sub);
+        return switch (c.op()) {
+            case EQ, IN, CONTAINS, NOT_EMPTY -> exists;
+            default -> cb.not(exists);
+        };
     }
 
     private Predicate numberField(Clause c, CriteriaBuilder cb, Path<Integer> path) {

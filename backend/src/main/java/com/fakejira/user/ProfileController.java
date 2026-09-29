@@ -68,7 +68,7 @@ public class ProfileController {
                                   EmailFrequency emailFrequency, boolean emailAvailable, int pushDevices,
                                   boolean twoFactorEnabled, int recoveryCodesLeft, boolean passwordSet,
                                   boolean mustChangePassword, java.util.List<String> identities, Away away,
-                                  boolean calendarFeed) {
+                                  boolean calendarFeed, String language) {
     }
 
     /** Out-of-office settings; all null when none are set. */
@@ -78,7 +78,9 @@ public class ProfileController {
     /** Only non-null fields change. An empty display name removes it. */
     public record SettingsRequest(EmailFrequency emailFrequency,
                                   @jakarta.validation.constraints.Size(max = 60, message = "Display name must be at most 60 characters")
-                                  String displayName) {
+                                  String displayName,
+                                  @jakarta.validation.constraints.Pattern(regexp = "^(en|hu)$", message = "Unsupported language")
+                                  String language) {
     }
 
     @GetMapping
@@ -95,7 +97,8 @@ public class ProfileController {
                 user.getEmailFrequency(), mail.isEnabled(), (int) push.countByUserId(user.getId()),
                 user.isTotpEnabled(), twoFactor.remainingRecoveryCodes(user), user.isPasswordSet(),
                 user.isMustChangePassword(), identities.providersFor(user.getId()),
-                new Away(user.getAwayFrom(), user.getAwayUntil(), user.getAwayMessage()), user.getCalendarToken() != null);
+                new Away(user.getAwayFrom(), user.getAwayUntil(), user.getAwayMessage()), user.getCalendarToken() != null,
+                user.getLanguage());
     }
 
     @PutMapping("/settings")
@@ -113,6 +116,9 @@ public class ProfileController {
         if (request.displayName() != null) {
             String name = request.displayName().trim();
             user.setDisplayName(name.isEmpty() ? null : name);
+        }
+        if (request.language() != null) {
+            user.setLanguage(request.language());
         }
         users.save(user);
         return profile(jwt);

@@ -36,7 +36,11 @@ public class SearchService {
     private final ProjectRepository projects;
     private final EntityManager em;
 
-    public SearchService(TaskRepository tasks, TeamRepository teams, ProjectRepository projects, EntityManager em) {
+    private final com.fakejira.field.CustomFieldRepository customFields;
+
+    public SearchService(TaskRepository tasks, TeamRepository teams, ProjectRepository projects, EntityManager em,
+                         com.fakejira.field.CustomFieldRepository customFields) {
+        this.customFields = customFields;
         this.tasks = tasks;
         this.teams = teams;
         this.projects = projects;
@@ -49,7 +53,9 @@ public class SearchService {
     /** Tasks visible to {@code user} matching the query, sorted, at most {@code limit}. Throws {@link FqlException}. */
     public Result run(User user, String fql, int limit) {
         Fql.Query query = Fql.parse(fql);
-        FqlCompiler compiler = new FqlCompiler(user, ZoneId.systemDefault(), this::teamMemberIds);
+        List<Long> projectIds = projects.findForMember(user.getId()).stream().map(Project::getId).toList();
+        FqlCompiler compiler = new FqlCompiler(user, ZoneId.systemDefault(), this::teamMemberIds,
+                name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds));
         Specification<Task> spec = visibleTo(user).and(compiler.where(query.where()));
         Comparator<Task> order = compiler.order(query.order());
         List<Task> found = new ArrayList<>(tasks.findAll(spec));

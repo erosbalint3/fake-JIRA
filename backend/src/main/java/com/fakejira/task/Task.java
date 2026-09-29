@@ -137,8 +137,9 @@ public class Task {
         this.reporter = reporter;
     }
 
+    /** Also called when only related rows (e.g. custom field values) changed. */
     @PreUpdate
-    void touch() {
+    public void touch() {
         updatedAt = Instant.now();
     }
 

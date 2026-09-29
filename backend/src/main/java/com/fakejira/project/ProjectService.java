@@ -41,12 +41,14 @@ public class ProjectService {
     private final InviteRepository invites;
     private final ApplicationEventPublisher events;
     private final AuditLog audit;
+    private final ProjectTemplates projectTemplates;
 
     public ProjectService(ProjectRepository projects, ProjectAccess access, UserRepository users,
                           TaskRepository tasks, SprintRepository sprints, TaskCleanup cleanup,
                           NotificationService notifications, LiveEvents live, EpicRepository epics,
                           BoardColumnRepository columns, SavedFilterRepository filters, InviteRepository invites,
-                          ApplicationEventPublisher events, AuditLog audit) {
+                          ApplicationEventPublisher events, AuditLog audit, ProjectTemplates projectTemplates) {
+        this.projectTemplates = projectTemplates;
         this.events = events;
         this.audit = audit;
         this.epics = epics;
@@ -79,7 +81,8 @@ public class ProjectService {
             throw ApiException.conflict("A project with key " + key + " already exists.");
         }
         Project project = projects.save(new Project(key, request.name().trim(), trim(request.description()), user));
-        audit.record(user, "project.create", key, project.getName());
+        projectTemplates.apply(project, user, request.template());
+        audit.record(user, "project.create", key, project.getName() + (request.template() == null ? "" : " (" + request.template() + ")"));
         return ProjectResponse.of(project);
     }
 

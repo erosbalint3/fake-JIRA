@@ -46,13 +46,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**", "/api/integrations/gitlab/**",
                                 "/api/integrations/gitea/**").permitAll()
                         // Secret-token URLs: the personal calendar feed and the inbound email webhook.
-                        .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**", "/api/metrics", "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .build();
+    }
+
+    /** /api/metrics uses its own token (APP_METRICS_TOKEN), so it is not read as a sign-in token. */
+    @Bean
+    org.springframework.security.oauth2.server.resource.web.BearerTokenResolver bearerTokenResolver() {
+        var standard = new org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver();
+        return request -> "/api/metrics".equals(request.getRequestURI()) ? null : standard.resolve(request);
     }
 
     @Bean
