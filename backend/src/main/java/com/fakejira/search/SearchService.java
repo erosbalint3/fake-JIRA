@@ -86,7 +86,7 @@ public class SearchService {
 
     // ------------------------------------------------------------------ free text
 
-    public enum HitKind { TASK, COMMENT, ATTACHMENT, EPIC, RELEASE }
+    public enum HitKind { TASK, COMMENT, ATTACHMENT, EPIC, RELEASE, WIKI }
 
     public record Hit(HitKind kind, Long id, Long taskId, String key, String title, String snippet, String projectKey,
                       int score) {
@@ -168,6 +168,20 @@ public class SearchService {
             if (words.stream().allMatch(name.toLowerCase(Locale.ROOT)::contains)) {
                 hits.add(new Hit(HitKind.RELEASE, (Long) row[0], null, null, name, snippet((String) row[2], words),
                         (String) row[3], 2));
+            }
+        }
+        // Wiki pages: key carries the page's slug.
+        List<Object[]> wiki = em.createQuery("select p.id, p.title, p.body, p.project.key, p.slug from WikiPage p "
+                        + "where p.project.id in :projects and (lower(p.title) like :w escape '\\' or lower(p.body) like :w escape '\\')")
+                .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(80).getResultList();
+        for (Object[] row : wiki) {
+            String title = (String) row[1];
+            String body = (String) row[2];
+            String haystack = (title + "\n" + body).toLowerCase(Locale.ROOT);
+            if (words.stream().allMatch(haystack::contains)) {
+                boolean inTitle = words.stream().allMatch(title.toLowerCase(Locale.ROOT)::contains);
+                hits.add(new Hit(HitKind.WIKI, (Long) row[0], null, (String) row[4], title, snippet(body, words),
+                        (String) row[3], inTitle ? 3 : 1));
             }
         }
         hits.sort(Comparator.comparingInt(Hit::score).reversed());

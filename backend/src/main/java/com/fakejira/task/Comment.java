@@ -42,6 +42,10 @@ public class Comment {
     @JoinColumn(name = "parent_id")
     private Comment parent;
 
+    /** For inline comments: the passage of the description the comment is about. */
+    @Column(length = 300)
+    private String anchor;
+
     protected Comment() {
     }
 
@@ -53,6 +57,14 @@ public class Comment {
 
     public Long getId() {
         return id;
+    }
+
+    public String getAnchor() {
+        return anchor;
+    }
+
+    public void setAnchor(String anchor) {
+        this.anchor = anchor;
     }
 
     public Task getTask() {

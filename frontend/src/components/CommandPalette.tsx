@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
+import { BookOpen,
   Activity, BarChart3, Bell, CalendarDays, Clock, CornerDownLeft, FileText, Filter, FolderKanban, KanbanSquare,
   LayoutDashboard, ListTodo, Map, MessageSquare, Moon, Package, Paperclip, Plus, Search, Settings, Shield, UserRound,
   UserSquare2, Users,
@@ -110,15 +110,15 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
     const q = query.trim().toLowerCase();
     const matching = q ? all.filter((item) => item.label.toLowerCase().includes(q)) : all;
     const hitIcon = { TASK: <FileText size={16} />, COMMENT: <MessageSquare size={16} />, ATTACHMENT: <Paperclip size={16} />,
-      EPIC: <Map size={16} />, RELEASE: <Package size={16} /> };
-    const hitGroup = { TASK: 'Tasks', COMMENT: 'Comments', ATTACHMENT: 'Files', EPIC: 'Epics', RELEASE: 'Releases' };
+      EPIC: <Map size={16} />, RELEASE: <Package size={16} />, WIKI: <BookOpen size={16} /> };
+    const hitGroup = { TASK: 'Tasks', COMMENT: 'Comments', ATTACHMENT: 'Files', EPIC: 'Epics', RELEASE: 'Releases', WIKI: 'Wiki' };
     const hitItems: Item[] = hits.map((hit) => ({
       id: `hit-${hit.kind}-${hit.id}`, group: hitGroup[hit.kind],
       label: hit.kind === 'COMMENT' || hit.kind === 'ATTACHMENT' ? (hit.snippet ?? hit.title) : hit.title,
-      hint: hit.key ? <span className="task-key">{hit.key}</span> : <span className="muted">{hit.projectKey}</span>,
+      hint: hit.key && hit.kind !== 'WIKI' ? <span className="task-key">{hit.key}</span> : <span className="muted">{hit.projectKey}</span>,
       icon: hitIcon[hit.kind],
       run: go(hit.taskId ? `/tasks/${hit.taskId}` : hit.kind === 'EPIC' ? `/p/${hit.projectKey}/backlog?epic=${hit.id}`
-        : `/p/${hit.projectKey}/releases`),
+        : hit.kind === 'WIKI' ? `/p/${hit.projectKey}/wiki/${hit.key}` : `/p/${hit.projectKey}/releases`),
     }));
     const recentItems: Item[] = q ? [] : recent.slice(0, 6).map((task) => ({
       id: `recent-${task.id}`, group: 'Recently viewed', label: task.title,

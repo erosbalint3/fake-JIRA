@@ -74,7 +74,7 @@ export function CommentItem({
   };
 
   return (
-    <li className={`comment ${comment.parentId ? 'comment-reply' : ''}`}>
+    <li className={`comment ${comment.parentId ? 'comment-reply' : ''}`} id={`comment-${comment.id}`}>
       <Avatar user={comment.author} size={comment.parentId ? 26 : 32} />
       <div className="comment-body">
         <div className="comment-head">
@@ -114,7 +114,10 @@ export function CommentItem({
             </div>
           </div>
         ) : (
-          <Markdown>{comment.body}</Markdown>
+          <>
+            {comment.anchor && <blockquote className="comment-anchor">“{comment.anchor}”</blockquote>}
+            <Markdown>{comment.body}</Markdown>
+          </>
         )}
 
         <div className="comment-footer">

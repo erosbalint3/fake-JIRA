@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Eye, KanbanSquare, Users, Zap } from 'lucide-react';
@@ -180,7 +181,7 @@ export function BoardPage() {
     const target = lane.assigneeId ?? null;
     if ((task.assignee?.id ?? null) === target) return;
     const member = project.members.find((m) => m.id === target) ?? null;
-    if (member?.role === 'VIEWER') {
+    if ((member && isReadOnlyRole(member.role))) {
       toast(`${member.displayName} is a viewer and cannot be assigned`, 'error');
       return;
     }

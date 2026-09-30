@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCopy, Gauge, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, Gauge, NotebookPen, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -14,6 +14,7 @@ import type { RetroItem, RetroKind, ReviewTask, SprintReview } from '../types';
 import { t } from '../i18n';
 import { SprintGoals } from '../components/sprint/SprintGoals';
 import { CapacityPanel } from '../components/sprint/CapacityPanel';
+import { MeetingNotes } from '../components/MeetingNotes';
 
 const COLUMNS: { kind: RetroKind; title: string; hint: string }[] = [
   { kind: 'WENT_WELL', title: 'Went well', hint: 'What should we keep doing?' },
@@ -26,7 +27,8 @@ export function SprintPage() {
   const { id } = useParams();
   const sprintId = Number(id);
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'retro' ? 'retro' : params.get('tab') === 'capacity' ? 'capacity' : 'review';
+  const requested = params.get('tab');
+  const tab = requested === 'retro' || requested === 'capacity' || requested === 'notes' ? requested : 'review';
   const [review, setReview] = useState<SprintReview | null>(null);
   const [error, setError] = useState('');
   const { canEdit: canEditSprint } = useProjectAccess(project);
@@ -62,12 +64,15 @@ export function SprintPage() {
           onClick={() => setParams({}, { replace: true })}><Presentation size={15} /> {t("Review")}</button>
         <button role="tab" aria-selected={tab === 'capacity'} className={`tab ${tab === 'capacity' ? 'active' : ''}`}
           onClick={() => setParams({ tab: 'capacity' }, { replace: true })}><Gauge size={15} /> {t("Capacity")}</button>
+        <button role="tab" aria-selected={tab === 'notes'} className={`tab ${tab === 'notes' ? 'active' : ''}`}
+          onClick={() => setParams({ tab: 'notes' }, { replace: true })}><NotebookPen size={15} /> {t("Notes")}</button>
         <button role="tab" aria-selected={tab === 'retro'} className={`tab ${tab === 'retro' ? 'active' : ''}`}
           onClick={() => setParams({ tab: 'retro' }, { replace: true })}><MessageSquareHeart size={15} /> {t("Retrospective")}</button>
       </nav>
       <SprintGoals sprintId={sprintId} canEdit={canEditSprint && sprint.state !== 'COMPLETED'} />
       {tab === 'review' ? <ReviewView review={review} />
         : tab === 'capacity' ? <CapacityPanel sprintId={sprintId} projectId={project.id} canEdit={canEditSprint} />
+        : tab === 'notes' ? <MeetingNotes projectKey={key} projectId={project.id} members={project.members} canEdit={canEditSprint} sprintId={sprintId} />
         : <RetroBoard sprintId={sprintId} projectId={project.id} open={sprint.state !== 'PLANNED'} />}
     </div>
   );

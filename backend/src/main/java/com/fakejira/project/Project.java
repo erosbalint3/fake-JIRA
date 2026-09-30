@@ -52,6 +52,16 @@ public class Project {
             inverseJoinColumns = @JoinColumn(name = "user_id"))
     private Set<User> viewers = new LinkedHashSet<>();
 
+    /**
+     * Outside guests such as a client: read-only like viewers (a subset of {@link #viewers}) but they may comment.
+     * They do not see task history, time logs or other members' email addresses.
+     */
+    @ManyToMany
+    @JoinTable(name = "project_guests",
+            joinColumns = @JoinColumn(name = "project_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<User> guests = new LinkedHashSet<>();
+
     /** Secret for verifying GitHub webhook signatures; null when the integration is off. */
     @Column(length = 64)
     private String githubSecret;
@@ -108,6 +118,14 @@ public class Project {
 
     public boolean isViewer(User user) {
         return viewers.stream().anyMatch(viewer -> viewer.getId().equals(user.getId()));
+    }
+
+    public boolean isGuest(User user) {
+        return guests.stream().anyMatch(guest -> guest.getId().equals(user.getId()));
+    }
+
+    public Set<User> getGuests() {
+        return guests;
     }
 
     /** Members who are not read-only viewers can change things. */

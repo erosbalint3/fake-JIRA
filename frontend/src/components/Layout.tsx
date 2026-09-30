@@ -3,7 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
   Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
-  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users, GanttChart, Briefcase, Flag,
+  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users, GanttChart, Briefcase, Flag, BookOpen, NotebookPen,
+  Coffee, Heart,
 } from 'lucide-react';
 import { filterPath } from '../filters';
 import { api, isOffline, OFFLINE_CHANGED } from '../api';
@@ -257,6 +258,9 @@ export function Layout() {
                 <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> {t("Roadmap")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/timeline`} className="nav-link"><GanttChart size={18} /> {t("Timeline")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> {t("Releases")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/wiki`} className="nav-link"><BookOpen size={18} /> {t("Wiki")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/standup`} className="nav-link"><Coffee size={18} /> {t("Stand-up")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/meetings`} className="nav-link"><NotebookPen size={18} /> {t("Meetings")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> {t("Reports")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/automation`} className="nav-link"><Bot size={18} /> {t("Automation")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/settings`} className="nav-link"><Settings size={18} /> {t("Settings")}</NavLink>
@@ -278,6 +282,7 @@ export function Layout() {
             <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> {t("My work")}</NavLink>
             <NavLink to="/portfolio" className="nav-link"><Briefcase size={18} /> {t("Portfolio")}</NavLink>
             <NavLink to="/goals" className="nav-link"><Flag size={18} /> {t("Goals")}</NavLink>
+            <NavLink to="/kudos" className="nav-link"><Heart size={18} /> {t("Kudos")}</NavLink>
             <NavLink to="/search" className="nav-link"><SearchCode size={18} /> {t("Search")}</NavLink>
             <NavLink to="/calendar" className="nav-link"><CalendarDays size={18} /> {t("Calendar")}</NavLink>
             <NavLink to="/activity" className="nav-link"><Activity size={18} /> {t("Activity")}</NavLink>

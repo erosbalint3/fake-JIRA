@@ -179,7 +179,11 @@ public final class TaskDtos {
             String body,
 
             /** Replies to this comment (replies are one level deep). */
-            Long parentId) {
+            Long parentId,
+
+            /** Inline comment: the passage of the description it refers to. */
+            @Size(max = 300, message = "The quoted passage is at most 300 characters")
+            String anchor) {
     }
 
     public record ReactionRequest(@NotBlank String emoji) {
@@ -321,7 +325,7 @@ public final class TaskDtos {
     }
 
     public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt, Instant editedAt,
-                                  Long parentId, List<ReactionSummary> reactions) {
+                                  Long parentId, List<ReactionSummary> reactions, String anchor) {
 
         public static CommentResponse of(Comment comment) {
             return of(comment, List.of());
@@ -330,7 +334,7 @@ public final class TaskDtos {
         public static CommentResponse of(Comment comment, List<ReactionSummary> reactions) {
             return new CommentResponse(comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(),
                     comment.getCreatedAt(), comment.getEditedAt(),
-                    comment.getParent() == null ? null : comment.getParent().getId(), reactions);
+                    comment.getParent() == null ? null : comment.getParent().getId(), reactions, comment.getAnchor());
         }
     }
 

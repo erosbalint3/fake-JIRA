@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../../types';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Boxes, Pencil, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../../api';
@@ -85,7 +86,7 @@ export function ComponentsSection({ projectKey, members, canEdit }: { projectKey
               <span>{t('Lead')} <span className="muted">{t('(optional)')}</span></span>
               <select value={lead} onChange={(e) => setLead(e.target.value)}>
                 <option value="">{t('Nobody')}</option>
-                {members.filter((m) => m.role !== 'VIEWER').map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
+                {members.filter((m) => !isReadOnlyRole(m.role)).map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
               </select>
             </label>
           </div>

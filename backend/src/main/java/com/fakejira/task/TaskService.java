@@ -215,7 +215,21 @@ public class TaskService {
     }
 
     public TaskResponse update(User user, Long id, UpdateTaskRequest request) {
+        return update(user, id, request, null);
+    }
+
+    /**
+     * {@code expected}: the updatedAt the editor saw when opening the form. When the task changed since,
+     * the save is refused so nobody silently overwrites someone else's edit.
+     */
+    public TaskResponse update(User user, Long id, UpdateTaskRequest request, java.time.Instant expected) {
         Task task = support.editableTask(id, user);
+        if (expected != null && task.getUpdatedAt().isAfter(expected.plusMillis(1))) {
+            String who = support.lastActor(task).filter(actor -> !actor.getId().equals(user.getId()))
+                    .map(User::getUsername).orElse("Someone");
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                    who + " changed this task while you were editing it.", java.util.Map.of("updatedBy", who));
+        }
         List<String> changes = new ArrayList<>();
         String title = request.title().trim();
         if (!title.equals(task.getTitle())) {

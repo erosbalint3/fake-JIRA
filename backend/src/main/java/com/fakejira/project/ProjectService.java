@@ -70,12 +70,12 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public List<ProjectResponse> mine(User user) {
-        return projects.findForMember(user.getId()).stream().map(ProjectResponse::of).toList();
+        return projects.findForMember(user.getId()).stream().map(p -> ProjectResponse.of(p, user)).toList();
     }
 
     @Transactional(readOnly = true)
     public ProjectResponse get(User user, String key) {
-        return ProjectResponse.of(access.memberProject(key, user));
+        return ProjectResponse.of(access.memberProject(key, user), user);
     }
 
     public ProjectResponse create(User user, CreateProjectRequest request) {
@@ -124,8 +124,11 @@ public class ProjectService {
             throw ApiException.conflict(member.getUsername() + " is already a member.");
         }
         project.getMembers().add(member);
-        if (role == ProjectDtos.Role.VIEWER) {
+        if (role == ProjectDtos.Role.VIEWER || role == ProjectDtos.Role.GUEST) {
             project.getViewers().add(member);
+        }
+        if (role == ProjectDtos.Role.GUEST) {
+            project.getGuests().add(member);
         }
         notifications.notify(member, user,
                 user.getUsername() + " added you to project " + project.getKey() + " · " + project.getName(), null);
@@ -143,12 +146,18 @@ public class ProjectService {
         if (project.isOwner(member) || role == null || role == ProjectDtos.Role.OWNER) {
             throw ApiException.badRequest("The owner's role cannot be changed.");
         }
-        if (role == ProjectDtos.Role.VIEWER && !project.isViewer(member)) {
+        if ((role == ProjectDtos.Role.VIEWER || role == ProjectDtos.Role.GUEST) && !project.isViewer(member)) {
             project.getViewers().add(member);
-            // Viewers cannot own work.
+            // Viewers and guests cannot own work.
             tasks.unassignInProject(project.getId(), memberId);
+            events.publishEvent(new MemberRemoved(project.getId(), memberId));
         } else if (role == ProjectDtos.Role.MEMBER) {
             project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
+        }
+        if (role == ProjectDtos.Role.GUEST) {
+            project.getGuests().add(member);
+        } else {
+            project.getGuests().removeIf(guest -> guest.getId().equals(memberId));
         }
         audit.record(user, "project.role", project.getKey(), member.getUsername() + " → " + role);
         live.projectChanged(project);
@@ -162,6 +171,7 @@ public class ProjectService {
         User next = project.getMembers().stream().filter(m -> m.getId().equals(newOwnerId)).findFirst()
                 .orElseThrow(() -> ApiException.notFound("That user is not a member of this project."));
         project.getViewers().removeIf(viewer -> viewer.getId().equals(newOwnerId));
+        project.getGuests().removeIf(guest -> guest.getId().equals(newOwnerId));
         project.setOwner(next);
         audit.record(user, "project.transfer", project.getKey(), "to " + next.getUsername());
         live.projectChanged(project);
@@ -180,6 +190,7 @@ public class ProjectService {
         }
         boolean removed = project.getMembers().removeIf(member -> member.getId().equals(memberId));
         project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
+        project.getGuests().removeIf(guest -> guest.getId().equals(memberId));
         if (!removed) {
             throw ApiException.notFound("That user is not a member of this project.");
         }

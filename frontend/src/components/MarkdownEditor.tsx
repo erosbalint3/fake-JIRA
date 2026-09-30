@@ -20,11 +20,13 @@ interface Props {
   invalid?: boolean;
   /** Enables pasting/dropping images: uploads one and resolves to the Markdown that shows it. */
   onUploadImage?: (file: File) => Promise<string>;
+  /** Receives the textarea (e.g. for live co-editing, which keeps the caret in place). */
+  inputRef?: { current: HTMLTextAreaElement | null };
 }
 
 /** Textarea with a Write / Preview toggle, @mention autocomplete and (optionally) image paste. */
 export function MarkdownEditor({
-  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage,
+  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage, inputRef,
 }: Props) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [caret, setCaret] = useState(0);
@@ -128,7 +130,10 @@ export function MarkdownEditor({
       {tab === 'write' ? (
         <div className="md-write">
           <textarea
-            ref={ref}
+            ref={(el) => {
+              ref.current = el;
+              if (inputRef) inputRef.current = el;
+            }}
             rows={rows}
             value={value}
             maxLength={maxLength}

@@ -1,7 +1,8 @@
+import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
+  ArrowLeft, BookOpen, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
   Pencil, Trash2, Upload, X,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
@@ -15,6 +16,11 @@ import { PokerPanel } from '../components/task/PokerPanel';
 import { ShareModal } from '../components/task/ShareModal';
 import { CustomFieldsPanel } from '../components/task/CustomFieldsPanel';
 import { ApprovalsPanel } from '../components/task/ApprovalsPanel';
+import { PresenceBar } from '../components/task/PresenceBar';
+import { InlineComments } from '../components/task/InlineComments';
+import { PollsPanel } from '../components/task/PollsPanel';
+import { KudosPanel } from '../components/task/KudosPanel';
+import { usePresence } from '../collab';
 import { ChipPicker } from '../components/ChipPicker';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
@@ -69,6 +75,12 @@ export function TaskDetailPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [deleted, setDeleted] = useState(false);
   const [editing, setEditing] = useState(false);
+  // The task's updatedAt when the edit form opened, to catch someone else saving in the meantime.
+  const [editBase, setEditBase] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ input: TaskInput; message: string } | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [pollSignal, setPollSignal] = useState(0);
+  const [wikiMentions, setWikiMentions] = useState<{ title: string; slug: string }[]>([]);
   const [editingLabels, setEditingLabels] = useState<string[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -124,13 +136,22 @@ export function TaskDetailPage() {
     api.components(task.projectKey).then(setComponents).catch(() => {});
   }, [task?.projectKey]);
 
+  const present = usePresence(Number.isNaN(taskId) ? null : taskId, editing, user?.id);
+  useEffect(() => {
+    if (!Number.isNaN(taskId)) api.taskWikiMentions(taskId).then(setWikiMentions).catch(() => {});
+  }, [taskId]);
+
   useLiveRefresh((m) => m.type === 'task' && m.data.taskId === taskId, () => {
     // A live "deleted" event arrives after someone else removed the task.
     api.task(taskId).then(() => load()).catch((e: ApiError) => e.status === 404 ? setDeleted(true) : undefined);
   });
 
   const project = task ? byKey(task.projectKey) : undefined;
-  const { canEdit, isOwner } = useProjectAccess(project);
+  const { canEdit, isOwner, canComment } = useProjectAccess(project);
+  const startEditing = () => {
+    setEditBase(task?.updatedAt ?? null);
+    setEditing(true);
+  };
 
   if (deleted || error?.status === 404 || Number.isNaN(taskId)) {
     return (
@@ -145,7 +166,7 @@ export function TaskDetailPage() {
   if (!task || !user) return <div className="page"><Spinner /></div>;
 
   const members = project?.members ?? [];
-  const assignable = members.filter((m) => m.role !== 'VIEWER');
+  const assignable = members.filter((m) => !isReadOnlyRole(m.role));
   const isAssignee = task.assignee?.id === user.id;
   const canDelete = canEdit && (task.reporter.id === user.id || isOwner);
 
@@ -189,9 +210,10 @@ export function TaskDetailPage() {
     if (!comment.trim()) return;
     setBusy(true);
     try {
-      const created = await api.addComment(task.id, comment.trim());
+      const created = await api.addComment(task.id, comment.trim(), anchor);
       setComments([...comments, created]);
       clearComment();
+      setAnchor(null);
     } catch (e) {
       toast((e as ApiError).message, 'error');
     } finally {
@@ -284,7 +306,8 @@ export function TaskDetailPage() {
           <Link to={`/p/${task.projectKey}/board`}>{task.projectName}</Link>
           {task.parent && <> / <Link to={`/tasks/${task.parent.id}`}>{task.parent.key}</Link></>} / {task.key}
         </span>
-        {!canEdit && <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
+        {!canEdit && <span className="readonly-badge"><Eye size={13} /> {canComment ? t("Guest") : t("Read-only")}</span>}
+        <PresenceBar present={present} />
       </div>
 
       <div className="detail">
@@ -321,7 +344,7 @@ export function TaskDetailPage() {
               </button>
             )}
             {canEdit && (
-              <button className="btn btn-ghost" onClick={() => setEditing(true)}>
+              <button className="btn btn-ghost" onClick={startEditing}>
                 <Pencil size={16} /> Edit
               </button>
             )}
@@ -357,6 +380,7 @@ export function TaskDetailPage() {
               } },
               { label: 'Move to another project…', hidden: !canEdit || !!task.parent, onSelect: () => setMoving(true) },
               { label: 'Share publicly…', hidden: !canEdit, onSelect: () => setSharing(true) },
+              { label: 'Start a poll…', hidden: !canEdit, onSelect: () => setPollSignal((n) => n + 1) },
               { label: task.archivedAt ? 'Restore from archive' : 'Archive', hidden: !canEdit, onSelect: () => run(
                 () => (task.archivedAt ? api.unarchiveTask(task.id) : api.archiveTask(task.id)),
                 task.archivedAt ? 'Restored from the archive' : 'Archived — it no longer shows on boards and lists') },
@@ -373,9 +397,19 @@ export function TaskDetailPage() {
           <section className="panel">
             <h2 className="panel-title"><FileText size={16} /> {t("Description")}</h2>
             {task.description
-              ? <Markdown>{task.description}</Markdown>
-              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={() => setEditing(true)}>{t("Add one")}</button></>}</p>}
+              ? <InlineComments comments={comments} canComment={canComment} onComment={(quote) => {
+                  setAnchor(quote);
+                  setTab('comments');
+                  window.setTimeout(() => {
+                    const box = document.querySelector<HTMLTextAreaElement>('.comment-form textarea');
+                    box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    box?.focus();
+                  }, 50);
+                }}><Markdown>{task.description}</Markdown></InlineComments>
+              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={startEditing}>{t("Add one")}</button></>}</p>}
           </section>
+
+          <PollsPanel taskId={task.id} canCreate={canEdit} canVote={canComment} startSignal={pollSignal} />
 
           {!task.parent && (
             <SubtasksPanel subtasks={subtasks} canEdit={canEdit}
@@ -450,19 +484,26 @@ export function TaskDetailPage() {
               <>
                 <ul className="comments">
                   {threads.map((c) => (
-                    <CommentItem key={c.id} taskId={task.id} comment={c} me={user} canEdit={canEdit} isOwner={isOwner}
+                    <CommentItem key={c.id} taskId={task.id} comment={c} me={user} canEdit={canComment} isOwner={isOwner}
                       members={members} replies={repliesOf(c.id)} uploadImage={canEdit ? uploadImage : undefined}
                       onReplied={(reply) => setComments((list) => [...list, reply])}
                       onChanged={(updated) => setComments((list) => list.map((x) => (x.id === updated.id ? updated : x)))}
                       onDeleted={(id) => setComments((list) => list.filter((x) => x.id !== id && x.parentId !== id))} />
                   ))}
                 </ul>
-                {canEdit && <form className="comment-form" onSubmit={postComment}>
+                {canComment && <form className="comment-form" onSubmit={postComment}>
                   <Avatar user={user} size={32} />
                   <div className="comment-input">
+                    {anchor && (
+                      <div className="comment-anchor-draft">
+                        <blockquote className="comment-anchor">“{anchor}”</blockquote>
+                        <button type="button" className="icon-button sm" aria-label={t("Comment on the whole task instead")}
+                          onClick={() => setAnchor(null)}><X size={13} /></button>
+                      </div>
+                    )}
                     <MarkdownEditor value={comment} onChange={setComment} members={members} rows={3} maxLength={2000}
                       label={t("Comment")} placeholder={t("Add a comment… Type @ to mention someone. Ctrl+Enter to send.")}
-                      onSubmitShortcut={() => postComment()} onUploadImage={uploadImage} />
+                      onSubmitShortcut={() => postComment()} onUploadImage={canEdit ? uploadImage : undefined} />
                     <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>{t("Comment")}</button>
                   </div>
                 </form>}
@@ -580,7 +621,7 @@ export function TaskDetailPage() {
                   estimateMinutes: task.estimateMinutes }), e.target.value ? 'Start date set' : 'Start date removed')} />
             </dd>
             <dt>{t("Estimate")}</dt>
-            <dd>
+            <dd className="with-unit">
               <input type="number" min={0} step={0.5} key={`est-${task.estimateMinutes}`} placeholder="–"
                 defaultValue={task.estimateMinutes != null ? task.estimateMinutes / 60 : ''} disabled={busy || !canEdit}
                 aria-label={t("Estimate (hours)")} title={t("Estimate (hours)")}
@@ -652,6 +693,15 @@ export function TaskDetailPage() {
           </dl>
           <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
           <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
+          <KudosPanel task={task} me={user} canThank={canComment} />
+          {wikiMentions.length > 0 && (
+            <section className="side-section">
+              <h3 className="side-title"><BookOpen size={15} /> {t("Mentioned in the wiki")}</h3>
+              <ul className="mini-list">
+                {wikiMentions.map((p) => <li key={p.slug}><Link to={`/p/${task.projectKey}/wiki/${p.slug}`}>{p.title}</Link></li>)}
+              </ul>
+            </section>
+          )}
           {!task.parent && <PokerPanel task={task} canEdit={canEdit} onAccepted={load} />}
         </aside>
       </div>
@@ -664,8 +714,19 @@ export function TaskDetailPage() {
             kind: 'edit',
             projectKey: task.projectKey,
             initial: inputOf(task),
+            taskId: task.id,
+            coEditors: present.filter((p) => p.editing).map((p) => p.user.displayName),
             onSubmit: async (input) => {
-              setTask(await api.updateTask(task.id, input));
+              try {
+                setTask(await api.updateTask(task.id, input, editBase ?? undefined));
+              } catch (e) {
+                const err = e as ApiError;
+                if (err.status === 409) {
+                  setConflict({ input, message: err.message });
+                  return;
+                }
+                throw e;
+              }
               setEditing(false);
               toast(t("Changes saved"));
               api.activity(taskId).then(setActivity).catch(() => {});
@@ -674,6 +735,22 @@ export function TaskDetailPage() {
           onClose={() => setEditing(false)}
           uploadImage={uploadImage}
         />
+      )}
+      {conflict && (
+        <ConfirmDialog title={t("Someone else changed this task")} message={conflict.message}
+          confirmLabel={t("Save mine anyway")} onClose={() => setConflict(null)}
+          onConfirm={async () => {
+            try {
+              setTask(await api.updateTask(task.id, conflict.input));
+              toast(t("Changes saved"));
+              setEditing(false);
+            } catch (e) {
+              toast((e as ApiError).message, 'error');
+            }
+            setConflict(null);
+          }}>
+          <p className="muted small">{t("Saving replaces their title, priority, due date, labels and description with yours. Cancel to keep editing; your text stays in the form.")}</p>
+        </ConfirmDialog>
       )}
       {diff && <DiffModal activity={diff} onClose={() => setDiff(null)} />}
       {sharing && <ShareModal task={task} onClose={() => setSharing(false)} />}
@@ -766,7 +843,7 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
   const { projects } = useProjects();
   const { user } = useAuth();
   const targets = (projects ?? []).filter((p) => p.key !== task.projectKey
-    && p.members.some((m) => m.id === user?.id && m.role !== 'VIEWER'));
+    && p.members.some((m) => m.id === user?.id && !isReadOnlyRole(m.role)));
   const [target, setTarget] = useState(targets[0]?.key ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

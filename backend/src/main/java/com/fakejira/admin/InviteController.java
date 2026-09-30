@@ -49,16 +49,19 @@ public class InviteController {
     }
 
     public record InviteRequest(@Email(message = "Enter a valid email address") @Size(max = 120) String email,
-                                String projectKey) {
+                                String projectKey,
+                                /** MEMBER (default), VIEWER or GUEST; only for project invites. */
+                                com.fakejira.project.ProjectDtos.Role role) {
     }
 
     public record InviteResponse(Long id, String code, String link, String email, String projectKey,
-                                 String createdBy, Instant expiresAt, Instant usedAt, String usedBy) {
+                                 String createdBy, Instant expiresAt, Instant usedAt, String usedBy, String role) {
         static InviteResponse of(Invite invite, MailService mail) {
             return new InviteResponse(invite.getId(), invite.getCode(), mail.link("/register?invite=" + invite.getCode()),
                     invite.getEmail(), invite.getProject() == null ? null : invite.getProject().getKey(),
                     invite.getCreatedBy().getUsername(), invite.getExpiresAt(), invite.getUsedAt(),
-                    invite.getUsedBy() == null ? null : invite.getUsedBy().getUsername());
+                    invite.getUsedBy() == null ? null : invite.getUsedBy().getUsername(),
+                    invite.getProject() == null ? null : invite.getRole());
         }
     }
 
@@ -91,6 +94,9 @@ public class InviteController {
         String email = request.email() == null || request.email().isBlank() ? null : request.email().trim().toLowerCase();
         Invite invite = invites.save(new Invite(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes),
                 email, project, user, Instant.now().plus(VALIDITY)));
+        if (project != null && request.role() != null && request.role() != com.fakejira.project.ProjectDtos.Role.OWNER) {
+            invite.setRole(request.role().name());
+        }
         if (email != null && mail.isEnabled()) {
             mail.send(email, "[FakeJIRA] " + user.getName() + " invited you",
                     user.getName() + " invited you to FakeJIRA"

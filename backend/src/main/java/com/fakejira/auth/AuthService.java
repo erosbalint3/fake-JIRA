@@ -116,9 +116,7 @@ public class AuthService {
 
         if (invite != null) {
             invite.markUsed(user);
-            if (invite.getProject() != null) {
-                invite.getProject().getMembers().add(user);
-            }
+            invite.joinProject(user);
         }
         audit.record(user, "account.register", user.getUsername(),
                 (needsApproval ? "pending approval" : "active") + (invite != null ? ", invited" : ""));

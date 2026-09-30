@@ -136,8 +136,9 @@ public class TaskController {
 
     @PutMapping("/{id}")
     public TaskResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
-                               @Valid @RequestBody UpdateTaskRequest request) {
-        return taskService.update(currentUser.from(jwt), id, request);
+                               @Valid @RequestBody UpdateTaskRequest request,
+                               @RequestParam(required = false) java.time.Instant expected) {
+        return taskService.update(currentUser.from(jwt), id, request, expected);
     }
 
     @PatchMapping("/{id}/status")
@@ -232,7 +233,7 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse addComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                       @Valid @RequestBody CommentRequest request) {
-        return details.addComment(currentUser.from(jwt), id, request.body(), request.parentId());
+        return details.addComment(currentUser.from(jwt), id, request.body(), request.parentId(), request.anchor());
     }
 
     @GetMapping("/{id}/checklist")

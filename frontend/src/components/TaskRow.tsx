@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../types';
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
@@ -107,7 +108,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
             <select value={task.assignee?.id ?? ''} aria-label={`Assignee of ${task.key}`}
               onChange={(e) => inline.onAssign(task, e.target.value ? Number(e.target.value) : null)}>
               <option value="">{t("Unassigned")}</option>
-              {inline.members.filter((m) => m.role !== 'VIEWER').map((m) => (
+              {inline.members.filter((m) => !isReadOnlyRole(m.role)).map((m) => (
                 <option key={m.id} value={m.id}>{m.displayName}</option>
               ))}
             </select>

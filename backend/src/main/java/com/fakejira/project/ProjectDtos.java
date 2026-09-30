@@ -58,7 +58,7 @@ public final class ProjectDtos {
         }
     }
 
-    public enum Role { OWNER, MEMBER, VIEWER }
+    public enum Role { OWNER, MEMBER, VIEWER, GUEST }
 
     /** {@code role} defaults to MEMBER; VIEWER gives read-only access. */
     public record AddMemberRequest(@NotBlank(message = "Enter a username or email") String login, Role role) {
@@ -89,6 +89,23 @@ public final class ProjectDtos {
             boolean autoSchedule,
             boolean restrictTransitions) {
 
+        /** As seen by {@code viewer}: guests do not get other people's email addresses or integration settings. */
+        public static ProjectResponse of(Project project, com.fakejira.user.User viewer) {
+            ProjectResponse full = of(project);
+            if (viewer == null || !project.isGuest(viewer)) {
+                return full;
+            }
+            List<MemberResponse> members = full.members().stream()
+                    .map(m -> m.id().equals(viewer.getId()) ? m : new MemberResponse(m.id(), m.username(), null,
+                            m.displayName(), m.avatarUrl(), m.role(), m.awayUntil()))
+                    .toList();
+            UserSummary owner = full.owner();
+            return new ProjectResponse(full.id(), full.key(), full.name(), full.description(),
+                    new UserSummary(owner.id(), owner.username(), null, owner.displayName(), owner.avatarUrl(), owner.awayUntil()),
+                    members, false, false, full.createdAt(), full.kanban(), full.color(), full.autoSchedule(),
+                    full.restrictTransitions());
+        }
+
         public static ProjectResponse of(Project project) {
             return new ProjectResponse(
                     project.getId(),
@@ -100,6 +117,7 @@ public final class ProjectDtos {
                             .map(member -> {
                                 UserSummary summary = UserSummary.of(member);
                                 Role role = project.isOwner(member) ? Role.OWNER
+                                        : project.isGuest(member) ? Role.GUEST
                                         : project.isViewer(member) ? Role.VIEWER : Role.MEMBER;
                                 return new MemberResponse(summary.id(), summary.username(), summary.email(),
                                         summary.displayName(), summary.avatarUrl(), role, summary.awayUntil());

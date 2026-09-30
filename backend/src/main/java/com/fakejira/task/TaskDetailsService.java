@@ -121,7 +121,11 @@ public class TaskDetailsService {
     }
 
     public CommentResponse addComment(User user, Long taskId, String body, Long parentId) {
-        Task task = support.editableTask(taskId, user);
+        return addComment(user, taskId, body, parentId, null);
+    }
+
+    public CommentResponse addComment(User user, Long taskId, String body, Long parentId, String anchor) {
+        Task task = support.commentableTask(taskId, user);
         Comment parent = null;
         if (parentId != null) {
             parent = commentOf(task, parentId);
@@ -132,6 +136,10 @@ public class TaskDetailsService {
         }
         Comment created = new Comment(task, user, body.trim());
         created.setParent(parent);
+        if (parent == null && anchor != null && !anchor.isBlank()) {
+            String quote = anchor.trim().replaceAll("\\s+", " ");
+            created.setAnchor(quote.length() > 300 ? quote.substring(0, 300) : quote);
+        }
         Comment comment = comments.save(created);
         if (parent != null && !parent.getAuthor().getId().equals(user.getId())) {
             notifications.notify(parent.getAuthor(), user, task, "replied to your comment on");
@@ -157,7 +165,7 @@ public class TaskDetailsService {
 
     /** Authors edit their own comments; people @mentioned for the first time get notified. */
     public CommentResponse editComment(User user, Long taskId, Long commentId, String body) {
-        Task task = support.editableTask(taskId, user);
+        Task task = support.commentableTask(taskId, user);
         Comment comment = commentOf(task, commentId);
         if (!comment.getAuthor().getId().equals(user.getId())) {
             throw ApiException.forbidden("You can only edit your own comments.");
@@ -260,7 +268,10 @@ public class TaskDetailsService {
 
     @Transactional(readOnly = true)
     public List<ActivityResponse> activity(User user, Long taskId) {
-        support.memberTask(taskId, user);
+        // Guests see the conversation, not the internal history.
+        if (support.memberTask(taskId, user).getProject().isGuest(user)) {
+            return List.of();
+        }
         return activity.findForTask(taskId).stream().map(ActivityResponse::of).toList();
     }
 
@@ -329,7 +340,9 @@ public class TaskDetailsService {
 
     @Transactional(readOnly = true)
     public List<TimeEntryResponse> time(User user, Long taskId) {
-        support.memberTask(taskId, user);
+        if (support.memberTask(taskId, user).getProject().isGuest(user)) {
+            return List.of();
+        }
         return time.findForTask(taskId).stream().map(TimeEntryResponse::of).toList();
     }
 

@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, History, Pencil, Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
@@ -280,7 +281,7 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const editors = members.filter((m) => m.role !== 'VIEWER');
+  const editors = members.filter((m) => !isReadOnlyRole(m.role));
 
   const setAction = (index: number, action: RuleAction) =>
     setForm({ ...form, actions: form.actions.map((a, i) => (i === index ? action : a)) });

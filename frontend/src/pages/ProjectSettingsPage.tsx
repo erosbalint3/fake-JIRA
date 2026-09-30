@@ -28,7 +28,7 @@ import {
 } from '../types';
 import { t } from '../i18n';
 
-const ROLE_LABEL: Record<Role, string> = { OWNER: 'Owner', MEMBER: 'Member', VIEWER: 'Viewer' };
+const ROLE_LABEL: Record<Role, string> = { OWNER: 'Owner', MEMBER: 'Member', VIEWER: 'Viewer', GUEST: 'Guest' };
 
 async function copy(text: string, toast: (message: string) => void) {
   try {
@@ -285,6 +285,7 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
           <select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label={t("Role for the new member")}>
             <option value="MEMBER">{t("Member")}</option>
             <option value="VIEWER">{t("Viewer")}</option>
+            <option value="GUEST">{t("Guest (can comment)")}</option>
           </select>
           <button className="btn btn-soft" disabled={busy || !login.trim()}><UserPlus size={16} /> {t("Add")}</button>
         </form>
@@ -296,7 +297,7 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
             <div className="member-text">
               <strong>{member.displayName}{member.id === user?.id && <span className="muted"> {t("(you)")}</span>}
                 {member.awayUntil && <span className="away-badge" title={`Away until ${member.awayUntil}`}>{t("away")}</span>}</strong>
-              <span className="muted small">@{member.username} · {member.email}</span>
+              <span className="muted small">@{member.username}{member.email ? ` · ${member.email}` : ''}</span>
             </div>
             {member.role === 'OWNER' ? (
               <span className="owner-badge"><Crown size={13} /> {t("Owner")}</span>
@@ -307,6 +308,7 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
                     `${member.displayName} is now a ${ROLE_LABEL[e.target.value as Role].toLowerCase()}`)}>
                   <option value="MEMBER">{t("Member")}</option>
                   <option value="VIEWER">{t("Viewer")}</option>
+                  <option value="GUEST">{t("Guest")}</option>
                 </select>
                 <button className="icon-button" aria-label={`Make ${member.displayName} the owner`} title={t("Hand over ownership")}
                   onClick={() => onTransfer(member)}>
@@ -331,6 +333,7 @@ function InvitesSection({ project }: { project: Project }) {
   const toast = useToast();
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [email, setEmail] = useState('');
+  const [role, setRole] = useState<Role>('MEMBER');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -342,7 +345,7 @@ function InvitesSection({ project }: { project: Project }) {
     event.preventDefault();
     setBusy(true);
     try {
-      const invite = await api.createInvite(email.trim() || null, project.key);
+      const invite = await api.createInvite(email.trim() || null, project.key, role);
       setEmail('');
       load();
       await copy(inviteLink(invite.code), toast);
@@ -359,11 +362,16 @@ function InvitesSection({ project }: { project: Project }) {
     <section className="panel">
       <h2 className="panel-title"><Link2 size={16} /> {t("Invite links")}</h2>
       <p className="muted small hint">
-        Invite people who don't have an account yet. They join {project.name} as members when they sign up. Links are valid for 7 days.
+        {t("Invite people who don't have an account yet. They join with the role you pick when they sign up. Guests, such as clients, can read and comment but do not see history, time logs or email addresses. Links are valid for 7 days.")}
       </p>
       <form className="inline-form" onSubmit={create}>
         <input type="email" value={email} placeholder={t("Email (optional — binds the invite)")} aria-label={t("Invite email")}
           onChange={(e) => setEmail(e.target.value)} />
+        <select value={role} onChange={(e) => setRole(e.target.value as Role)} aria-label={t("Joins as")}>
+          <option value="MEMBER">{t("Member")}</option>
+          <option value="VIEWER">{t("Viewer")}</option>
+          <option value="GUEST">{t("Guest (can comment)")}</option>
+        </select>
         <button className="btn btn-soft" disabled={busy}><Plus size={16} /> {t("Create link")}</button>
       </form>
       {pending.length > 0 && (
@@ -372,7 +380,7 @@ function InvitesSection({ project }: { project: Project }) {
             <li key={invite.id}>
               <div className="invite-text">
                 <strong>{invite.email ?? 'Anyone with the link'}</strong>
-                <span className="muted small">Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
+                <span className="muted small">{invite.role && invite.role !== 'MEMBER' ? `${t(ROLE_LABEL[invite.role])} · ` : ''}Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
               </div>
               <button className="icon-button sm" aria-label={t("Copy invite link")} title={t("Copy link")} onClick={() => copy(inviteLink(invite.code), toast)}>
                 <Copy size={15} />

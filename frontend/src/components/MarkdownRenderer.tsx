@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { t } from '../i18n';
 
 /** Object URLs of attachment images already loaded in this tab. */
 const loaded = new Map<number, Promise<string>>();
@@ -49,6 +50,10 @@ export default function MarkdownRenderer({ children, className = '' }: { childre
           a: ({ href, children: text }) => (
             <a href={href} target="_blank" rel="noopener noreferrer nofollow">{text}</a>
           ),
+          // GitHub task-list items: read-only checkboxes need a name for screen readers.
+          input: ({ type, checked }) => (type === 'checkbox'
+            ? <input type="checkbox" checked={!!checked} disabled aria-label={checked ? t('Done') : t('Not done')} />
+            : null),
           img: ({ src, alt }) => {
             const match = typeof src === 'string' ? /^attachment:(\d+)$/.exec(src) : null;
             if (match) return <AttachmentImage id={Number(match[1])} alt={alt ?? ''} />;

@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../../types';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pause, Play, Plus, Repeat, Trash2 } from 'lucide-react';
 import { api, ApiError, type RecurringInput } from '../../api';
@@ -164,7 +165,7 @@ function RecurringModal({ initial, isNew, members, onClose, onSave }: {
           <label className="field"><span>Assignee</span>
             <select value={form.assigneeId ?? ''} onChange={(e) => set('assigneeId', e.target.value ? Number(e.target.value) : null)}>
               <option value="">Unassigned</option>
-              {members.filter((m) => m.role !== 'VIEWER').map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
+              {members.filter((m) => !isReadOnlyRole(m.role)).map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
             </select>
           </label>
           <label className="field"><span>Type</span>

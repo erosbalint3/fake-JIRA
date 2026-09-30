@@ -22,4 +22,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Project p where p.id = :id")
     Optional<Project> lockById(@Param("id") Long id);
+
+    @Query("select count(p) > 0 from Project p join p.guests g where g.id = :userId")
+    boolean isGuestAnywhere(@Param("userId") Long userId);
 }

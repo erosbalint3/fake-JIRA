@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../types';
 import { createContext, useCallback, useContext, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api';
@@ -57,7 +58,7 @@ export function TransitionProvider({ children }: { children: ReactNode }) {
 function RequirementsModal({ pending, onDone }: { pending: Pending; onDone: (task: Task | null) => void }) {
   const { byKey } = useProjects();
   const { task, required } = pending;
-  const members = (byKey(task.projectKey)?.members ?? []).filter((m) => m.role !== 'VIEWER');
+  const members = (byKey(task.projectKey)?.members ?? []).filter((m) => !isReadOnlyRole(m.role));
   const [resolution, setResolution] = useState<Resolution>('DONE');
   const [assignee, setAssignee] = useState<string>(task.assignee ? String(task.assignee.id) : '');
   const [points, setPoints] = useState(task.storyPoints?.toString() ?? '');

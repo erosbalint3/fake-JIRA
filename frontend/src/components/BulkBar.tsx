@@ -1,3 +1,4 @@
+import { isReadOnlyRole } from '../types';
 import { useState } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../api';
@@ -114,7 +115,7 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
       <strong>{selected.length} selected</strong>
       {select('Status', STATUSES.map((s) => [s, STATUS_LABEL[s]]),
         (v) => apply({ status: v as BulkChange['status'] }, `Moved to ${STATUS_LABEL[v as keyof typeof STATUS_LABEL]}`))}
-      {select('Assignee', [['none', 'Unassigned'], ...members.filter((m) => m.role !== 'VIEWER').map((m) => [String(m.id), m.displayName] as [string, string])],
+      {select('Assignee', [['none', 'Unassigned'], ...members.filter((m) => !isReadOnlyRole(m.role)).map((m) => [String(m.id), m.displayName] as [string, string])],
         (v) => apply(v === 'none' ? { unassign: true } : { assigneeId: Number(v) }, 'Assignee updated'))}
       {select('Sprint', [['backlog', 'Backlog'], ...sprints.filter((s) => s.state !== 'COMPLETED').map((s) => [String(s.id), s.name] as [string, string])],
         (v) => apply(v === 'backlog' ? { clearSprint: true } : { sprintId: Number(v) }, 'Sprint updated'))}

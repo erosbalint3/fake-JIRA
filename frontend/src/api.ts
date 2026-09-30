@@ -7,6 +7,7 @@ import type {
   SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
   AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
   PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
+  Poll, DecisionEntry, KudosEntry, KudosWall, WikiPage, WikiPageSummary, WikiRevision, MeetingNote, MeetingKind, Standup,
   Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
 } from './types';
 
@@ -375,7 +376,9 @@ export const api = {
   moveToColumn: (id: number, columnId: number, resolution?: Resolution | null) =>
     request<Task>('PATCH', `/tasks/${id}/column`, { columnId, resolution: resolution ?? null }),
   createTask: (input: CreateTaskInput) => request<Task>('POST', '/tasks', input),
-  updateTask: (id: number, input: TaskInput) => request<Task>('PUT', `/tasks/${id}`, input),
+  /** {@code expected}: the task's updatedAt when the form opened; the server refuses to overwrite newer changes. */
+  updateTask: (id: number, input: TaskInput, expected?: string) =>
+    request<Task>('PUT', `/tasks/${id}${expected ? `?expected=${encodeURIComponent(expected)}` : ''}`, input),
   setStatus: (id: number, status: Status, resolution?: Resolution | null) =>
     request<Task>('PATCH', `/tasks/${id}/status`, { status, resolution: resolution ?? null }),
   setResolution: (id: number, resolution: Resolution) => request<Task>('PUT', `/tasks/${id}/resolution`, { resolution }),
@@ -421,6 +424,56 @@ export const api = {
     request<SprintCapacity>('PUT', `/sprints/${sprintId}/capacity/${userId}`, { hoursPerDay, daysOff }),
 
   timeline: (key: string) => request<Timeline>('GET', `/projects/${key}/timeline`),
+
+  polls: (taskId: number) => request<Poll[]>('GET', `/tasks/${taskId}/polls`),
+  createPoll: (taskId: number, question: string, options: string[], multiple: boolean) =>
+    request<Poll>('POST', `/tasks/${taskId}/polls`, { question, options, multiple }),
+  vote: (pollId: number, options: number[]) => request<Poll>('POST', `/polls/${pollId}/vote`, { options }),
+  closePoll: (pollId: number, recordDecision: boolean) => request<Poll>('POST', `/polls/${pollId}/close`, { recordDecision }),
+  deletePoll: (pollId: number) => request<void>('DELETE', `/polls/${pollId}`),
+  decisions: (key: string) => request<DecisionEntry[]>('GET', `/projects/${key}/decisions`),
+  taskDecisions: (taskId: number) => request<DecisionEntry[]>('GET', `/tasks/${taskId}/decisions`),
+  recordDecision: (key: string, text: string, context: string, taskId?: number | null) =>
+    request<DecisionEntry>('POST', `/projects/${key}/decisions`, { text, context, taskId: taskId ?? null }),
+  deleteDecision: (id: number) => request<void>('DELETE', `/decisions/${id}`),
+  giveKudos: (taskId: number, toUserId: number, message: string, emoji: string) =>
+    request<KudosEntry>('POST', `/tasks/${taskId}/kudos`, { toUserId, message, emoji }),
+  taskKudos: (taskId: number) => request<KudosEntry[]>('GET', `/tasks/${taskId}/kudos`),
+  kudosWall: (project?: string) => request<KudosWall>('GET', `/kudos${project ? `?project=${project}` : ''}`),
+  wikiPages: (key: string) => request<WikiPageSummary[]>('GET', `/projects/${key}/wiki`),
+  wikiPage: (key: string, slug: string) => request<WikiPage>('GET', `/projects/${key}/wiki/${encodeURIComponent(slug)}`),
+  createWikiPage: (key: string, input: { title: string; body: string; parentId: number | null }) =>
+    request<WikiPage>('POST', `/projects/${key}/wiki`, input),
+  updateWikiPage: (id: number, input: { title: string; body: string; parentId: number | null; baseVersion: number }) =>
+    request<WikiPage>('PUT', `/wiki/${id}`, input),
+  deleteWikiPage: (id: number) => request<void>('DELETE', `/wiki/${id}`),
+  wikiHistory: (id: number) => request<WikiRevision[]>('GET', `/wiki/${id}/history`),
+  wikiRevision: (id: number, version: number) => request<WikiRevision>('GET', `/wiki/${id}/history/${version}`),
+  restoreWikiRevision: (id: number, version: number) => request<WikiPage>('POST', `/wiki/${id}/history/${version}/restore`),
+  taskWikiMentions: (taskId: number) => request<WikiPageSummary[]>('GET', `/tasks/${taskId}/wiki`),
+  meetings: (key: string, sprintId?: number) =>
+    request<MeetingNote[]>('GET', `/projects/${key}/meetings${sprintId ? `?sprint=${sprintId}` : ''}`),
+  createMeeting: (key: string, input: { kind: MeetingKind; title: string; date: string; body: string; sprintId: number | null }) =>
+    request<MeetingNote>('POST', `/projects/${key}/meetings`, input),
+  updateMeeting: (id: number, input: { kind: MeetingKind; title: string; date: string; body: string; sprintId: number | null }) =>
+    request<MeetingNote>('PUT', `/meetings/${id}`, input),
+  deleteMeeting: (id: number) => request<void>('DELETE', `/meetings/${id}`),
+  addAction: (noteId: number, text: string, assigneeId: number | null) =>
+    request<MeetingNote>('POST', `/meetings/${noteId}/actions`, { text, assigneeId }),
+  actionsFromNotes: (noteId: number) => request<MeetingNote>('POST', `/meetings/${noteId}/actions/from-notes`),
+  deleteAction: (id: number) => request<MeetingNote>('DELETE', `/meeting-actions/${id}`),
+  actionTasks: (noteId: number, only?: number) =>
+    request<MeetingNote>('POST', `/meetings/${noteId}/tasks${only ? `?only=${only}` : ''}`),
+  standup: (key: string, date?: string) => request<Standup>('GET', `/projects/${key}/standup${date ? `?date=${date}` : ''}`),
+  presenceHeartbeat: (taskId: number, clientId: string, editing: boolean) =>
+    request<{ user: User; editing: boolean }[]>('POST', `/tasks/${taskId}/presence`, { clientId, editing }),
+  presence: (taskId: number) => request<{ user: User; editing: boolean }[]>('GET', `/tasks/${taskId}/presence`),
+  presenceLeave: (taskId: number, clientId: string) => request<void>('POST', `/tasks/${taskId}/presence/leave`, { clientId }),
+  collabJoin: (taskId: number, clientId: string) =>
+    request<{ seed: boolean; updates: string[] }>('POST', `/tasks/${taskId}/collab/join`, { clientId }),
+  collabUpdate: (taskId: number, clientId: string, update: string) =>
+    request<void>('POST', `/tasks/${taskId}/collab/update`, { clientId, update }),
+  collabLeave: (taskId: number, clientId: string) => request<void>('POST', `/tasks/${taskId}/collab/leave`, { clientId }),
   portfolio: () => request<PortfolioRow[]>('GET', '/portfolio'),
   goals: (quarter?: string) => request<Goal[]>('GET', `/goals${quarter ? `?quarter=${encodeURIComponent(quarter)}` : ''}`),
   createGoal: (input: { title: string; description: string; quarter: string; shared: boolean }) =>
@@ -439,7 +492,8 @@ export const api = {
   deleteTask: (id: number) => request<void>('DELETE', `/tasks/${id}`),
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
-  addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
+  addComment: (id: number, body: string, anchor?: string | null) =>
+    request<Comment>('POST', `/tasks/${id}/comments`, { body, anchor: anchor ?? null }),
   replyToComment: (id: number, parentId: number, body: string) =>
     request<Comment>('POST', `/tasks/${id}/comments`, { body, parentId }),
   react: (id: number, commentId: number, emoji: string) =>
@@ -510,8 +564,8 @@ export const api = {
   pushTest: () => request<{ delivered: number }>('POST', '/push/test'),
 
   invites: () => request<Invite[]>('GET', '/invites'),
-  createInvite: (email: string | null, projectKey: string | null) =>
-    request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null }),
+  createInvite: (email: string | null, projectKey: string | null, role?: Role) =>
+    request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null, role: role ?? null }),
   revokeInvite: (id: number) => request<void>('DELETE', `/invites/${id}`),
 
   admin: () => request<AdminOverview>('GET', '/admin'),
@@ -645,8 +699,8 @@ export function saveBlob(blob: Blob, filename: string) {
 }
 
 export interface LiveMessage {
-  type: 'task' | 'project' | 'notification' | 'ready';
-  data: { projectId?: number; taskId?: number; deleted?: boolean };
+  type: 'task' | 'project' | 'notification' | 'ready' | 'presence' | 'collab';
+  data: { projectId?: number; taskId?: number; deleted?: boolean; clientId?: string; update?: string };
 }
 
 /**

@@ -3,7 +3,9 @@ export type Status = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
 export type Scope = 'AVAILABLE' | 'MINE' | 'REPORTED' | 'ALL';
 export type SprintState = 'PLANNED' | 'ACTIVE' | 'COMPLETED';
 
-export type Role = 'OWNER' | 'MEMBER' | 'VIEWER';
+export type Role = 'OWNER' | 'MEMBER' | 'VIEWER' | 'GUEST';
+/** Viewers and guests cannot own work. */
+export const isReadOnlyRole = (role: Role) => role === 'VIEWER' || role === 'GUEST';
 export type TaskType = 'TASK' | 'BUG' | 'STORY' | 'SPIKE';
 export type EmailFrequency = 'OFF' | 'INSTANT' | 'DAILY' | 'WEEKLY';
 export type RegistrationMode = 'OPEN' | 'INVITE' | 'APPROVAL';
@@ -231,6 +233,8 @@ export interface Invite {
   expiresAt: string;
   usedAt: string | null;
   usedBy: string | null;
+  /** Role in the project for project invites. */
+  role: Role | null;
 }
 
 export interface AdminUser {
@@ -271,6 +275,8 @@ export interface Comment {
   editedAt: string | null;
   parentId: number | null;
   reactions: Reaction[];
+  /** Inline comments: the passage of the description they refer to. */
+  anchor: string | null;
 }
 
 export interface ChecklistItem {
@@ -556,7 +562,7 @@ export interface SearchField {
   values: string[];
 }
 
-export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE';
+export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE' | 'WIKI';
 
 export interface TextHit {
   kind: HitKind;
@@ -950,4 +956,115 @@ export interface KeyResultInput {
   current?: number | null;
   unit?: string | null;
   epicIds?: number[];
+}
+
+// ---------------------------------------------------------------- 5.0: collaboration
+
+export interface PollOption {
+  text: string;
+  votes: number;
+  voters: string[];
+  mine: boolean;
+}
+
+export interface Poll {
+  id: number;
+  question: string;
+  multiple: boolean;
+  options: PollOption[];
+  voters: number;
+  createdBy: User;
+  createdAt: string;
+  closedAt: string | null;
+  canClose: boolean;
+}
+
+export interface DecisionEntry {
+  id: number;
+  text: string;
+  context: string;
+  task: TaskRef | null;
+  decidedBy: User;
+  decidedAt: string;
+}
+
+export interface KudosEntry {
+  id: number;
+  from: User;
+  to: User;
+  message: string;
+  emoji: string;
+  task: TaskRef | null;
+  projectKey: string;
+  createdAt: string;
+}
+
+export interface KudosWall {
+  recent: KudosEntry[];
+  thisMonth: { user: User; count: number }[];
+}
+
+export interface WikiPageSummary {
+  id: number;
+  title: string;
+  slug: string;
+  parentId: number | null;
+  updatedBy: User;
+  updatedAt: string;
+}
+
+export interface WikiPage {
+  id: number;
+  projectKey: string;
+  title: string;
+  slug: string;
+  body: string;
+  version: number;
+  parentId: number | null;
+  path: WikiPageSummary[];
+  children: WikiPageSummary[];
+  createdBy: User;
+  createdAt: string;
+  updatedBy: User;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
+export interface WikiRevision {
+  version: number;
+  title: string;
+  author: User;
+  createdAt: string;
+  body: string | null;
+}
+
+export type MeetingKind = 'STANDUP' | 'PLANNING' | 'REVIEW' | 'RETRO' | 'OTHER';
+
+export interface MeetingNote {
+  id: number;
+  kind: MeetingKind;
+  title: string;
+  date: string;
+  body: string;
+  sprintId: number | null;
+  sprintName: string | null;
+  createdBy: User;
+  updatedAt: string;
+  actions: { id: number; text: string; assignee: User | null; task: TaskRef | null }[];
+}
+
+export interface StandupPerson {
+  user: User;
+  away: boolean;
+  finished: TaskRef[];
+  workedOn: TaskRef[];
+  today: TaskRef[];
+  blocked: TaskRef[];
+  minutesLogged: number;
+}
+
+export interface Standup {
+  date: string;
+  since: string;
+  people: StandupPerson[];
 }

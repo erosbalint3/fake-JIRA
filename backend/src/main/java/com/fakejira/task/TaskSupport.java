@@ -54,6 +54,20 @@ public class TaskSupport {
         return task;
     }
 
+    /** Who last changed the task (from its history). */
+    public java.util.Optional<User> lastActor(Task task) {
+        return activity.findTopByTaskIdOrderByCreatedAtDesc(task.getId()).map(TaskActivity::getActor);
+    }
+
+    /** Members who may comment: editors, plus guests (who are otherwise read-only). */
+    public Task commentableTask(Long id, User user) {
+        Task task = memberTask(id, user);
+        if (!task.getProject().canEdit(user) && !task.getProject().isGuest(user)) {
+            throw ApiException.forbidden("You have read-only access to " + task.getProject().getKey() + ".");
+        }
+        return task;
+    }
+
     public void record(Task task, User actor, String message) {
         String rule = TaskEvents.currentRule();
         String text = rule == null ? message : message + " (rule “" + rule + "”)";

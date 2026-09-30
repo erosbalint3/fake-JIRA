@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { isReadOnlyRole } from '../types';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCollaborativeText } from '../collab';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
@@ -21,7 +23,9 @@ type Mode =
     parent?: { id: number; key: string };
     onSubmit: (input: CreateTaskInput) => Promise<void>;
   }
-  | { kind: 'edit'; projectKey: string; initial: TaskInput; onSubmit: (input: TaskInput) => Promise<void> };
+  | { kind: 'edit'; projectKey: string; initial: TaskInput; onSubmit: (input: TaskInput) => Promise<void>;
+      /** Turns on live co-editing of the description with others editing the same task. */
+      taskId?: number; coEditors?: string[] };
 
 interface Props {
   title: string;
@@ -33,6 +37,7 @@ interface Props {
 }
 
 export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }: Props) {
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   const { projects, lastKey } = useProjects();
   const initial = mode.kind === 'edit' ? mode.initial : null;
   const [projectKey, setProjectKey] = useState(mode.projectKey ?? lastKey() ?? '');
@@ -56,11 +61,13 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const collab = useCollaborativeText(mode.kind === 'edit' ? mode.taskId ?? null : null, form.description,
+    (description) => setForm((current) => ({ ...current, description })), descriptionRef);
 
   useEffect(() => {
     if (!projectKey) return;
     const project = projects?.find((p) => p.key === projectKey);
-    setMembers((project?.members ?? []).filter((m) => m.role !== 'VIEWER'));
+    setMembers((project?.members ?? []).filter((m) => !isReadOnlyRole(m.role)));
     api.epics(projectKey).then(setEpics).catch(() => setEpics([]));
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
@@ -184,10 +191,19 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
           {errors.title && <small className="field-error">{errors.title}</small>}
         </label>
         <div className="field">
-          <span>{t("Description")}</span>
+          <span className="field-label-row">{t("Description")}
+            {collab === 'live' && (
+              <span className="live-chip" title={t("Changes by others appear as they type")}>
+                <span className="live-dot on" /> {mode.kind === 'edit' && mode.coEditors?.length
+                  ? t('Editing live with {names}', { names: mode.coEditors.join(', ') }) : t('Live co-editing')}
+              </span>
+            )}
+            {collab === 'offline' && <span className="muted small">{t('Live co-editing unavailable — your text saves as usual')}</span>}
+          </span>
           <MarkdownEditor
+            inputRef={descriptionRef}
             value={form.description}
-            onChange={(description) => setForm({ ...form, description })}
+            onChange={(description) => setForm((current) => ({ ...current, description }))}
             members={members}
             maxLength={5000}
             rows={6}
