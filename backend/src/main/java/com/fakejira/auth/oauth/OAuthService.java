@@ -44,7 +44,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/** "Sign in with Google / GitHub" using the OAuth 2.0 authorization code flow. */
+/**
+ * "Sign in with Google / GitHub / your company" using the OAuth 2.0 authorization code flow. The company provider is
+ * any OpenID Connect issuer (Okta, Entra ID, Keycloak, Auth0…), set up from its discovery document. SAML sign-in
+ * ({@link SamlService}) shares the state, cookie and account handling here.
+ */
 @Service
 public class OAuthService {
 
@@ -89,6 +93,51 @@ public class OAuthService {
         register(env, "github", "GitHub", "https://github.com/login/oauth/authorize",
                 "https://github.com/login/oauth/access_token", "https://api.github.com/user",
                 "https://api.github.com/user/emails", "read:user user:email");
+        this.oidcIssuer = env.getProperty("app.oauth.oidc.issuer", "").trim().replaceAll("/+$", "");
+        this.oidcTrustEmail = env.getProperty("app.oauth.oidc.trust-email", Boolean.class, false);
+        if (!oidcIssuer.isEmpty()) {
+            providers.put("oidc", new OAuthProvider("oidc", env.getProperty("app.oauth.oidc.label", "Single sign-on"),
+                    env.getProperty("app.oauth.oidc.client-id", ""), env.getProperty("app.oauth.oidc.client-secret", ""),
+                    null, null, null, null, env.getProperty("app.oauth.oidc.scope", "openid email profile")));
+        }
+    }
+
+    private final String oidcIssuer;
+    private final boolean oidcTrustEmail;
+    private volatile OAuthProvider oidcResolved;
+    private SamlService saml;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setSaml(@org.springframework.context.annotation.Lazy SamlService saml) {
+        this.saml = saml;
+    }
+
+    /** The OpenID Connect provider with its endpoints read from the issuer's discovery document (cached). */
+    private OAuthProvider resolveOidc(OAuthProvider configured) {
+        OAuthProvider resolved = oidcResolved;
+        if (resolved != null) {
+            return resolved;
+        }
+        try {
+            JsonNode discovery = get(oidcIssuer + "/.well-known/openid-configuration", null);
+            if (!oidcIssuer.equals(discovery.path("issuer").asText().replaceAll("/+$", ""))) {
+                throw new IOException("The discovery document is for a different issuer");
+            }
+            resolved = new OAuthProvider("oidc", configured.label(), configured.clientId(), configured.clientSecret(),
+                    discovery.path("authorization_endpoint").asText(), discovery.path("token_endpoint").asText(),
+                    discovery.path("userinfo_endpoint").asText(), null, configured.scope());
+            if (resolved.authorizeUrl().isEmpty() || resolved.tokenUrl().isEmpty() || resolved.userUrl().isEmpty()) {
+                throw new IOException("The discovery document is missing endpoints");
+            }
+            oidcResolved = resolved;
+            return resolved;
+        } catch (IOException | RuntimeException e) {
+            throw new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY,
+                    "Could not reach the sign-in provider. Please try again later.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(org.springframework.http.HttpStatus.BAD_GATEWAY, "Sign-in was interrupted.");
+        }
     }
 
     private void register(Environment env, String id, String label, String authorize, String token, String user,
@@ -103,16 +152,29 @@ public class OAuthService {
 
     /** Providers with credentials configured, for the sign-in page. */
     public List<Map<String, String>> enabled() {
-        return providers.values().stream().filter(OAuthProvider::enabled)
-                .map(p -> Map.of("id", p.id(), "label", p.label())).toList();
+        List<Map<String, String>> list = new java.util.ArrayList<>(providers.values().stream().filter(OAuthProvider::enabled)
+                .map(p -> Map.of("id", p.id(), "label", p.label())).toList());
+        if (saml != null && saml.enabled()) {
+            list.add(Map.of("id", "saml", "label", saml.label()));
+        }
+        return list;
+    }
+
+    /** True when a company sign-in (OpenID Connect or SAML) is set up; "require single sign-on" needs one. */
+    public boolean ssoEnabled() {
+        OAuthProvider oidc = providers.get("oidc");
+        return oidc != null && oidc.enabled() || saml != null && saml.enabled();
     }
 
     private OAuthProvider provider(String id) {
+        if (id.equals("saml") && saml != null && saml.enabled()) {
+            return new OAuthProvider("saml", saml.label(), "saml", "saml", null, null, null, null, null);
+        }
         OAuthProvider provider = providers.get(id);
         if (provider == null || !provider.enabled()) {
             throw ApiException.notFound("Sign-in with " + id + " is not set up on this server.");
         }
-        return provider;
+        return id.equals("oidc") ? resolveOidc(provider) : provider;
     }
 
     public String redirectUri(String providerId) {
@@ -137,8 +199,16 @@ public class OAuthService {
         if (inviteCode != null && !inviteCode.isBlank()) {
             claims.claim("invite", inviteCode.trim());
         }
+        String requestId = null;
+        if (providerId.equals("saml")) {
+            requestId = "_" + newNonce().replace('-', 'a').replace('_', 'b');
+            claims.claim("request", requestId);
+        }
         String state = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()))
                 .getTokenValue();
+        if (providerId.equals("saml")) {
+            return saml.authnRequestUrl(requestId, state);
+        }
         Map<String, String> params = new LinkedHashMap<>();
         params.put("client_id", provider.clientId());
         params.put("redirect_uri", redirectUri(providerId));
@@ -160,10 +230,8 @@ public class OAuthService {
     /** Handles the provider's redirect back to us. */
     @Transactional
     public Outcome callback(String providerId, String code, String state, String cookieNonce) {
-        Jwt stateJwt;
-        try {
-            stateJwt = decoder.decode(state == null ? "" : state);
-        } catch (JwtException e) {
+        Jwt stateJwt = readState(state);
+        if (stateJwt == null) {
             return error("The sign-in link expired. Please try again.");
         }
         if (!"oauth-state".equals(stateJwt.getClaimAsString(TokenService.PURPOSE))
@@ -179,7 +247,7 @@ public class OAuthService {
         OAuthProvider provider = provider(providerId);
         Profile profile;
         try {
-            profile = fetchProfile(provider, code);
+            profile = providerId.equals("saml") ? saml.redeem(code, state) : fetchProfile(provider, code);
         } catch (IOException | InterruptedException | RuntimeException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -192,6 +260,15 @@ public class OAuthService {
             return linkAccount(provider, profile, Long.valueOf(link));
         }
         return signIn(provider, profile, stateJwt.getClaimAsString("invite"));
+    }
+
+    /** The signed state (also SAML's RelayState), or null when it is invalid or expired. */
+    Jwt readState(String state) {
+        try {
+            return decoder.decode(state == null ? "" : state);
+        } catch (JwtException e) {
+            return null;
+        }
     }
 
     private Outcome linkAccount(OAuthProvider provider, Profile profile, Long userId) {
@@ -302,17 +379,20 @@ public class OAuthService {
             return new Profile(user.path("id").asText(), email, verified, user.path("login").asText(null),
                     user.path("name").asText(null));
         }
-        return new Profile(user.path("sub").asText(), user.path("email").asText(null),
-                user.path("email_verified").asBoolean(false), null, user.path("name").asText(null));
+        boolean verified = user.path("email_verified").asBoolean(false) || provider.id().equals("oidc") && oidcTrustEmail;
+        return new Profile(user.path("sub").asText(), user.path("email").asText(null), verified,
+                user.path("preferred_username").asText(null), user.path("name").asText(null));
     }
 
     private JsonNode get(String url, String accessToken) throws IOException, InterruptedException {
-        HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url))
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(15))
-                .header("Authorization", "Bearer " + accessToken)
                 .header("Accept", "application/json")
-                .header("User-Agent", "FakeJIRA")
-                .GET().build(), HttpResponse.BodyHandlers.ofString());
+                .header("User-Agent", "FakeJIRA");
+        if (accessToken != null) {
+            request.header("Authorization", "Bearer " + accessToken);
+        }
+        HttpResponse<String> response = http.send(request.GET().build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 300) {
             throw new IOException(url + " returned " + response.statusCode());
         }
@@ -350,6 +430,6 @@ public class OAuthService {
 
     // Visible for the status endpoint on the Admin page.
     public boolean anyEnabled() {
-        return providers.values().stream().anyMatch(OAuthProvider::enabled);
+        return providers.values().stream().anyMatch(OAuthProvider::enabled) || saml != null && saml.enabled();
     }
 }

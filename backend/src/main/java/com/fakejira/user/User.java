@@ -189,6 +189,33 @@ public class User {
         this.status = status;
     }
 
+    /** The identity provider's userName and id, for accounts provisioned over SCIM. */
+    @Column(length = 200)
+    private String scimUserName;
+
+    @Column(length = 200)
+    private String externalId;
+
+    public String getScimUserName() {
+        return scimUserName;
+    }
+
+    public void setScimUserName(String scimUserName) {
+        this.scimUserName = scimUserName;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
     public String getDisplayName() {
         return displayName;
     }

@@ -27,18 +27,20 @@ public class SessionService {
     private static final Duration CACHE_FOR = Duration.ofSeconds(30);
     private static final Duration TOUCH_EVERY = Duration.ofMinutes(5);
 
-    private record Cached(boolean active, long userId, Instant checkedAt) {
+    private record Cached(boolean active, long userId, Instant checkedAt, Instant lastSeen) {
     }
 
     private final UserSessionRepository sessions;
     private final JwtProperties jwt;
     private final RateLimitFilter clientIps;
     private final TransactionTemplate tx;
+    private final com.fakejira.admin.SecurityPolicy policy;
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     private final Map<String, Instant> touched = new ConcurrentHashMap<>();
 
     public SessionService(UserSessionRepository sessions, JwtProperties jwt, RateLimitFilter clientIps,
-                          TransactionTemplate tx) {
+                          TransactionTemplate tx, com.fakejira.admin.SecurityPolicy policy) {
+        this.policy = policy;
         this.sessions = sessions;
         this.jwt = jwt;
         this.clientIps = clientIps;
@@ -55,7 +57,7 @@ public class SessionService {
             ip = clientIps.clientIp(request);
         }
         UserSession session = new UserSession(UUID.randomUUID().toString(), user,
-                Instant.now().plus(jwt.validity()), cut(userAgent, 250), cut(ip, 64), method);
+                Instant.now().plus(policy.sessionLength()), cut(userAgent, 250), cut(ip, 64), method);
         return tx.execute(status -> sessions.save(session));
     }
 
@@ -65,11 +67,20 @@ public class SessionService {
         Cached cached = cache.get(sessionId);
         if (cached == null || cached.checkedAt().plus(CACHE_FOR).isBefore(now)) {
             cached = tx.execute(status -> sessions.findById(sessionId)
-                    .map(s -> new Cached(s.isActive(now), s.getUser().getId(), now))
-                    .orElse(new Cached(false, -1, now)));
+                    .map(s -> new Cached(s.isActive(now), s.getUser().getId(), now, s.getLastSeenAt()))
+                    .orElse(new Cached(false, -1, now, null)));
             cache.put(sessionId, cached);
         }
         boolean active = cached.active() && cached.userId() == userId;
+        int idle = policy.get().idleMinutes();
+        if (active && idle > 0) {
+            Instant lastSeen = touched.getOrDefault(sessionId, cached.lastSeen());
+            if (lastSeen != null && lastSeen.plus(Duration.ofMinutes(idle)).isBefore(now)) {
+                // Idle too long: end the session for good.
+                revoke(userId, sessionId);
+                return false;
+            }
+        }
         if (active) {
             Instant last = touched.get(sessionId);
             if (last == null || last.plus(TOUCH_EVERY).isBefore(now)) {

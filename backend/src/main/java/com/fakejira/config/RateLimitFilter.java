@@ -105,6 +105,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return 0;
     }
 
+    /** The client address of the request being handled, or null outside a request. */
+    public String currentIp() {
+        return org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+                instanceof org.springframework.web.context.request.ServletRequestAttributes attributes
+                ? clientIp(attributes.getRequest()) : null;
+    }
+
     public String clientIp(HttpServletRequest request) {
         for (String header : ipHeaders) {
             String value = request.getHeader(header);

@@ -38,9 +38,10 @@ public class SecurityConfig {
                         // Async dispatches carry on an already-authorized request (SSE streams).
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/login/2fa", "/api/auth/register",
-                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/oauth/*/url").permitAll()
+                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/oauth/*/url",
+                                "/api/auth/oauth/saml/acs").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/invite", "/api/auth/password-policy",
-                                "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/avatars/**",
+                                "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/auth/saml/metadata", "/api/avatars/**",
                                 "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**", "/api/integrations/gitlab/**",
@@ -69,7 +70,9 @@ public class SecurityConfig {
     @Bean
     org.springframework.security.oauth2.server.resource.web.BearerTokenResolver bearerTokenResolver() {
         var standard = new org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver();
-        return request -> "/api/metrics".equals(request.getRequestURI()) ? null : standard.resolve(request);
+        // The metrics endpoint and SCIM check their own bearer tokens.
+        return request -> "/api/metrics".equals(request.getRequestURI()) || request.getRequestURI().startsWith("/scim/")
+                ? null : standard.resolve(request);
     }
 
     @Bean
