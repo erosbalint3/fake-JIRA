@@ -105,6 +105,7 @@ public class SecurityAdminController {
     }
 
     @DeleteMapping("/security/scim-token")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void revokeScimToken(@AuthenticationPrincipal Jwt jwt) {
         User admin = currentUser.admin(jwt);
         scim.revokeToken();
@@ -113,6 +114,7 @@ public class SecurityAdminController {
 
     @PostMapping("/users/{id}/suspend")
     @Transactional
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void suspend(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         User admin = currentUser.admin(jwt);
         User user = users.findById(id).filter(u -> u.getStatus() == AccountStatus.ACTIVE)
@@ -127,6 +129,7 @@ public class SecurityAdminController {
 
     @PostMapping("/users/{id}/reactivate")
     @Transactional
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public void reactivate(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
         User admin = currentUser.admin(jwt);
         User user = users.findById(id).filter(u -> u.getStatus() == AccountStatus.SUSPENDED)

@@ -224,7 +224,11 @@ public class AiController {
             List<TaskActivity> history = new ArrayList<>(activity.findForTask(task.getId()));
             history.sort(Comparator.comparing(TaskActivity::getCreatedAt));
             StringBuilder text = new StringBuilder(taskBlock(task)).append("<comments>\n");
+            boolean internal = taskSupport.canSeeInternal(task, user);
             for (Comment c : comments.findForTask(task.getId())) {
+                if (c.isInternal() && !internal) {
+                    continue;
+                }
                 text.append("<comment author=\"").append(attr(name(c.getAuthor()))).append("\" at=\"").append(c.getCreatedAt())
                         .append("\">\n").append(c.getBody()).append("\n</comment>\n");
             }

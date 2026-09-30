@@ -141,6 +141,7 @@ public class TaskService {
 
     public TaskResponse create(User user, CreateTaskRequest request) {
         Project project = access.editorProject(request.projectKey(), user);
+        access.require(project, user, com.fakejira.project.Permission.CREATE_TASKS);
         Task parent = null;
         if (request.parentId() != null) {
             parent = support.memberTask(request.parentId(), user);
@@ -436,7 +437,7 @@ public class TaskService {
     }
 
     public void delete(User user, Long id) {
-        Task task = support.editableTask(id, user);
+        Task task = support.permittedTask(id, user, com.fakejira.project.Permission.DELETE_TASKS);
         if (!task.isReporter(user) && !task.getProject().isOwner(user)) {
             throw ApiException.forbidden("Only the reporter or the project owner can delete this task.");
         }

@@ -14,6 +14,8 @@ import type {
   HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, TaskGithub, BuildInfo, GithubRepoSettings, ChatCommandSettings,
   CalendarStatus, LinkPreviewData, RequestTypeDef, PortalConversation, SimilarTask,
   AiStatus, AiTaskDraft, AiThreadSummary, AiProposedTask, AiNotes, AiFql, AiEstimate, AiTriage,
+  SecurityOverview, SecurityPolicy, RetentionPolicy, RetentionCounts, EncryptionStatus, RestoreStatus, HealthCheck,
+  HealthThresholds, CustomRole, RolesCatalog, Permission,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -119,7 +121,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: { 'Content-Type': 'application/json' },
   });
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export interface AuthResponse {
@@ -499,8 +502,8 @@ export const api = {
   deleteTask: (id: number) => request<void>('DELETE', `/tasks/${id}`),
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
-  addComment: (id: number, body: string, anchor?: string | null) =>
-    request<Comment>('POST', `/tasks/${id}/comments`, { body, anchor: anchor ?? null }),
+  addComment: (id: number, body: string, anchor?: string | null, internal = false) =>
+    request<Comment>('POST', `/tasks/${id}/comments`, { body, anchor: anchor ?? null, internal }),
   replyToComment: (id: number, parentId: number, body: string) =>
     request<Comment>('POST', `/tasks/${id}/comments`, { body, parentId }),
   react: (id: number, commentId: number, emoji: string) =>
@@ -694,6 +697,34 @@ export const api = {
   setPasswordPolicy: (rules: PasswordRules) => request<PasswordRules>('PUT', '/admin/password-policy', rules),
   backups: () => request<Backup[]>('GET', '/admin/backups'),
   backupNow: () => request<Backup>('POST', '/admin/backups'),
+  restoreBackup: (name: string, password: string) =>
+    request<{ safetyBackup: string; message: string }>('POST', `/admin/backups/${encodeURIComponent(name)}/restore`, { password }),
+  restoreStatus: () => request<RestoreStatus>('GET', '/admin/restore'),
+  securityOverview: () => request<SecurityOverview>('GET', '/admin/security'),
+  saveSecurityPolicy: (policy: SecurityPolicy) => request<SecurityPolicy>('PUT', '/admin/security', policy),
+  newScimToken: () => request<{ token: string }>('POST', '/admin/security/scim-token'),
+  revokeScimToken: () => request<void>('DELETE', '/admin/security/scim-token'),
+  suspendUser: (id: number) => request<void>('POST', `/admin/users/${id}/suspend`),
+  reactivateUser: (id: number) => request<void>('POST', `/admin/users/${id}/reactivate`),
+  retention: () => request<{ policy: RetentionPolicy; preview: RetentionCounts }>('GET', '/admin/retention'),
+  saveRetention: (policy: RetentionPolicy) =>
+    request<{ policy: RetentionPolicy; preview: RetentionCounts }>('PUT', '/admin/retention', policy),
+  runRetention: () => request<RetentionCounts>('POST', '/admin/retention/run'),
+  encryptionStatus: () => request<EncryptionStatus>('GET', '/admin/encryption'),
+  encryptAll: () => request<{ changed: number; status: EncryptionStatus }>('POST', '/admin/encryption/encrypt-all'),
+  health: () => request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('GET', '/admin/health'),
+  checkHealth: () => request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('POST', '/admin/health/check'),
+  saveHealth: (thresholds: HealthThresholds) =>
+    request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('PUT', '/admin/health', thresholds),
+  projectRoles: (key: string) => request<RolesCatalog>('GET', `/projects/${key}/roles`),
+  myPermissions: (key: string) => request<Permission[]>('GET', `/projects/${key}/my-permissions`),
+  createRole: (key: string, role: { name: string; description: string; permissions: Permission[] }) =>
+    request<CustomRole>('POST', `/projects/${key}/roles`, role),
+  updateRole: (key: string, id: number, role: { name: string; description: string; permissions: Permission[] }) =>
+    request<CustomRole>('PUT', `/projects/${key}/roles/${id}`, role),
+  deleteRole: (key: string, id: number) => request<void>('DELETE', `/projects/${key}/roles/${id}`),
+  assignRole: (key: string, userId: number, roleId: number | null) =>
+    request<void>('PUT', `/projects/${key}/members/${userId}/custom-role`, { roleId }),
   backupBlob: async (name: string) => (await send('GET', `/admin/backups/${encodeURIComponent(name)}`)).blob(),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PUT', '/profile/password', { currentPassword, newPassword }),

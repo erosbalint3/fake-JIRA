@@ -55,7 +55,7 @@ public class OAuthService {
     private static final Duration STATE_VALIDITY = Duration.ofMinutes(10);
 
     /** A verified profile from the provider. */
-    record Profile(String subject, String email, boolean emailVerified, String login, String name) {
+    public record Profile(String subject, String email, boolean emailVerified, String login, String name) {
     }
 
     /** Where the browser goes after the callback: a fragment the sign-in page reads. */

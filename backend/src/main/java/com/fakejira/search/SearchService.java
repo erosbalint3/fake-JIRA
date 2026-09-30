@@ -39,12 +39,21 @@ public class SearchService {
     private final com.fakejira.field.CustomFieldRepository customFields;
 
     public SearchService(TaskRepository tasks, TeamRepository teams, ProjectRepository projects, EntityManager em,
-                         com.fakejira.field.CustomFieldRepository customFields) {
+                         com.fakejira.field.CustomFieldRepository customFields, com.fakejira.project.ProjectAccess access) {
+        this.access = access;
         this.customFields = customFields;
         this.tasks = tasks;
         this.teams = teams;
         this.projects = projects;
         this.em = em;
+    }
+
+    private final com.fakejira.project.ProjectAccess access;
+
+    /** The user's projects where they may read internal comments. */
+    private java.util.Set<Long> internalProjects(User user) {
+        return projects.findForMember(user.getId()).stream().filter(p -> access.canSeeInternal(p, user))
+                .map(Project::getId).collect(java.util.stream.Collectors.toSet());
     }
 
     public record Result(List<Task> tasks, int total) {
@@ -55,7 +64,8 @@ public class SearchService {
         Fql.Query query = Fql.parse(fql);
         List<Long> projectIds = projects.findForMember(user.getId()).stream().map(Project::getId).toList();
         FqlCompiler compiler = new FqlCompiler(user, ZoneId.systemDefault(), this::teamMemberIds,
-                name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds));
+                name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds))
+                .internalCommentsIn(internalProjects(user));
         Specification<Task> spec = visibleTo(user).and(compiler.where(query.where()));
         if (!FqlCompiler.mentions(query.where(), "archived")) {
             spec = spec.and((root, q, cb) -> cb.isNull(root.get("archivedAt")));
@@ -125,12 +135,16 @@ public class SearchService {
             }
         }
 
-        List<Object[]> comments = em.createQuery("select c.id, c.body, t from Comment c join c.task t "
+        java.util.Set<Long> internal = internalProjects(user);
+        List<Object[]> comments = em.createQuery("select c.id, c.body, t, c.internal from Comment c join c.task t "
                         + "where t.project.id in :projects and lower(c.body) like :w escape '\\' order by c.createdAt desc")
                 .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(200).getResultList();
         for (Object[] row : comments) {
             String body = (String) row[1];
             Task t = (Task) row[2];
+            if (Boolean.TRUE.equals(row[3]) && !internal.contains(t.getProject().getId())) {
+                continue;
+            }
             if (words.stream().allMatch(body.toLowerCase(Locale.ROOT)::contains)) {
                 hits.add(new Hit(HitKind.COMMENT, (Long) row[0], t.getId(), t.getKey(), t.getTitle(), snippet(body, words),
                         t.getProject().getKey(), 0));

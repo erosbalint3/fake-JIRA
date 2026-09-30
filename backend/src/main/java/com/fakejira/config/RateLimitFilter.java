@@ -134,6 +134,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return seconds < 90 ? seconds + " seconds" : Math.round(seconds / 60.0) + " minutes";
     }
 
+    @com.fakejira.cluster.PerInstance
+
     @Scheduled(fixedRate = 600_000)
     public void cleanup() {
         long now = System.currentTimeMillis();

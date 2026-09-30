@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Archive, Check, Copy, Download, Link2, Plus, Shield, Trash2, X } from 'lucide-react';
+import { Archive, Check, Copy, Download, History, Link2, Plus, Shield, Trash2, X } from 'lucide-react';
+import { AccessPanel } from '../components/admin/AccessPanel';
+import { DataPanel, HealthPanel } from '../components/admin/DataPanel';
+import { Modal } from '../components/Modal';
 import { api, ApiError, inviteLink, saveBlob } from '../api';
 import { useAuth } from '../auth';
 import { useToast } from '../toast';
@@ -8,6 +11,7 @@ import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ActionMenu } from '../components/ActionMenu';
 import { ConfirmDialog } from '../components/Modal';
+import type { RestoreStatus } from '../types';
 import { SystemPanel } from '../components/admin/SystemPanel';
 import { AuditLogPanel } from '../components/admin/AuditLogPanel';
 import { PasswordPolicyPanel } from '../components/admin/PasswordPolicyPanel';
@@ -34,7 +38,11 @@ export function AdminPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'people' | 'security' | 'backups' | 'system'>('people');
+  const [tab, setTab] = useState<'people' | 'access' | 'security' | 'backups' | 'system'>('people');
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restorePassword, setRestorePassword] = useState('');
+  const [restoreError, setRestoreError] = useState('');
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'reset2fa'; user: User } | null>(null);
 
   const load = useCallback(() => {
@@ -45,6 +53,7 @@ export function AdminPage() {
     }).catch((e: ApiError) => setError(e.message));
     api.invites().then(setInvites).catch(() => setInvites([]));
     api.backups().then(setBackups).catch(() => setBackups([]));
+    api.restoreStatus().then(setRestoreStatus).catch(() => setRestoreStatus(null));
   }, []);
 
   useEffect(() => {
@@ -92,6 +101,7 @@ export function AdminPage() {
 
   const pending = users.filter((u) => u.status === 'PENDING');
   const active = users.filter((u) => u.status === 'ACTIVE');
+  const suspended = users.filter((u) => u.status === 'SUSPENDED');
   const openInvites = invites.filter((i) => !i.usedAt && new Date(i.expiresAt) > new Date());
 
   return (
@@ -115,9 +125,9 @@ export function AdminPage() {
             </div>
           )}
           <nav className="tabs" role="tablist" aria-label={t("Admin sections")}>
-            {([['people', 'People & sign-up'], ['security', 'Security'], ['backups', 'Backups'], ['system', 'System']] as const).map(([id, label]) => (
+            {([['people', 'People & sign-up'], ['access', 'Sign-in & access'], ['security', 'Security'], ['backups', 'Data & backups'], ['system', 'System']] as const).map(([id, label]) => (
               <button key={id} role="tab" aria-selected={tab === id} className={`tab ${tab === id ? 'active' : ''}`}
-                onClick={() => setTab(id)}>{label}</button>
+                onClick={() => setTab(id)}>{t(label)}</button>
             ))}
           </nav>
           {tab === 'people' && (
@@ -209,6 +219,8 @@ export function AdminPage() {
                       onSelect: () => setConfirm({ kind: 'reset2fa', user: u }) },
                     { label: 'Sign out everywhere',
                       onSelect: () => act(() => api.signOutUser(u.id), `${u.username} was signed out everywhere`) },
+                    { label: t('Deactivate'), hidden: u.id === user?.id,
+                      onSelect: () => act(() => api.suspendUser(u.id), t('{name} was deactivated', { name: u.username })) },
                     { label: 'Delete account…', danger: true, hidden: u.id === user?.id,
                       onSelect: () => setConfirm({ kind: 'delete', user: u }) },
                   ]} />
@@ -217,9 +229,33 @@ export function AdminPage() {
             </ul>
           </section>
 
+          {suspended.length > 0 && (
+            <section className="panel">
+              <h2 className="panel-title">{t('Deactivated')} <span className="count">{suspended.length}</span></h2>
+              <ul className="member-list">
+                {suspended.map(({ user: u }) => (
+                  <li key={u.id}>
+                    <Avatar user={u} size={32} />
+                    <div className="member-text">
+                      <strong>{u.displayName}</strong>
+                      <span className="muted small">@{u.username} · {u.email}</span>
+                    </div>
+                    <button className="btn btn-soft sm" disabled={busy}
+                      onClick={() => act(() => api.reactivateUser(u.id), t('{name} can sign in again', { name: u.username }))}>{t('Reactivate')}</button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           </>
           )}
-          {tab === 'system' && <SystemPanel />}
+          {tab === 'access' && <AccessPanel />}
+          {tab === 'system' && (
+          <>
+            <HealthPanel />
+            <SystemPanel />
+          </>
+          )}
           {tab === 'security' && (
           <>
             <PasswordPolicyPanel />
@@ -227,6 +263,7 @@ export function AdminPage() {
           </>
           )}
           {tab === 'backups' && (
+          <>
           <section className="panel">
             <div className="panel-head">
               <h2 className="panel-title"><Archive size={16} /> {t("Backups")}</h2>
@@ -253,13 +290,61 @@ export function AdminPage() {
                       }}>
                       <Download size={15} />
                     </button>
+                    {restoreStatus?.supported && (
+                      <button className="icon-button sm" aria-label={t('Restore {name}', { name: backup.name })} title={t('Restore')}
+                        onClick={() => {
+                          setRestoring(backup.name);
+                          setRestorePassword('');
+                          setRestoreError('');
+                        }}>
+                        <History size={15} />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
+            {restoreStatus && !restoreStatus.supported && restoreStatus.reason && <p className="muted small">{restoreStatus.reason}</p>}
+            {restoreStatus && restoreStatus.lastResult.length > 0 && (
+              <p className={restoreStatus.lastResult[0] === 'ok' ? 'muted small' : 'small field-error'}>
+                {restoreStatus.lastResult[0] === 'ok'
+                  ? t('Last restore: {name} at {when}', { name: restoreStatus.lastResult[1] ?? '', when: restoreStatus.lastResult[2] ?? '' })
+                  : t('The last restore failed: {why}', { why: restoreStatus.lastResult[3] ?? '' })}
+              </p>
+            )}
           </section>
+          <DataPanel />
+          </>
           )}
         </>
+      )}
+      {restoring && (
+        <Modal title={t('Restore {name}?', { name: restoring })} onClose={() => setRestoring(null)} footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setRestoring(null)}>{t('Cancel')}</button>
+            <button className="btn btn-danger" disabled={busy || !restorePassword} onClick={async () => {
+              setBusy(true);
+              setRestoreError('');
+              try {
+                const result = await api.restoreBackup(restoring, restorePassword);
+                toast(result.message);
+                setRestoring(null);
+              } catch (e) {
+                setRestoreError((e as ApiError).message);
+              } finally {
+                setBusy(false);
+              }
+            }}>{t('Restore and restart')}</button>
+          </>
+        }>
+          <p>{t('Everything changed since this backup — tasks, comments, files, accounts — is replaced by the backup. A backup of the current state is made first, and the old data is kept on the server.')}</p>
+          <p className="muted small">{t('The server restarts; this takes about a minute. Everyone is signed out.')}</p>
+          <label className="field">
+            <span>{t('Your password')}</span>
+            <input type="password" autoComplete="current-password" value={restorePassword} onChange={(e) => setRestorePassword(e.target.value)} />
+          </label>
+          {restoreError && <div className="alert" role="alert">{restoreError}</div>}
+        </Modal>
       )}
       {confirm?.kind === 'delete' && (
         <ConfirmDialog title={`Delete ${confirm.user.username}'s account?`} confirmLabel={t("Delete account")} danger busy={busy}

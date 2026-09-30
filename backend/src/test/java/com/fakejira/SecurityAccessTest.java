@@ -439,7 +439,7 @@ class SecurityAccessTest extends ApiTestSupport {
         // DELETE deactivates; revoking the token turns SCIM off.
         scim(delete("/scim/v2/Users/" + graceId), token, null).andExpect(status().isNoContent());
         assertThat(read(scim(get("/scim/v2/Users/" + graceId), token, null)).get("active").asBoolean()).isFalse();
-        perform(delete("/api/admin/security/scim-token"), admin).andExpect(status().isOk());
+        perform(delete("/api/admin/security/scim-token"), admin).andExpect(status().isNoContent());
         scim(get("/scim/v2/Users"), token, null).andExpect(status().isUnauthorized());
     }
 
@@ -505,12 +505,12 @@ class SecurityAccessTest extends ApiTestSupport {
     void adminsCanSuspendAndReactivate() throws Exception {
         Account admin = theAdmin();
         Account member = register();
-        perform(post("/api/admin/users/" + member.id() + "/suspend"), admin).andExpect(status().isOk());
+        perform(post("/api/admin/users/" + member.id() + "/suspend"), admin).andExpect(status().isNoContent());
         perform(get("/api/auth/me"), member).andExpect(status().isUnauthorized());
         JsonNode users = getJson("/api/admin", admin).get("users");
         assertThat(users.toString()).contains("SUSPENDED");
         perform(post("/api/admin/users/" + admin.id() + "/suspend"), admin).andExpect(status().isBadRequest());
-        perform(post("/api/admin/users/" + member.id() + "/reactivate"), admin).andExpect(status().isOk());
+        perform(post("/api/admin/users/" + member.id() + "/reactivate"), admin).andExpect(status().isNoContent());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(body("login", member.username(), "password", PASSWORD)))
                 .andExpect(status().isOk());
     }

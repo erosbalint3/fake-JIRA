@@ -2167,3 +2167,22 @@ html.embedded, html.embedded body { background: var(--surface); }
 .ai-ask-icon { color: var(--accent-text); }
 .ai-ask-note { flex-basis: 100%; margin: 0; }
 .ai-result a { text-decoration: underline; }
+
+/* ---- Access, data, roles, internal comments ---- */
+.copy-field { display: flex; align-items: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
+.copy-field code { background: var(--surface-hover); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+.retention-rule { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.retention-rule span { flex: 1 1 260px; }
+.health-checks li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.health-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.health-dot.ok { background: var(--success); }
+.health-dot.bad { background: var(--danger); }
+.health-bad { color: var(--danger-text); font-weight: 600; }
+.permission-grid { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
+.permission-grid legend { font-size: 12px; color: var(--text-muted); padding: 0 4px; }
+.role-form { margin-top: 10px; }
+.comment-submit { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.internal-toggle { display: inline-flex; align-items: center; gap: 4px; }
+.internal-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--p-high) 18%, transparent); color: var(--warn-text); }

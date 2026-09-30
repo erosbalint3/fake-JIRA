@@ -52,4 +52,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("update Notification n set n.archivedAt = :now where n.recipient.id = :recipientId and n.read = true"
             + " and n.archivedAt is null and n.snoozedUntil is null")
     int archiveRead(@Param("recipientId") Long recipientId, @Param("now") Instant now);
+
+    @Modifying
+    @Query("delete from Notification n where n.createdAt < :before")
+    int deleteOlderThan(@org.springframework.data.repository.query.Param("before") java.time.Instant before);
+
+    @Query("select count(n) from Notification n where n.createdAt < :before")
+    long countOlderThan(@org.springframework.data.repository.query.Param("before") java.time.Instant before);
 }

@@ -233,7 +233,8 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public CommentResponse addComment(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                       @Valid @RequestBody CommentRequest request) {
-        return details.addComment(currentUser.from(jwt), id, request.body(), request.parentId(), request.anchor());
+        return details.addComment(currentUser.from(jwt), id, request.body(), request.parentId(), request.anchor(),
+                Boolean.TRUE.equals(request.internal()));
     }
 
     @GetMapping("/{id}/checklist")

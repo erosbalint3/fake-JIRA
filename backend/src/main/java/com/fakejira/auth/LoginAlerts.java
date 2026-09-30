@@ -169,6 +169,8 @@ public class LoginAlerts {
         failures.remove(event.userId());
     }
 
+    @com.fakejira.cluster.PerInstance
+
     @Scheduled(cron = "0 50 4 * * *")
     public void prune() {
         tx.executeWithoutResult(status -> devices.deleteUnusedSince(Instant.now().minus(Duration.ofDays(365))));

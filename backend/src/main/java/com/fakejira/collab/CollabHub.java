@@ -106,6 +106,7 @@ public class CollabHub {
     }
 
     /** Forgets people whose browser stopped sending heartbeats (closed tab, lost network). */
+    @com.fakejira.cluster.PerInstance
     @Scheduled(fixedDelay = 30000)
     public synchronized void expire() {
         Instant cutoff = Instant.now().minus(PRESENCE_TTL);

@@ -139,7 +139,7 @@ public class ShareController {
                 .map(i -> new PublicItem(i.getText(), i.isDone())).toList();
         List<PublicSubtask> subtasks = tasks.findByParentIdOrderByIdAsc(t.getId()).stream()
                 .map(s -> new PublicSubtask(s.getKey(), s.getTitle(), s.getStatus())).toList();
-        List<PublicComment> publicComments = !link.isIncludeComments() ? List.of() : comments.findForTask(t.getId()).stream()
+        List<PublicComment> publicComments = !link.isIncludeComments() ? List.of() : comments.findForTask(t.getId()).stream().filter(c -> !c.isInternal())
                 .map(c -> new PublicComment(c.getAuthor().getName(), c.getBody(), c.getCreatedAt())).toList();
         return ResponseEntity.ok()
                 .header("X-Robots-Tag", "noindex")

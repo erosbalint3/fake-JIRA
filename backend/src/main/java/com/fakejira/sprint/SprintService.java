@@ -68,6 +68,7 @@ public class SprintService {
 
     public SprintResponse create(User user, String projectKey, SprintRequest request) {
         Project project = access.editorProject(projectKey, user);
+        access.require(project, user, com.fakejira.project.Permission.MANAGE_SPRINTS);
         requireScrum(project);
         String name = blank(request.name())
                 ? project.getKey() + " Sprint " + (sprints.countByProjectId(project.getId()) + 1)
@@ -300,7 +301,7 @@ public class SprintService {
 
     private Sprint editableSprint(Long id, User user) {
         Sprint sprint = memberSprint(id, user);
-        access.requireEditor(sprint.getProject(), user);
+        access.require(sprint.getProject(), user, com.fakejira.project.Permission.MANAGE_SPRINTS);
         return sprint;
     }
 

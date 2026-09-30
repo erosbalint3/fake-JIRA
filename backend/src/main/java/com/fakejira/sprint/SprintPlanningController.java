@@ -256,7 +256,7 @@ public class SprintPlanningController {
 
     private Sprint editableSprint(Long id, User user) {
         Sprint sprint = memberSprint(id, user);
-        access.requireEditor(sprint.getProject(), user);
+        access.require(sprint.getProject(), user, com.fakejira.project.Permission.MANAGE_SPRINTS);
         return sprint;
     }
 

@@ -22,6 +22,7 @@ import { TypeChecklistsSection } from '../components/settings/TypeChecklistsSect
 import { ServiceDeskSection } from '../components/settings/ServiceDeskSection';
 import { GithubRepoSection } from '../components/settings/GithubRepoSection';
 import { ChatCommandsSection } from '../components/settings/ChatCommandsSection';
+import { RolesSection } from '../components/settings/RolesSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -158,6 +159,7 @@ export function ProjectSettingsPage() {
         onRemove={(member) => setConfirm({ kind: 'remove', member })}
         onTransfer={(member) => setConfirm({ kind: 'transfer', member })} />
       {isOwner && <InvitesSection project={project} />}
+      <RolesSection projectKey={project.key} members={project.members} isOwner={isOwner} />
       <ColumnsSection project={project} canEdit={canEdit} />
       <WorkflowSection projectKey={project.key} projectId={project.id} canEdit={canEdit} />
       <ComponentsSection projectKey={project.key} members={project.members} canEdit={canEdit} />

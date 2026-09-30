@@ -39,9 +39,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 
@@ -75,7 +73,7 @@ public class SamlService {
             CanonicalizationMethod.EXCLUSIVE_WITH_COMMENTS);
 
     /** A checked response, waiting for the browser to arrive at the callback. */
-    private record Ticket(String state, OAuthService.Profile profile, Instant expires) {
+    record Ticket(String state, OAuthService.Profile profile, Instant expires) {
     }
 
     private final String ssoUrl;
@@ -86,15 +84,18 @@ public class SamlService {
     private final MailService site;
     private final OAuthService oauth;
     private final SecureRandom random = new SecureRandom();
-    private final Map<String, Ticket> tickets = new ConcurrentHashMap<>();
-    private final Map<String, Instant> usedAssertions = new ConcurrentHashMap<>();
+    private final com.fakejira.cluster.Cluster cluster;
+    private final com.fasterxml.jackson.databind.ObjectMapper json;
 
     public SamlService(@Value("${app.saml.idp-sso-url:}") String ssoUrl,
                        @Value("${app.saml.idp-entity-id:}") String idpEntityId,
                        @Value("${app.saml.idp-certificate:}") String idpCertificate,
                        @Value("${app.saml.label:Company sign-in}") String label,
                        @Value("${app.saml.trust-email:true}") boolean trustEmail,
-                       MailService site, OAuthService oauth) {
+                       MailService site, OAuthService oauth, com.fakejira.cluster.Cluster cluster,
+                       com.fasterxml.jackson.databind.ObjectMapper json) {
+        this.cluster = cluster;
+        this.json = json;
         this.ssoUrl = ssoUrl.trim();
         this.idpEntityId = idpEntityId.trim();
         this.idpKey = idpCertificate.isBlank() ? null : parseKey(idpCertificate);
@@ -167,17 +168,23 @@ public class SamlService {
             org.slf4j.LoggerFactory.getLogger(SamlService.class).warn("Rejected a SAML response: {}", e.getMessage());
             return "/api/auth/oauth/saml/callback?error=invalid";
         }
-        cleanUp();
         byte[] bytes = new byte[24];
         random.nextBytes(bytes);
         String ticket = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        tickets.put(ticket, new Ticket(relayState, profile, Instant.now().plus(TICKET_VALIDITY)));
+        try {
+            // Shared, so the browser can come back to any instance.
+            cluster.put("saml:ticket:" + ticket, json.writeValueAsString(new Ticket(relayState, profile, Instant.now().plus(TICKET_VALIDITY))),
+                    TICKET_VALIDITY);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
         return "/api/auth/oauth/saml/callback?code=" + ticket + "&state=" + URLEncoder.encode(relayState, StandardCharsets.UTF_8);
     }
 
     /** The profile for a ticket; each ticket works once, only with the state it was issued for. */
     OAuthService.Profile redeem(String ticket, String state) throws IOException {
-        Ticket found = ticket == null ? null : tickets.remove(ticket);
+        String stored = ticket == null ? null : cluster.take("saml:ticket:" + ticket);
+        Ticket found = stored == null ? null : json.readValue(stored, Ticket.class);
         if (found == null || found.expires().isBefore(Instant.now()) || !found.state().equals(state)) {
             throw new IOException("Unknown or expired SAML ticket");
         }
@@ -278,7 +285,8 @@ public class SamlService {
 
         String assertionId = assertion.getAttribute("ID");
         Instant keepUntil = parseTime(conditions.getAttribute("NotOnOrAfter"), now.plus(Duration.ofHours(1))).plus(SKEW);
-        if (usedAssertions.putIfAbsent(assertionId, keepUntil) != null) {
+        Duration keep = Duration.between(now, keepUntil);
+        if (!cluster.putIfAbsent("saml:assertion:" + assertionId, "used", keep.isNegative() ? SKEW : keep.plus(SKEW))) {
             throw new SamlException("assertion already used");
         }
 
@@ -434,12 +442,6 @@ public class SamlService {
         } catch (java.security.GeneralSecurityException e) {
             throw new IllegalStateException("app.saml.idp-certificate is not a valid certificate or public key", e);
         }
-    }
-
-    private void cleanUp() {
-        Instant now = Instant.now();
-        tickets.values().removeIf(t -> t.expires().isBefore(now));
-        usedAssertions.values().removeIf(until -> until.isBefore(now));
     }
 
     private static String xml(String value) {

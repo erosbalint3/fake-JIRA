@@ -98,7 +98,9 @@ public class EpicController {
     @Transactional
     public EpicResponse create(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
                                @Valid @RequestBody EpicRequest request) {
-        Project project = access.editorProject(key, currentUser.from(jwt));
+        User creator = currentUser.from(jwt);
+        Project project = access.editorProject(key, creator);
+        access.require(project, creator, com.fakejira.project.Permission.MANAGE_EPICS);
         validate(request);
         int color = (int) (epics.countByProjectId(project.getId()) % PALETTE_SIZE);
         Epic epic = epics.save(new Epic(project, request.name().trim(), trim(request.description()), color,
@@ -180,7 +182,7 @@ public class EpicController {
 
     private Epic editable(Long id, User user) {
         Epic epic = epics.findById(id).orElseThrow(() -> ApiException.notFound("Epic not found."));
-        access.requireEditor(epic.getProject(), user);
+        access.require(epic.getProject(), user, com.fakejira.project.Permission.MANAGE_EPICS);
         return epic;
     }
 

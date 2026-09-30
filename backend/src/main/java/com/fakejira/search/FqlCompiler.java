@@ -103,6 +103,14 @@ public final class FqlCompiler {
         this.customField = customField;
     }
 
+    /** Projects where the user may read internal comments; elsewhere only public comments are searched. */
+    private Set<Long> internalProjects = Set.of();
+
+    public FqlCompiler internalCommentsIn(Set<Long> projectIds) {
+        this.internalProjects = projectIds;
+        return this;
+    }
+
     public static String canonical(String field) {
         return ALIASES.getOrDefault(field, field);
     }
@@ -631,7 +639,9 @@ public final class FqlCompiler {
     private Predicate commentLike(Clause c, Root<Task> root, CriteriaBuilder cb, jakarta.persistence.criteria.CriteriaQuery<?> query) {
         Subquery<Long> sub = query.subquery(Long.class);
         Root<Comment> comment = sub.from(Comment.class);
-        sub.select(comment.get("id")).where(cb.equal(comment.get("task"), root), like(cb, comment.get("body"), c));
+        Predicate visible = internalProjects.isEmpty() ? cb.isFalse(comment.get("internal"))
+                : cb.or(cb.isFalse(comment.get("internal")), root.get("project").get("id").in(internalProjects));
+        sub.select(comment.get("id")).where(cb.equal(comment.get("task"), root), like(cb, comment.get("body"), c), visible);
         return cb.exists(sub);
     }
 

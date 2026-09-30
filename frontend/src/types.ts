@@ -240,7 +240,7 @@ export interface Invite {
 export interface AdminUser {
   user: User;
   admin: boolean;
-  status: 'ACTIVE' | 'PENDING';
+  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
   createdAt: string;
   twoFactor: boolean;
   mustChangePassword: boolean;
@@ -277,6 +277,8 @@ export interface Comment {
   reactions: Reaction[];
   /** Inline comments: the passage of the description they refer to. */
   anchor: string | null;
+  /** Only for the team: hidden from guests, viewers and limited roles. */
+  internal: boolean;
 }
 
 export interface ChecklistItem {
@@ -1415,3 +1417,28 @@ export interface AiEstimate {
 export interface AiTriage {
   type: TaskType; priority: Priority; assignee: User | null; labels: string[]; duplicateOf: TaskRef | null; reasoning: string;
 }
+
+// ---- Admin: access, data and health --------------------------------------------------------------------------------
+
+export interface SecurityPolicy {
+  ssoRequired: boolean; sessionHours: number; idleMinutes: number; ipAllowlist: string[]; loginAlerts: boolean;
+}
+export interface SecurityOverview {
+  policy: SecurityPolicy; signIn: string[]; ssoAvailable: boolean; samlMetadataUrl: string; samlAcsUrl: string;
+  oidcRedirectUrl: string; scimUrl: string; scimTokenSet: boolean; yourIp: string;
+}
+export interface RetentionPolicy {
+  archiveDoneAfterDays: number; deleteArchivedAfterDays: number; deleteNotificationsAfterDays: number; deleteAuditAfterDays: number;
+}
+export interface RetentionCounts { tasksArchived: number; tasksDeleted: number; notificationsDeleted: number; auditEntriesDeleted: number }
+export interface EncryptionStatus { enabled: boolean; encrypted: number; oldKey: number; plain: number }
+export interface RestoreStatus { supported: boolean; reason: string | null; lastResult: string[] }
+export interface HealthCheck { id: string; label: string; ok: boolean; detail: string; since: string | null }
+export interface HealthThresholds { minFreeDiskMb: number; maxBackupAgeHours: number; maxServerErrors: number; maxHeapPercent: number; alerts: boolean }
+
+// ---- Custom project roles ------------------------------------------------------------------------------------------
+
+export type Permission = 'CREATE_TASKS' | 'EDIT_TASKS' | 'DELETE_TASKS' | 'COMMENT' | 'LOG_TIME' | 'MANAGE_SPRINTS'
+  | 'MANAGE_RELEASES' | 'MANAGE_EPICS' | 'VIEW_INTERNAL';
+export interface CustomRole { id: number; name: string; description: string; permissions: Permission[]; memberIds: number[] }
+export interface RolesCatalog { roles: CustomRole[]; permissions: { id: Permission; label: string }[] }

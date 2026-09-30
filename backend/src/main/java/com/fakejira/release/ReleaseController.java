@@ -100,7 +100,9 @@ public class ReleaseController {
     @Transactional
     public ReleaseResponse create(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
                                   @Valid @RequestBody ReleaseRequest request) {
-        Project project = access.editorProject(key, currentUser.from(jwt));
+        User creator = currentUser.from(jwt);
+        Project project = access.editorProject(key, creator);
+        access.require(project, creator, com.fakejira.project.Permission.MANAGE_RELEASES);
         String name = request.name().trim();
         if (releases.existsByProjectIdAndNameIgnoreCase(project.getId(), name)) {
             throw ApiException.conflict("A release called " + name + " already exists.");
@@ -283,7 +285,7 @@ public class ReleaseController {
 
     private Release editable(Long id, User user) {
         Release release = releases.findById(id).orElseThrow(() -> ApiException.notFound("Release not found."));
-        access.requireEditor(release.getProject(), user);
+        access.require(release.getProject(), user, com.fakejira.project.Permission.MANAGE_RELEASES);
         return release;
     }
 

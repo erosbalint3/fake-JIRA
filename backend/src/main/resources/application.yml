@@ -59,6 +59,11 @@ app:
         poll-ms: ${APP_MAIL_INBOUND_IMAP_POLL_MS:60000}
   storage:
     dir: ${APP_STORAGE_DIR:./data/attachments}
+    # Encrypt attachments at rest (AES-256-GCM): 32 random bytes, base64 (`openssl rand -base64 32`). Keep it safe —
+    # files and backups cannot be read without it. After changing it, list the old key(s) here (comma-separated)
+    # and use "Encrypt all files now" on the Admin page.
+    encryption-key: ${APP_STORAGE_ENCRYPTION_KEY:}
+    previous-encryption-keys: ${APP_STORAGE_PREVIOUS_ENCRYPTION_KEYS:}
   registration:
     # Initial sign-up mode (OPEN, INVITE or APPROVAL); admins can change it on the Admin page.
     default-mode: ${APP_REGISTRATION_DEFAULT_MODE:OPEN}
@@ -117,6 +122,40 @@ app:
     github:
       client-id: ${APP_OAUTH_GITHUB_CLIENT_ID:}
       client-secret: ${APP_OAUTH_GITHUB_CLIENT_SECRET:}
+    # Company single sign-on with any OpenID Connect provider (Okta, Entra ID, Keycloak, Auth0, Google Workspace…).
+    # Redirect URL to register: <APP_BASE_URL>/api/auth/oauth/oidc/callback
+    oidc:
+      issuer: ${APP_OAUTH_OIDC_ISSUER:}
+      client-id: ${APP_OAUTH_OIDC_CLIENT_ID:}
+      client-secret: ${APP_OAUTH_OIDC_CLIENT_SECRET:}
+      label: ${APP_OAUTH_OIDC_LABEL:Single sign-on}
+      # Some providers (Entra ID) do not send email_verified; set true if yours only has verified addresses.
+      trust-email: ${APP_OAUTH_OIDC_TRUST_EMAIL:false}
+  saml:
+    # SAML 2.0 single sign-on. Give your IdP the metadata at <APP_BASE_URL>/api/auth/saml/metadata; from it you need
+    # the sign-in URL, entity id and signing certificate (PEM).
+    idp-sso-url: ${APP_SAML_IDP_SSO_URL:}
+    idp-entity-id: ${APP_SAML_IDP_ENTITY_ID:}
+    idp-certificate: ${APP_SAML_IDP_CERTIFICATE:}
+    label: ${APP_SAML_LABEL:Company sign-in}
+  ldap:
+    # Sign in with company LDAP / Active Directory passwords, e.g. ldaps://ldap.example.com:636. Either a DN pattern
+    # (uid={0},ou=people,dc=example,dc=com) or a search base (with an optional service account) finds people.
+    url: ${APP_LDAP_URL:}
+    user-dn-pattern: ${APP_LDAP_USER_DN_PATTERN:}
+    user-search-base: ${APP_LDAP_USER_SEARCH_BASE:}
+    user-search-filter: ${APP_LDAP_USER_SEARCH_FILTER:(|(uid={0})(mail={0})(sAMAccountName={0}))}
+    bind-dn: ${APP_LDAP_BIND_DN:}
+    bind-password: ${APP_LDAP_BIND_PASSWORD:}
+    email-attribute: ${APP_LDAP_EMAIL_ATTRIBUTE:mail}
+    name-attribute: ${APP_LDAP_NAME_ATTRIBUTE:cn}
+  security:
+    # Recovery switch: ignore the admin's IP allowlist (if it ever locks everyone out).
+    ip-allowlist-disabled: ${APP_SECURITY_IP_ALLOWLIST_DISABLED:false}
+  redis:
+    # Run several instances behind a load balancer (with PostgreSQL and a shared data volume): live updates,
+    # scheduled jobs and sign-in hand-offs are shared through Redis, e.g. redis://redis:6379
+    url: ${APP_REDIS_URL:}
   db-tcp:
     # Network access to the live H2 database for tools like DBeaver, e.g. 9092. Off when empty;
     # needs SPRING_DATASOURCE_PASSWORD. Connect with jdbc:h2:tcp://HOST:PORT/fakejira

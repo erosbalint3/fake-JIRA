@@ -46,6 +46,18 @@ public class Comment {
     @Column(length = 300)
     private String anchor;
 
+    /** Only for the team: hidden from guests, viewers and roles without "See internal comments". */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean internal;
+
+    public boolean isInternal() {
+        return internal;
+    }
+
+    public void setInternal(boolean internal) {
+        this.internal = internal;
+    }
+
     protected Comment() {
     }
 

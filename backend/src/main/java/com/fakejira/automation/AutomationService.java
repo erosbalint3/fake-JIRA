@@ -87,6 +87,10 @@ public class AutomationService {
         if (event.automated() || event.kind() == TaskEvent.Kind.DELETED) {
             return;
         }
+        // Rules can email or post outside the team, so internal comments do not trigger them.
+        if (event.kind() == TaskEvent.Kind.COMMENTED && "true".equals(event.details().get("internal"))) {
+            return;
+        }
         AutomationRule.Trigger trigger = switch (event.kind()) {
             case CREATED -> AutomationRule.Trigger.CREATED;
             case UPDATED -> AutomationRule.Trigger.UPDATED;

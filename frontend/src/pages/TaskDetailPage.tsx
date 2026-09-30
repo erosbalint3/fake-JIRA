@@ -1,10 +1,7 @@
 import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import {
-  ArrowLeft, BookOpen, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
-  Pencil, Trash2, Upload, X,
-} from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip, Pencil, Trash2, Upload, X, Lock } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useTransitionGuard } from '../components/TransitionGuard';
 import { useAuth } from '../auth';
@@ -90,6 +87,8 @@ export function TaskDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [comment, setComment, clearComment] = useDraft(`comment:${taskId}`);
+  const [internalComment, setInternalComment] = useState(false);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [diff, setDiff] = useState<Activity | null>(null);
   const [moving, setMoving] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -138,6 +137,7 @@ export function TaskDetailPage() {
     api.sprints(task.projectKey).then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED'))).catch(() => {});
     api.epics(task.projectKey).then(setEpics).catch(() => {});
     api.releases(task.projectKey).then(setReleases).catch(() => {});
+    api.myPermissions(task.projectKey).then(setPermissions).catch(() => setPermissions([]));
     api.components(task.projectKey).then(setComponents).catch(() => {});
   }, [task?.projectKey]);
 
@@ -224,9 +224,10 @@ export function TaskDetailPage() {
     if (!comment.trim()) return;
     setBusy(true);
     try {
-      const created = await api.addComment(task.id, comment.trim(), anchor);
+      const created = await api.addComment(task.id, comment.trim(), anchor, internalComment);
       setComments([...comments, created]);
       clearComment();
+      setInternalComment(false);
       setAnchor(null);
     } catch (e) {
       toast((e as ApiError).message, 'error');
@@ -521,7 +522,16 @@ export function TaskDetailPage() {
                     <MarkdownEditor value={comment} onChange={setComment} members={members} rows={3} maxLength={2000}
                       label={t("Comment")} placeholder={t("Add a comment… Type @ to mention someone. Ctrl+Enter to send.")}
                       onSubmitShortcut={() => postComment()} onUploadImage={canEdit ? uploadImage : undefined} />
-                    <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>{t("Comment")}</button>
+                    <div className="comment-submit">
+                      {permissions.includes('VIEW_INTERNAL') && (
+                        <label className="toggle small internal-toggle" title={t('Hidden from guests, viewers and limited roles')}>
+                          <input type="checkbox" checked={internalComment} onChange={(e) => setInternalComment(e.target.checked)} />
+                          <Lock size={13} aria-hidden /> {t('Internal (team only)')}
+                        </label>
+                      )}
+                      <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>
+                        {internalComment ? t('Add internal comment') : t('Comment')}</button>
+                    </div>
                   </div>
                 </form>}
               </>

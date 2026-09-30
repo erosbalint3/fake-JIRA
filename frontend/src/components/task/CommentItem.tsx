@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useState } from 'react';
 import { Pencil, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../../api';
@@ -80,6 +81,7 @@ export function CommentItem({
         <div className="comment-head">
           <strong>{comment.author.displayName}</strong>
           <span className="muted small" title={new Date(comment.createdAt).toLocaleString()}>{timeAgo(comment.createdAt)}</span>
+          {comment.internal && <span className="internal-badge" title={t('Only the team can see this')}>{t('Internal')}</span>}
           {comment.editedAt && (
             <span className="muted small" title={`Edited ${new Date(comment.editedAt).toLocaleString()}`}>· edited</span>
           )}

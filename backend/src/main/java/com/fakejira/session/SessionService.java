@@ -122,6 +122,8 @@ public class SessionService {
         return ids.size();
     }
 
+    @com.fakejira.cluster.PerInstance
+
     @Scheduled(cron = "0 45 4 * * *")
     public void prune() {
         tx.executeWithoutResult(status -> sessions.deleteEnded(Instant.now().minus(Duration.ofDays(30))));

@@ -25,9 +25,12 @@ public class TaskSupport {
     private final TaskLinkRepository links;
     private final TaskActivityRepository activity;
     private final NotificationService notifications;
+    private final com.fakejira.project.ProjectAccess access;
 
     public TaskSupport(TaskRepository tasks, ChecklistItemRepository checklist, TimeEntryRepository time,
-                       TaskLinkRepository links, TaskActivityRepository activity, NotificationService notifications) {
+                       TaskLinkRepository links, TaskActivityRepository activity, NotificationService notifications,
+                       com.fakejira.project.ProjectAccess access) {
+        this.access = access;
         this.tasks = tasks;
         this.checklist = checklist;
         this.time = time;
@@ -47,11 +50,22 @@ public class TaskSupport {
 
     /** Like {@link #memberTask} but also rejects read-only viewers. */
     public Task editableTask(Long id, User user) {
+        return permittedTask(id, user, com.fakejira.project.Permission.EDIT_TASKS);
+    }
+
+    /** A task in a project where the user may edit and their role includes {@code permission}. */
+    public Task permittedTask(Long id, User user, com.fakejira.project.Permission permission) {
         Task task = memberTask(id, user);
         if (!task.getProject().canEdit(user)) {
             throw ApiException.forbidden("You have read-only access to " + task.getProject().getKey() + ".");
         }
+        access.require(task.getProject(), user, permission);
         return task;
+    }
+
+    /** Whether the user may read internal comments on this task. */
+    public boolean canSeeInternal(Task task, User user) {
+        return access.canSeeInternal(task.getProject(), user);
     }
 
     /** Who last changed the task (from its history). */
@@ -64,6 +78,9 @@ public class TaskSupport {
         Task task = memberTask(id, user);
         if (!task.getProject().canEdit(user) && !task.getProject().isGuest(user)) {
             throw ApiException.forbidden("You have read-only access to " + task.getProject().getKey() + ".");
+        }
+        if (!access.allows(task.getProject(), user, com.fakejira.project.Permission.COMMENT)) {
+            throw ApiException.forbidden("Your role in " + task.getProject().getKey() + " does not allow commenting.");
         }
         return task;
     }

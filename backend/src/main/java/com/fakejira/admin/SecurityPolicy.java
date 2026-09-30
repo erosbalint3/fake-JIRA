@@ -58,8 +58,16 @@ public class SecurityPolicy {
     private volatile Policy current;
     private volatile List<Range> ranges = List.of();
 
+    private final com.fakejira.cluster.Cluster cluster;
+
     public SecurityPolicy(AppSettings settings, ObjectMapper json, JwtProperties jwt,
-                          @Value("${app.security.ip-allowlist-disabled:false}") boolean allowlistDisabled) {
+                          @Value("${app.security.ip-allowlist-disabled:false}") boolean allowlistDisabled,
+                          com.fakejira.cluster.Cluster cluster) {
+        this.cluster = cluster;
+        // Another instance saved new rules: read them again.
+        cluster.subscribe("settings", key -> {
+            if (KEY.equals(key)) current = null;
+        });
         this.settings = settings;
         this.json = json;
         this.allowlistDisabled = allowlistDisabled;
@@ -106,6 +114,9 @@ public class SecurityPolicy {
         }
         ranges = parsed;
         current = saved;
+        if (cluster.enabled()) {
+            cluster.publish("settings", KEY);
+        }
         return saved;
     }
 

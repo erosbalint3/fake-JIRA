@@ -183,7 +183,14 @@ public final class TaskDtos {
 
             /** Inline comment: the passage of the description it refers to. */
             @Size(max = 300, message = "The quoted passage is at most 300 characters")
-            String anchor) {
+            String anchor,
+
+            /** Only for the team (not guests or viewers); replies to internal comments are internal too. */
+            Boolean internal) {
+
+        public CommentRequest(String body, Long parentId, String anchor) {
+            this(body, parentId, anchor, null);
+        }
     }
 
     public record ReactionRequest(@NotBlank String emoji) {
@@ -325,7 +332,7 @@ public final class TaskDtos {
     }
 
     public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt, Instant editedAt,
-                                  Long parentId, List<ReactionSummary> reactions, String anchor) {
+                                  Long parentId, List<ReactionSummary> reactions, String anchor, boolean internal) {
 
         public static CommentResponse of(Comment comment) {
             return of(comment, List.of());
@@ -334,7 +341,8 @@ public final class TaskDtos {
         public static CommentResponse of(Comment comment, List<ReactionSummary> reactions) {
             return new CommentResponse(comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(),
                     comment.getCreatedAt(), comment.getEditedAt(),
-                    comment.getParent() == null ? null : comment.getParent().getId(), reactions, comment.getAnchor());
+                    comment.getParent() == null ? null : comment.getParent().getId(), reactions, comment.getAnchor(),
+                    comment.isInternal());
         }
     }
 
