@@ -1,5 +1,6 @@
 import { isReadOnlyRole } from '../types';
 import { ProjectNotifyButton } from '../components/ProjectNotifyButton';
+import { BUILD_ICON, BUILD_LABEL } from '../components/task/DevPanel';
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Eye, KanbanSquare, Users, Zap } from 'lucide-react';
@@ -20,6 +21,7 @@ import { formatDay, todayIso } from '../format';
 import {
   PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, TASK_TYPES, TASK_TYPE_LABEL, type BoardColumn, type Sprint, type Task,
   type User,
+  type BuildInfo,
 } from '../types';
 import { t } from '../i18n';
 
@@ -113,6 +115,7 @@ export function BoardPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const kanban = project?.kanban ?? false;
 
+  const [builds, setBuilds] = useState<Record<string, BuildInfo>>({});
   const load = useCallback(async () => {
     if (!project) return;
     setError('');
@@ -122,6 +125,7 @@ export function BoardPage() {
       setActive(current);
       setColumns(cols);
       setTasks(await api.tasks({ project: key, sprint: current ? String(current.id) : undefined }));
+      api.projectBuilds(key).then(setBuilds).catch(() => {});
     } catch (e) {
       setError((e as ApiError).message);
     }
@@ -248,6 +252,15 @@ export function BoardPage() {
         {task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
         <ChecklistProgress done={task.checklistDone} total={task.checklistTotal} />
         <SubtaskBadge done={task.subtaskDone} total={task.subtaskTotal} />
+        {builds[task.id] && (() => {
+          const build = builds[task.id];
+          const Icon = BUILD_ICON[build.state];
+          return (
+            <span className={`build-badge build-${build.state}`} title={`${build.name}: ${t(BUILD_LABEL[build.state])}`}>
+              <Icon size={13} aria-hidden /> <span className="sr-only">{t('Build')} </span>{t(BUILD_LABEL[build.state])}
+            </span>
+          );
+        })()}
       </div>
       <footer className="card-footer">
         <TypeIcon type={task.type} />

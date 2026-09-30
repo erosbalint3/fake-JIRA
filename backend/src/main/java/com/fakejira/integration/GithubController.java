@@ -42,10 +42,15 @@ public class GithubController {
     private final GithubWebhookService webhooks;
     private final MailService mail;
     private final ObjectMapper json;
+    private final BuildService builds;
+    private final IssueSyncService issueSync;
     private final SecureRandom random = new SecureRandom();
 
     public GithubController(ProjectRepository projects, ProjectAccess access, CurrentUser currentUser,
-                            GithubWebhookService webhooks, MailService mail, ObjectMapper json) {
+                            GithubWebhookService webhooks, MailService mail, ObjectMapper json, BuildService builds,
+                            IssueSyncService issueSync) {
+        this.builds = builds;
+        this.issueSync = issueSync;
         this.projects = projects;
         this.access = access;
         this.currentUser = currentUser;
@@ -133,6 +138,13 @@ public class GithubController {
             return ResponseEntity.ok(Map.of("ok", true));
         }
         JsonNode payload = json.readTree(body);
+        BuildService.Build build = builds.fromGithub(event, payload, "GitHub");
+        if (build != null) {
+            return ResponseEntity.ok(Map.of("builds", builds.record(project, build)));
+        }
+        if ("issues".equals(event)) {
+            return ResponseEntity.ok(Map.of("issues", issueSync.onIssueEvent(project, payload)));
+        }
         GithubWebhookService.Result result = webhooks.handle(project, event, payload);
         return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
     }
@@ -147,6 +159,9 @@ public class GithubController {
         Project project = integrated(key);
         if (!MessageDigest.isEqual(project.getGithubSecret().getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid token.");
+        }
+        if ("Pipeline Hook".equals(event)) {
+            return ResponseEntity.ok(Map.of("builds", builds.record(project, builds.fromGitlab(json.readTree(body)))));
         }
         GithubWebhookService.Result result = webhooks.handleGitlab(project, event, json.readTree(body));
         return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
@@ -163,8 +178,43 @@ public class GithubController {
         if (!validSignature(project.getGithubSecret(), body, "sha256=" + signature)) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid signature.");
         }
-        GithubWebhookService.Result result = webhooks.handleGitea(project, event, json.readTree(body));
+        JsonNode giteaPayload = json.readTree(body);
+        BuildService.Build giteaBuild = builds.fromGithub(event, giteaPayload, "Gitea");
+        if (giteaBuild != null) {
+            return ResponseEntity.ok(Map.of("builds", builds.record(project, giteaBuild)));
+        }
+        GithubWebhookService.Result result = webhooks.handleGitea(project, event, giteaPayload);
         return ResponseEntity.ok(Map.of("linked", result.linked(), "completed", result.completed()));
+    }
+
+    /**
+     * Any CI system (Jenkins, CircleCI, Buildkite, a shell script…) can report results here with the project's
+     * integration secret in X-FakeJIRA-Token. Tasks are found by their keys in {@code ref} and {@code text}.
+     */
+    public record CiReport(String name, String status, String url, String ref, String text) {
+    }
+
+    @PostMapping("/api/integrations/ci/{key}")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> ci(@PathVariable String key,
+                                                  @RequestHeader(value = "X-FakeJIRA-Token", defaultValue = "") String token,
+                                                  @RequestBody CiReport report) {
+        Project project = integrated(key);
+        if (!MessageDigest.isEqual(project.getGithubSecret().getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid token.");
+        }
+        String state = report.status() == null ? "" : report.status().toLowerCase(java.util.Locale.ROOT);
+        state = switch (state) {
+            case "success", "passed", "ok", "green" -> "success";
+            case "failure", "failed", "error", "red", "broken" -> "failure";
+            case "running", "in_progress", "started" -> "running";
+            case "cancelled", "canceled", "aborted", "skipped" -> "cancelled";
+            case "pending", "queued", "waiting" -> "pending";
+            default -> throw ApiException.field("status", "Use pending, running, success, failure or cancelled.");
+        };
+        int recorded = builds.record(project, new BuildService.Build("CI", report.name(), state, report.url(), report.ref(),
+                report.text() == null ? "" : report.text()));
+        return ResponseEntity.ok(Map.of("builds", recorded));
     }
 
     private Project integrated(String key) {

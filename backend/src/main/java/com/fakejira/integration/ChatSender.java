@@ -96,6 +96,17 @@ public class ChatSender {
             // No @everyone / role pings from task text.
             return json.writeValueAsString(Map.of("content", cut(text, 1900), "allowed_mentions", Map.of("parse", List.of())));
         }
+        if (kind == ChatHook.Kind.MATTERMOST || kind == ChatHook.Kind.TEAMS) {
+            // Both take Markdown; Teams wants it in a MessageCard.
+            String text = "**" + markdown(m.actor()) + "** " + m.verb() + " [" + markdown(m.subject()) + "](" + link + ")"
+                    + (m.quote() == null ? "" : "\n\n> " + markdown(m.quote()).replace("\n", "\n> "));
+            if (kind == ChatHook.Kind.MATTERMOST) {
+                return json.writeValueAsString(Map.of("text", cut(text, 3500)));
+            }
+            return json.writeValueAsString(Map.of("@type", "MessageCard", "@context", "https://schema.org/extensions",
+                    "summary", cut(m.actor() + " " + m.verb() + " " + m.subject(), 200), "themeColor", "4F46E5",
+                    "text", cut(text, 3500)));
+        }
         String text = "*" + slack(m.actor()) + "* " + m.verb() + " <" + link + "|" + slack(m.subject()) + ">"
                 + (m.quote() == null ? "" : "\n>" + slack(m.quote()).replace("\n", "\n>"));
         return json.writeValueAsString(Map.of("text", cut(text, 3500)));
@@ -103,6 +114,10 @@ public class ChatSender {
 
     private static String slack(String text) {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private static String markdown(String text) {
+        return text.replaceAll("([\\\\*_`\\[\\]])", "\\\\$1").replace("@", "@\u200B");
     }
 
     private static String discord(String text) {

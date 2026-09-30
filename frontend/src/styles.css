@@ -937,9 +937,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .dev-icon.dev-merged { color: var(--s-review); }
 .dev-icon.dev-closed { color: var(--danger); }
 .dev-state { font-size: 11.5px; font-weight: 700; text-transform: capitalize; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); }
-.dev-state.dev-open { color: var(--success); }
+.dev-state.dev-open { color: color-mix(in srgb, var(--success) 60%, #000); }
+:root[data-theme='dark'] .dev-state.dev-open { color: var(--success); }
 .dev-state.dev-merged { color: var(--s-review); }
-.dev-state.dev-closed { color: var(--danger); }
+.dev-state.dev-closed { color: var(--danger-text); }
 
 /* Roadmap */
 .roadmap { padding: 0; overflow-x: auto; }
@@ -2109,3 +2110,27 @@ html.embedded, html.embedded body { background: var(--surface); }
   .public-roadmap { grid-template-columns: 1fr; }
   .conversation li { max-width: 100%; }
 }
+.code-block { white-space: pre-wrap; overflow-x: auto; font-size: 12.5px; background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius); }
+.link-card { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.link-card-body { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); text-decoration: none; background: var(--surface); max-width: 640px; }
+.link-card-body:hover { border-color: var(--accent); }
+.link-card-body img { width: 96px; height: 64px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.link-card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.link-card-text strong { overflow: hidden; text-overflow: ellipsis; }
+.link-card-icon { flex-shrink: 0; color: var(--text-muted); }
+.link-card .btn { align-self: flex-start; }
+.link-embed { width: 100%; max-width: 800px; aspect-ratio: 16 / 9; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.link-embed.embed-google-document { aspect-ratio: 4 / 5; }
+.build-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 650; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+.build-badge.build-success, .build-state.build-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: color-mix(in srgb, var(--success) 60%, #000); }
+.build-badge.build-failure, .build-state.build-failure { background: var(--danger-soft); color: var(--danger-text); }
+.build-badge.build-running, .build-state.build-running { background: var(--accent-soft); color: var(--accent-text); }
+:root[data-theme='dark'] .build-badge.build-success, :root[data-theme='dark'] .build-state.build-success { color: var(--success); }
+.build-state { font-size: 12px; font-weight: 650; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-muted); }
+.build-icon.build-success { color: var(--success); }
+.build-icon.build-failure { color: var(--danger); }
+.build-icon.build-running { color: var(--accent); }
+.dev-actions { margin-bottom: 8px; }
+.developer-links li { display: block; }
+.developer-links .code-block { margin-top: 6px; }

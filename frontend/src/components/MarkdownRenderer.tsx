@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { api } from '../api';
+import { api, tokenStore } from '../api';
+import { LinkPreview } from './LinkPreview';
 import { t } from '../i18n';
 
 /** Object URLs of attachment images already loaded in this tab. */
@@ -40,6 +41,7 @@ function AttachmentImage({ id, alt }: { id: number; alt: string }) {
  * so user content cannot inject markup or scripts.
  */
 export default function MarkdownRenderer({ children, className = '' }: { children: string; className?: string }) {
+  const previews = !!tokenStore.get();
   return (
     <div className={`markdown ${className}`}>
       <ReactMarkdown
@@ -47,6 +49,16 @@ export default function MarkdownRenderer({ children, className = '' }: { childre
         // attachment:<id> points at an uploaded image; everything else goes through the safe default.
         urlTransform={(url) => (/^attachment:\d+$/.test(url) ? url : defaultUrlTransform(url))}
         components={{
+          // A link alone on its line (pasted URL) becomes a preview card for signed-in readers.
+          p: ({ node, children: content }) => {
+            const only = node?.children.length === 1 ? node.children[0] : null;
+            if (previews && only && only.type === 'element' && only.tagName === 'a') {
+              const href = String(only.properties?.href ?? '');
+              const text = only.children.length === 1 && only.children[0].type === 'text' ? only.children[0].value : '';
+              if (/^https:\/\//.test(href) && text === href) return <LinkPreview url={href}>{content}</LinkPreview>;
+            }
+            return <p>{content}</p>;
+          },
           a: ({ href, children: text }) => (
             <a href={href} target="_blank" rel="noopener noreferrer nofollow">{text}</a>
           ),

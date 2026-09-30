@@ -482,7 +482,7 @@ export function TaskDetailPage() {
             }} />
 
           <TimePanel taskId={task.id} entries={timeEntries} userId={user.id} isOwner={isOwner} canEdit={canEdit} onChange={load} />
-          <DevPanel links={devLinks} />
+          <DevPanel taskId={task.id} links={devLinks} onChanged={() => api.devLinks(task.id).then(setDevLinks).catch(() => {})} />
 
           <section className="panel">
             <div className="tabs compact" role="tablist">

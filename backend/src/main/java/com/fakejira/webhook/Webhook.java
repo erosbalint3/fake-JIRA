@@ -56,6 +56,13 @@ public class Webhook {
     @Column(length = 300)
     private String lastError;
 
+    /** Subscribed through the REST hook API (Zapier, n8n, Make) rather than set up in the project settings. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean restHook;
+
+    /** Who subscribed it (REST hooks), so they can unsubscribe it again. */
+    private Long createdBy;
+
     protected Webhook() {
     }
 
@@ -125,5 +132,18 @@ public class Webhook {
         lastDeliveryAt = Instant.now();
         lastStatus = status;
         lastError = error == null ? null : error.length() > 300 ? error.substring(0, 299) + "…" : error;
+    }
+
+    public boolean isRestHook() {
+        return restHook;
+    }
+
+    public Long getCreatedBy() {
+        return createdBy;
+    }
+
+    public void markRestHook(Long userId) {
+        this.restHook = true;
+        this.createdBy = userId;
     }
 }

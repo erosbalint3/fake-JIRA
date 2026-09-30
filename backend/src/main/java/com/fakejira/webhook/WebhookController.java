@@ -170,7 +170,7 @@ public class WebhookController {
         return requested.stream().distinct().toList();
     }
 
-    private static String newSecret() {
+    static String newSecret() {
         byte[] bytes = new byte[24];
         new SecureRandom().nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);

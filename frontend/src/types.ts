@@ -188,7 +188,7 @@ export interface TimeEntry {
 
 export interface DevLink {
   id: number;
-  kind: 'COMMIT' | 'PULL_REQUEST';
+  kind: 'COMMIT' | 'PULL_REQUEST' | 'BRANCH';
   url: string;
   title: string;
   state: string | null;
@@ -1338,4 +1338,61 @@ export interface PublicChangelog {
   projectKey: string;
   portal: boolean;
   releases: { version: string; date: string | null; description: string; features: string[]; fixes: string[]; other: string[] }[];
+}
+
+// ---- Integrations ----
+
+export type BuildState = 'pending' | 'running' | 'success' | 'failure' | 'cancelled';
+
+export interface BuildInfo {
+  source: string;
+  name: string;
+  state: BuildState;
+  url: string | null;
+  ref: string | null;
+  updatedAt: string;
+}
+
+export interface TaskGithub {
+  repo: string | null;
+  canCreate: boolean;
+  issueUrl: string | null;
+  issueNumber: number | null;
+  builds: BuildInfo[];
+}
+
+export interface GithubRepoSettings {
+  repo: string;
+  hasToken: boolean;
+  defaultBranch: string | null;
+  issueSync: boolean;
+}
+
+export interface ChatCommandSettings {
+  slackSigningSecret: boolean;
+  slackBotToken: boolean;
+  mattermostToken: boolean;
+  discordPublicKey: boolean;
+  slackCommandUrl: string;
+  slackEventsUrl: string;
+  mattermostCommandUrl: string;
+  discordInteractionsUrl: string;
+}
+
+export interface CalendarStatus {
+  available: boolean;
+  connected: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  events: number;
+}
+
+export interface LinkPreviewData {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  embed: string | null;
+  kind: string;
 }

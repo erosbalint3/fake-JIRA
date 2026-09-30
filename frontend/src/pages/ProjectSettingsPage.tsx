@@ -20,6 +20,8 @@ import { WorkflowSection } from '../components/settings/WorkflowSection';
 import { ComponentsSection } from '../components/settings/ComponentsSection';
 import { TypeChecklistsSection } from '../components/settings/TypeChecklistsSection';
 import { ServiceDeskSection } from '../components/settings/ServiceDeskSection';
+import { GithubRepoSection } from '../components/settings/GithubRepoSection';
+import { ChatCommandsSection } from '../components/settings/ChatCommandsSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -165,6 +167,8 @@ export function ProjectSettingsPage() {
       <TemplatesSection projectKey={project.key} canEdit={canEdit} />
       <RecurringSection projectKey={project.key} members={project.members} canEdit={canEdit} />
       {isOwner && <GithubSection project={project} onChange={refresh} />}
+      {isOwner && <GithubRepoSection projectKey={project.key} />}
+      {isOwner && <ChatCommandsSection projectKey={project.key} />}
       {isOwner && <ChatHooksSection projectKey={project.key} />}
       {isOwner && <WebhooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />

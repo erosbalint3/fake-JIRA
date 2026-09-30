@@ -44,7 +44,10 @@ public class SecurityConfig {
                                 "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**", "/api/integrations/gitlab/**",
-                                "/api/integrations/gitea/**").permitAll()
+                                "/api/integrations/gitea/**", "/api/integrations/ci/**", "/api/integrations/slack/**",
+                                "/api/integrations/mattermost/**", "/api/integrations/discord/**").permitAll()
+                        // The Google Calendar OAuth callback carries its own signed state.
+                        .requestMatchers(HttpMethod.GET, "/api/integrations/google-calendar/callback").permitAll()
                         // Secret-token URLs: the personal calendar feed and the inbound email webhook.
                         .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**", "/api/metrics", "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()

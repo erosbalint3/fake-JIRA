@@ -125,3 +125,11 @@ app:
     # Set APP_JWT_SECRET (32+ chars) in production so sessions survive restarts.
     secret: ${APP_JWT_SECRET:}
     validity: 12h
+
+springdoc:
+  swagger-ui:
+    # The interactive API explorer; the OpenAPI JSON is at /v3/api-docs/fakejira.
+    path: /api-docs
+    urls-primary-name: fakejira
+    display-request-duration: true
+    persist-authorization: true

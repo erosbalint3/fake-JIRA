@@ -11,7 +11,8 @@ import type {
   Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
   NotificationLevel, NotificationRule, NotificationSettings, Reminder, RunningTimer, TodayList, DaySummary, PersonalNotes,
   ForecastResult, Burnup, AgingWip, BugTrends, SlaTarget, TaskSla, SlaReport, TrendWeek, ReportSubscription, ReportKind,
-  HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, RequestTypeDef, PortalConversation, SimilarTask,
+  HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, TaskGithub, BuildInfo, GithubRepoSettings, ChatCommandSettings,
+  CalendarStatus, LinkPreviewData, RequestTypeDef, PortalConversation, SimilarTask,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -605,6 +606,25 @@ export const api = {
   replyToRequester: (taskId: number, body: string) => request<PortalConversation>('POST', `/tasks/${taskId}/portal/messages`, { body }),
   similarTasks: (key: string, q: string, exclude?: number) =>
     request<SimilarTask[]>('GET', `/projects/${key}/similar${query({ q, exclude })}`),
+  taskGithub: (taskId: number) => request<TaskGithub>('GET', `/tasks/${taskId}/github`),
+  projectBuilds: (key: string) => request<Record<string, BuildInfo>>('GET', `/projects/${key}/builds`),
+  createBranch: (taskId: number, base?: string) => request<{ branch: string; url: string }>('POST', `/tasks/${taskId}/github/branch`, { base }),
+  createPullRequest: (taskId: number, draft: boolean) =>
+    request<{ number: number; url: string }>('POST', `/tasks/${taskId}/github/pull-request`, { draft }),
+  githubRepo: (key: string) => request<GithubRepoSettings | undefined>('GET', `/projects/${key}/github/repo`),
+  saveGithubRepo: (key: string, input: { repo: string; token?: string; issueSync: boolean }) =>
+    request<GithubRepoSettings>('PUT', `/projects/${key}/github/repo`, input),
+  removeGithubRepo: (key: string) => request<void>('DELETE', `/projects/${key}/github/repo`),
+  importGithubIssues: (key: string, state: 'open' | 'all') =>
+    request<{ imported: number; alreadyLinked: number; pullRequestsSkipped: number }>('POST', `/projects/${key}/github/import`, { state }),
+  chatCommands: (key: string) => request<ChatCommandSettings>('GET', `/projects/${key}/chat-commands`),
+  saveChatCommands: (key: string, input: Partial<Record<'slackSigningSecret' | 'slackBotToken' | 'mattermostToken' | 'discordPublicKey', string>>) =>
+    request<ChatCommandSettings>('PUT', `/projects/${key}/chat-commands`, input),
+  calendarStatus: () => request<CalendarStatus>('GET', '/integrations/google-calendar'),
+  connectCalendar: () => request<{ url: string }>('POST', '/integrations/google-calendar/connect'),
+  syncCalendar: () => request<{ pulled: number; created: number; updated: number; removed: number }>('POST', '/integrations/google-calendar/sync'),
+  disconnectCalendar: () => request<void>('DELETE', '/integrations/google-calendar'),
+  linkPreview: (url: string) => request<LinkPreviewData>('GET', `/link-preview?url=${encodeURIComponent(url)}`),
   timer: () => request<RunningTimer | undefined>('GET', '/timer'),
   startTimer: (taskId: number) =>
     request<{ logged: TimeEntry | null; running: RunningTimer | null }>('POST', '/timer/start', { taskId }),
@@ -714,7 +734,7 @@ export type ChatEvent = 'TASK_CREATED' | 'TASK_DONE' | 'STATUS_CHANGED' | 'COMME
 
 export interface ChatHook {
   id: number;
-  kind: 'SLACK' | 'DISCORD';
+  kind: 'SLACK' | 'DISCORD' | 'TEAMS' | 'MATTERMOST';
   url: string;
   events: ChatEvent[];
   lastDeliveryAt: string | null;

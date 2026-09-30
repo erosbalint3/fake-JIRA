@@ -3,6 +3,7 @@ import { MessageSquare, Plus, Send, Trash2 } from 'lucide-react';
 import { api, ApiError, type ChatEvent, type ChatHook } from '../api';
 import { useToast } from '../toast';
 import { timeAgo } from '../format';
+import { t } from '../i18n';
 
 const EVENTS: { id: ChatEvent; label: string }[] = [
   { id: 'TASK_CREATED', label: 'Task created' },
@@ -13,6 +14,13 @@ const EVENTS: { id: ChatEvent; label: string }[] = [
 ];
 
 /** Post project updates to Slack or Discord channels through incoming webhooks. */
+
+const CHAT_APP: Record<ChatHook['kind'], string> = { SLACK: 'Slack', DISCORD: 'Discord', TEAMS: 'Microsoft Teams', MATTERMOST: 'Mattermost' };
+const PLACEHOLDER: Record<ChatHook['kind'], string> = {
+  SLACK: 'https://hooks.slack.com/services/…', DISCORD: 'https://discord.com/api/webhooks/…',
+  TEAMS: 'https://…webhook.office.com/…', MATTERMOST: 'https://mattermost.example.com/hooks/…',
+};
+
 export function ChatHooksSection({ projectKey }: { projectKey: string }) {
   const toast = useToast();
   const [hooks, setHooks] = useState<ChatHook[] | null>(null);
@@ -52,17 +60,16 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><MessageSquare size={16} /> Slack &amp; Discord</h2>
+      <h2 className="panel-title"><MessageSquare size={16} /> {t('Chat notifications')}</h2>
       <p className="muted small hint">
-        Create an incoming webhook in Slack (Apps → Incoming Webhooks) or Discord (channel settings → Integrations →
-        Webhooks) and paste its URL here. Mattermost and Rocket.Chat work with the Slack format.
+        {t('Create an incoming webhook in Slack (Apps → Incoming Webhooks), Discord (channel settings → Integrations → Webhooks), Microsoft Teams (channel → Workflows or Connectors → Incoming Webhook) or Mattermost (Integrations → Incoming Webhooks) and paste its URL here.')}
       </p>
       {hooks && hooks.length > 0 && (
         <ul className="hook-list">
           {hooks.map((hook) => (
             <li key={hook.id}>
               <div className="hook-head">
-                <strong>{hook.kind === 'SLACK' ? 'Slack' : 'Discord'}</strong>
+                <strong>{CHAT_APP[hook.kind]}</strong>
                 <span className="muted small mono">{hook.url}</span>
                 <span className="spacer" />
                 <button className="btn btn-ghost btn-sm" onClick={async () => {
@@ -97,9 +104,11 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
           <select value={kind} onChange={(e) => setKind(e.target.value as ChatHook['kind'])} aria-label="Chat app">
             <option value="SLACK">Slack</option>
             <option value="DISCORD">Discord</option>
+            <option value="TEAMS">Microsoft Teams</option>
+            <option value="MATTERMOST">Mattermost</option>
           </select>
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Webhook URL"
-            placeholder={kind === 'SLACK' ? 'https://hooks.slack.com/services/…' : 'https://discord.com/api/webhooks/…'} />
+            placeholder={PLACEHOLDER[kind]} />
           <button className="btn btn-soft" disabled={busy || !url.trim()}><Plus size={16} /> Add</button>
         </form>
       )}
