@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { formatDay } from '../format';
 import type { CycleTask, FlowDay, Throughput } from '../types';
 
-const HEIGHT = 260;
-const PAD = { top: 14, right: 16, bottom: 30, left: 40 };
+export const HEIGHT = 260;
+export const PAD = { top: 14, right: 16, bottom: 30, left: 40 };
 
-function useWidth() {
+export function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   useEffect(() => {
@@ -26,7 +26,7 @@ function ticks(max: number) {
   return list;
 }
 
-function Frame({ width, max, children, label, xLabels }: {
+export function Frame({ width, max, children, label, xLabels }: {
   width: number; max: number; children: ReactNode; label: string; xLabels: { x: number; text: string }[];
 }) {
   const plotW = width - PAD.left - PAD.right;

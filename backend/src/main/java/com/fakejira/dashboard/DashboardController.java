@@ -43,7 +43,7 @@ import java.util.Set;
 @RestController
 public class DashboardController {
 
-    static final Set<String> WIDGET_TYPES = Set.of("filter", "chart", "counter", "activity", "recent", "calendar", "sprint");
+    static final Set<String> WIDGET_TYPES = Set.of("filter", "chart", "counter", "activity", "recent", "calendar", "sprint", "trend", "report");
     static final int MAX_WIDGETS = 24;
     static final int MAX_DASHBOARDS = 20;
     static final int RECENT_LIMIT = 20;

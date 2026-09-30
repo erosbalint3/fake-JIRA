@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Activity, BarChart3, Clock, Gauge, Timer, TrendingDown } from 'lucide-react';
-import { api, ApiError } from '../api';
+import { Activity, BarChart3, Bug, Clock, Dices, FileSpreadsheet, FileText, Gauge, HeartPulse, Hourglass, Mail, PackageCheck, ShieldCheck, Timer, TrendingDown } from 'lucide-react';
+import { api, ApiError, saveBlob } from '../api';
+import { useToast } from '../toast';
+import { AgingReport, BugReport, BurnupReport, ForecastReport, SlaReportView } from '../components/reports/InsightReports';
+import { HealthCheckReport } from '../components/reports/HealthCheckReport';
+import { ScheduleReportModal } from '../components/reports/ScheduleReportModal';
 import { useLiveRefresh } from '../live';
 import { useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
@@ -14,7 +18,7 @@ import { formatDay, formatMinutes, todayIso } from '../format';
 import type { Burndown, CycleReport, FlowDay, Sprint, Throughput, TimeReport, VelocityEntry } from '../types';
 import { t } from '../i18n';
 
-type Tab = 'burndown' | 'velocity' | 'flow' | 'cycle' | 'time';
+type Tab = 'burndown' | 'velocity' | 'flow' | 'cycle' | 'time' | 'forecast' | 'burnup' | 'aging' | 'bugs' | 'sla' | 'health';
 
 const TABS: { id: Tab; label: string; icon: typeof BarChart3; scrumOnly?: boolean }[] = [
   { id: 'burndown', label: 'Burndown', icon: TrendingDown, scrumOnly: true },
@@ -22,11 +26,26 @@ const TABS: { id: Tab; label: string; icon: typeof BarChart3; scrumOnly?: boolea
   { id: 'flow', label: 'Cumulative flow', icon: Activity },
   { id: 'cycle', label: 'Cycle time', icon: Timer },
   { id: 'time', label: 'Time', icon: Clock },
+  { id: 'forecast', label: 'Forecast', icon: Dices },
+  { id: 'burnup', label: 'Release burn-up', icon: PackageCheck },
+  { id: 'aging', label: 'Aging work', icon: Hourglass },
+  { id: 'bugs', label: 'Bugs', icon: Bug },
+  { id: 'sla', label: 'SLA', icon: ShieldCheck },
+  { id: 'health', label: 'Team health', icon: HeartPulse },
 ];
 
 export function ReportsPage() {
-  const { key, project, loading } = useRouteProject();
+  const { key, project, loading, canEdit, isOwner } = useRouteProject();
   const [params, setParams] = useSearchParams();
+  const toast = useToast();
+  const [scheduling, setScheduling] = useState(false);
+  const download = async (format: 'xlsx' | 'pdf') => {
+    try {
+      saveBlob(await api.exportReports(key, format), `${key.toLowerCase()}-reports-${todayIso()}.${format}`);
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+    }
+  };
 
   if (!loading && !project) return <NotFoundPage />;
   if (!project) return <div className="page"><Spinner /></div>;
@@ -42,12 +61,17 @@ export function ReportsPage() {
           <span className="eyebrow">{project.name}</span>
           <h1>{t("Reports")}</h1>
         </div>
+        <div className="header-actions">
+          <button className="btn btn-ghost btn-sm" onClick={() => download('xlsx')}><FileSpreadsheet size={15} /> {t('Excel')}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => download('pdf')}><FileText size={15} /> {t('PDF')}</button>
+          <button className="btn btn-soft btn-sm" onClick={() => setScheduling(true)}><Mail size={15} /> {t('Email me a summary')}</button>
+        </div>
       </header>
       <nav className="tabs" role="tablist" aria-label={t("Reports")}>
         {tabs.map(({ id, label, icon: Icon }) => (
           <button key={id} role="tab" aria-selected={tab === id} className={`tab ${tab === id ? 'active' : ''}`}
             onClick={() => setParams(id === first ? {} : { tab: id }, { replace: true })}>
-            <Icon size={15} /> {label}
+            <Icon size={15} /> {t(label)}
           </button>
         ))}
       </nav>
@@ -56,6 +80,14 @@ export function ReportsPage() {
       {tab === 'flow' && <FlowReport projectKey={key} projectId={project.id} />}
       {tab === 'cycle' && <CycleReportView projectKey={key} projectId={project.id} />}
       {tab === 'time' && <TimeReportView projectKey={key} projectId={project.id} />}
+      {tab === 'forecast' && <ForecastReport projectKey={key} />}
+      {tab === 'burnup' && <BurnupReport projectKey={key} />}
+      {tab === 'aging' && <AgingReport projectKey={key} />}
+      {tab === 'bugs' && <BugReport projectKey={key} />}
+      {tab === 'sla' && <SlaReportView projectKey={key} isOwner={isOwner} />}
+      {tab === 'health' && <HealthCheckReport projectKey={key} canEdit={canEdit} />}
+      {scheduling && <ScheduleReportModal kind="project" target={key} defaultTitle={`${project.name} summary`}
+        onClose={() => setScheduling(false)} />}
     </div>
   );
 }

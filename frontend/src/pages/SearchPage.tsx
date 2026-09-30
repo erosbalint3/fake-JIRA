@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bookmark, Download, Link2, Search as SearchIcon } from 'lucide-react';
-import { api, ApiError } from '../api';
+import { Bookmark, Download, FileSpreadsheet, FileText, Link2, Mail, Search as SearchIcon } from 'lucide-react';
+import { ScheduleReportModal } from '../components/reports/ScheduleReportModal';
+import { api, ApiError, saveBlob } from '../api';
 import { useToast } from '../toast';
 import { useProjects } from '../projects';
 import { Avatar } from '../components/Avatar';
@@ -35,6 +36,7 @@ export function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   const run = useCallback(async (q: string) => {
     setLoading(true);
@@ -109,6 +111,14 @@ export function SearchPage() {
     URL.revokeObjectURL(link.href);
   };
 
+  const download = async (format: 'xlsx' | 'pdf') => {
+    try {
+      saveBlob(await api.exportSearch(params.get('q') ?? text, format), `fakejira-tasks.${format}`);
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+    }
+  };
+
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/search?q=${encodeURIComponent(text)}`);
@@ -161,6 +171,9 @@ export function SearchPage() {
             <div className="header-actions">
               <button className="btn btn-ghost btn-sm" onClick={copyLink}><Link2 size={15} /> {t("Copy link")}</button>
               <button className="btn btn-ghost btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={15} /> {t("CSV")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => download('xlsx')} disabled={!rows.length}><FileSpreadsheet size={15} /> {t('Excel')}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => download('pdf')} disabled={!rows.length}><FileText size={15} /> {t('PDF')}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setScheduling(true)}><Mail size={15} /> {t('Email me')}</button>
               <button className="btn btn-soft btn-sm" onClick={() => setSaving(true)}><Bookmark size={15} /> {t("Save filter")}</button>
             </div>
           </div>
@@ -204,6 +217,8 @@ export function SearchPage() {
         toast(`Filter "${name}" saved`);
         window.dispatchEvent(new Event(FILTERS_CHANGED));
       }} />}
+      {scheduling && <ScheduleReportModal kind="filter" target={params.get('q') ?? text} defaultTitle=""
+        onClose={() => setScheduling(false)} />}
     </div>
   );
 }

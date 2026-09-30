@@ -21,6 +21,7 @@ import { InlineComments } from '../components/task/InlineComments';
 import { PollsPanel } from '../components/task/PollsPanel';
 import { KudosPanel } from '../components/task/KudosPanel';
 import { PersonalPanel } from '../components/task/PersonalPanel';
+import { SlaPanel } from '../components/task/SlaPanel';
 import { TimerButton } from '../components/Timer';
 import { usePresence } from '../collab';
 import { ChipPicker } from '../components/ChipPicker';
@@ -706,6 +707,7 @@ export function TaskDetailPage() {
           <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
           <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
           <KudosPanel task={task} me={user} canThank={canComment} />
+          <SlaPanel task={task} />
           <PersonalPanel task={task} />
           {wikiMentions.length > 0 && (
             <section className="side-section">

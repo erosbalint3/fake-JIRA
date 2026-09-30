@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ConnectedAccounts } from '../components/profile/ConnectedAccounts';
 import { ApiTokensPanel } from '../components/profile/ApiTokensPanel';
+import { ScheduledReportsPanel } from '../components/profile/ScheduledReportsPanel';
 import { NotificationRulesPanel } from '../components/profile/NotificationRulesPanel';
 import { AwayPanel } from '../components/profile/AwayPanel';
 import { DataPanel } from '../components/profile/DataPanel';
@@ -216,6 +217,7 @@ export function ProfilePage() {
       </section>
 
       <NotificationRulesPanel />
+      <ScheduledReportsPanel />
 
       <h2 className="section-heading" id="security">{t("Security")}</h2>
       <section className="panel">

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowDown, ArrowUp, CalendarDays, Clock, Gauge, LayoutDashboard, ListFilter, Pencil, Plus, Rows3, Trash2, Zap,
+  ArrowDown, ArrowUp, CalendarDays, Clock, FileBarChart, Gauge, LayoutDashboard, LineChart as LineIcon, ListFilter, Mail, Pencil, Plus, Rows3, Trash2, Zap,
 } from 'lucide-react';
+import { BarChart, DonutChart, LineChart } from '../components/Charts';
+import { ScheduleReportModal } from '../components/reports/ScheduleReportModal';
 import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -13,7 +15,8 @@ import { ConfirmDialog, Modal } from '../components/Modal';
 import { ErrorBanner, Spinner } from '../components/States';
 import { formatDay, timeAgo, todayIso } from '../format';
 import type {
-  Burndown, CalendarEvent, Dashboard, FeedItem, RecentTask, SearchGroup, SearchResult, Widget, WidgetType,
+  AgingWip, BugTrends, Burndown, CalendarEvent, Dashboard, FeedItem, ForecastResult, RecentTask, ReportWidgetKind, SearchGroup,
+  SearchResult, SlaReport, TrendWeek, Widget, WidgetType,
 } from '../types';
 import { t } from '../i18n';
 
@@ -21,13 +24,19 @@ const WIDGET_TYPES: { type: WidgetType; label: string; hint: string }[] = [
   { type: 'filter', label: 'Task list', hint: 'Tasks matching a query' },
   { type: 'counter', label: 'Counter', hint: 'How many tasks match a query' },
   { type: 'chart', label: 'Chart', hint: 'Tasks of a query grouped by a field' },
+  { type: 'trend', label: 'Trend', hint: 'Created and resolved per week for a query' },
+  { type: 'report', label: 'Project report', hint: 'Forecast, aging work, bugs or SLA of a project' },
   { type: 'sprint', label: 'Sprint progress', hint: "A project's active sprint" },
   { type: 'calendar', label: 'Upcoming', hint: 'Due dates, sprints and releases in the next two weeks' },
   { type: 'activity', label: 'Activity', hint: 'Latest changes and comments' },
   { type: 'recent', label: 'Recently viewed', hint: 'Tasks you opened lately' },
 ];
 
-const GROUPS = ['status', 'priority', 'assignee', 'type', 'project', 'epic', 'sprint', 'release'];
+const GROUPS = ['status', 'priority', 'assignee', 'reporter', 'type', 'resolution', 'project', 'epic', 'sprint', 'release'];
+
+const REPORTS: { value: ReportWidgetKind; label: string }[] = [
+  { value: 'forecast', label: 'Forecast' }, { value: 'aging', label: 'Aging work' }, { value: 'bugs', label: 'Bug trends' }, { value: 'sla', label: 'SLA' },
+];
 
 function addDays(days: number) {
   const d = new Date();
@@ -45,6 +54,7 @@ export function DashboardPage() {
   const [nameDialog, setNameDialog] = useState<'new' | 'rename' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tick, setTick] = useState(0);
+  const [scheduling, setScheduling] = useState(false);
 
   const load = useCallback(() => {
     api.dashboards().then((list) => {
@@ -104,7 +114,10 @@ export function DashboardPage() {
               <button className="btn btn-primary btn-sm" onClick={() => setEditing(false)}>{t("Done")}</button>
             </>
           ) : (
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={15} /> {t("Edit dashboard")}</button>
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={() => setScheduling(true)}><Mail size={15} /> {t('Email me')}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><Pencil size={15} /> {t("Edit dashboard")}</button>
+            </>
           )}
         </div>
       </header>
@@ -150,6 +163,8 @@ export function DashboardPage() {
             save(widgets);
           }} />
       )}
+      {scheduling && <ScheduleReportModal kind="dashboard" target={String(dashboard.id)} defaultTitle={dashboard.name}
+        onClose={() => setScheduling(false)} />}
       {nameDialog && (
         <NameModal initial={nameDialog === 'rename' ? dashboard.name : ''} title={nameDialog === 'rename' ? 'Rename dashboard' : 'New dashboard'}
           onClose={() => setNameDialog(null)}
@@ -200,7 +215,9 @@ function WidgetBody({ widget, tick }: { widget: Widget; tick: number }) {
   switch (widget.type) {
     case 'filter': return <FilterWidget query={widget.query ?? ''} limit={widget.limit ?? 8} tick={tick} />;
     case 'counter': return <CounterWidget query={widget.query ?? ''} tick={tick} />;
-    case 'chart': return <ChartWidget query={widget.query ?? ''} groupBy={widget.groupBy ?? 'status'} tick={tick} />;
+    case 'chart': return <ChartWidget query={widget.query ?? ''} groupBy={widget.groupBy ?? 'status'} kind={widget.chartKind ?? 'bars'} tick={tick} />;
+    case 'trend': return <TrendWidget query={widget.query ?? ''} weeks={widget.weeks ?? 12} tick={tick} />;
+    case 'report': return <ReportWidget project={widget.project ?? ''} report={widget.report ?? 'forecast'} tick={tick} />;
     case 'sprint': return <SprintWidget project={widget.project ?? ''} tick={tick} />;
     case 'calendar': return <UpcomingWidget project={widget.project} tick={tick} />;
     case 'activity': return <ActivityWidget project={widget.project} tick={tick} />;
@@ -255,13 +272,15 @@ function CounterWidget({ query, tick }: { query: string; tick: number }) {
   );
 }
 
-function ChartWidget({ query, groupBy, tick }: { query: string; groupBy: string; tick: number }) {
+function ChartWidget({ query, groupBy, kind, tick }: { query: string; groupBy: string; kind: 'bars' | 'donut'; tick: number }) {
   const { data, error } = useWidgetData<SearchGroup[]>(() => api.searchStats(query, groupBy), [query, groupBy, tick]);
   const max = Math.max(1, ...(data ?? []).map((g) => g.count));
   const total = (data ?? []).reduce((s, g) => s + g.count, 0);
   return (
     <WidgetState error={error} loading={!data}>
-      {data && (data.length === 0 ? <p className="muted">{t("No tasks match.")}</p> : (
+      {data && (data.length === 0 ? <p className="muted">{t("No tasks match.")}</p> : kind === 'donut' ? (
+        <DonutChart label={`Tasks by ${groupBy}`} slices={data.map((g) => ({ label: g.label, value: g.count }))} />
+      ) : (
         <table className="bar-table" aria-label={`Tasks by ${groupBy}`}>
           <tbody>
             {data.map((g, i) => (
@@ -277,6 +296,81 @@ function ChartWidget({ query, groupBy, tick }: { query: string; groupBy: string;
           </tbody>
         </table>
       ))}
+    </WidgetState>
+  );
+}
+
+function TrendWidget({ query, weeks, tick }: { query: string; weeks: number; tick: number }) {
+  const { data, error } = useWidgetData<TrendWeek[]>(() => api.searchTrend(query, weeks), [query, weeks, tick]);
+  return (
+    <WidgetState error={error} loading={!data}>
+      {data && (
+        <LineChart label={t('Created and resolved per week')} xLabels={data.map((w) => formatDay(w.weekStart))}
+          series={[{ label: t('Created'), values: data.map((w) => w.created) }, { label: t('Resolved'), values: data.map((w) => w.resolved) },
+            { label: t('Open'), values: data.map((w) => w.open), dashed: true }]} />
+      )}
+    </WidgetState>
+  );
+}
+
+type ReportData = { kind: 'forecast'; data: ForecastResult } | { kind: 'aging'; data: AgingWip } | { kind: 'bugs'; data: BugTrends }
+  | { kind: 'sla'; data: SlaReport };
+
+function ReportWidget({ project, report, tick }: { project: string; report: ReportWidgetKind; tick: number }) {
+  const { data, error } = useWidgetData<ReportData>(async () => {
+    switch (report) {
+      case 'aging': return { kind: 'aging', data: await api.agingWip(project) };
+      case 'bugs': return { kind: 'bugs', data: await api.bugTrends(project, 8) };
+      case 'sla': return { kind: 'sla', data: await api.slaReport(project) };
+      default: return { kind: 'forecast', data: await api.forecast(project) };
+    }
+  }, [project, report, tick]);
+  const link = <Link className="small widget-more" to={`/p/${project}/reports?tab=${report === 'aging' ? 'aging' : report}`}>{t('Open the report →')}</Link>;
+  return (
+    <WidgetState error={error} loading={!data}>
+      {data?.kind === 'forecast' && (
+        <>
+          {data.data.enoughData && data.data.completion.length > 0 ? (
+            <div className="forecast-cards compact">
+              {data.data.completion.filter((e) => e.confidence === 50 || e.confidence === 85).map((e) => (
+                <div key={e.confidence} className="forecast-card">
+                  <span className="muted small">{t('{n}% likely by', { n: e.confidence })}</span>
+                  <strong>{formatDay(e.date, true)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : <p className="muted">{data.data.remaining === 0 ? t('Nothing left to do.') : t('Not enough history yet.')}</p>}
+          <p className="muted small">{t('{n} open tasks in {scope}.', { n: data.data.remaining, scope: project })}</p>
+        </>
+      )}
+      {data?.kind === 'aging' && (
+        data.data.items.length === 0 ? <p className="muted">{t('Nothing is in progress right now.')}</p> : (
+          <ul className="widget-list">
+            {data.data.items.slice(0, 6).map((i) => (
+              <li key={i.task.id}>
+                <span className={`aging-badge ${i.level}`}>{t('{n} d', { n: i.ageDays })}</span>
+                <Link to={`/tasks/${i.task.id}`}><span className="task-key">{i.task.key}</span> {i.task.title}</Link>
+              </li>
+            ))}
+          </ul>
+        )
+      )}
+      {data?.kind === 'bugs' && (
+        <BarChart label={t('Bugs created and resolved per week')} xLabels={data.data.weeks.map((w) => formatDay(w.weekStart))}
+          series={[{ label: t('Created'), values: data.data.weeks.map((w) => w.created) },
+            { label: t('Resolved'), values: data.data.weeks.map((w) => w.resolved) }]} />
+      )}
+      {data?.kind === 'sla' && (
+        <div className="forecast-cards compact">
+          <div className="forecast-card"><span className="muted small">{t('Responses on time')}</span>
+            <strong>{data.data.responseMetPercent == null ? '–' : `${data.data.responseMetPercent}%`}</strong></div>
+          <div className="forecast-card"><span className="muted small">{t('Resolved on time')}</span>
+            <strong>{data.data.resolveMetPercent == null ? '–' : `${data.data.resolveMetPercent}%`}</strong></div>
+          <div className="forecast-card"><span className="muted small">{t('At risk or late')}</span>
+            <strong>{data.data.attention.length}</strong></div>
+        </div>
+      )}
+      {data && link}
     </WidgetState>
   );
 }
@@ -384,11 +478,16 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
   const [groupBy, setGroupBy] = useState(widget?.groupBy ?? 'status');
   const [project, setProject] = useState(widget?.project ?? projects?.[0]?.key ?? '');
   const [limit, setLimit] = useState(widget?.limit ?? 8);
+  const [chartKind, setChartKind] = useState<'bars' | 'donut'>(widget?.chartKind ?? 'bars');
+  const [weeks, setWeeks] = useState(widget?.weeks ?? 12);
+  const [report, setReport] = useState<ReportWidgetKind>(widget?.report ?? 'forecast');
   const [error, setError] = useState('');
-  const needsQuery = type === 'filter' || type === 'counter' || type === 'chart';
+  const needsQuery = type === 'filter' || type === 'counter' || type === 'chart' || type === 'trend';
+  const needsProject = type === 'sprint' || type === 'activity' || type === 'calendar' || type === 'report';
   const icons: Record<WidgetType, ReactNode> = {
     filter: <ListFilter size={16} />, counter: <Gauge size={16} />, chart: <Rows3 size={16} />, sprint: <Zap size={16} />,
     calendar: <CalendarDays size={16} />, activity: <Clock size={16} />, recent: <Clock size={16} />,
+    trend: <LineIcon size={16} />, report: <FileBarChart size={16} />,
   };
 
   const submit = async (event: FormEvent) => {
@@ -405,9 +504,11 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
     onSave({
       type, title: title.trim() || label,
       ...(needsQuery ? { query } : {}),
-      ...(type === 'chart' ? { groupBy } : {}),
+      ...(type === 'chart' ? { groupBy, chartKind } : {}),
+      ...(type === 'trend' ? { weeks } : {}),
+      ...(type === 'report' ? { report } : {}),
       ...(type === 'filter' ? { limit } : {}),
-      ...(type === 'sprint' || type === 'activity' || type === 'calendar' ? { project: project || undefined } : {}),
+      ...(needsProject ? { project: project || undefined } : {}),
     });
   };
 
@@ -442,10 +543,35 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
           </label>
         )}
         {type === 'chart' && (
+          <div className="form-grid two">
+            <label className="field">
+              <span>{t("Group by")}</span>
+              <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
+                {GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>{t('Chart style')}</span>
+              <select value={chartKind} onChange={(e) => setChartKind(e.target.value as 'bars' | 'donut')}>
+                <option value="bars">{t('Bars')}</option>
+                <option value="donut">{t('Donut')}</option>
+              </select>
+            </label>
+          </div>
+        )}
+        {type === 'trend' && (
           <label className="field">
-            <span>{t("Group by")}</span>
-            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-              {GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+            <span>{t('Period')}</span>
+            <select value={weeks} onChange={(e) => setWeeks(Number(e.target.value))}>
+              {[8, 12, 26, 52].map((w) => <option key={w} value={w}>{t('Last {n} weeks', { n: w })}</option>)}
+            </select>
+          </label>
+        )}
+        {type === 'report' && (
+          <label className="field">
+            <span>{t('Report')}</span>
+            <select value={report} onChange={(e) => setReport(e.target.value as ReportWidgetKind)}>
+              {REPORTS.map((r) => <option key={r.value} value={r.value}>{t(r.label)}</option>)}
             </select>
           </label>
         )}
@@ -457,11 +583,11 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
             </select>
           </label>
         )}
-        {(type === 'sprint' || type === 'activity' || type === 'calendar') && (
+        {needsProject && (
           <label className="field">
             <span>{t("Project")}</span>
             <select value={project} onChange={(e) => setProject(e.target.value)}>
-              {type !== 'sprint' && <option value="">{t("All projects")}</option>}
+              {type !== 'sprint' && type !== 'report' && <option value="">{t("All projects")}</option>}
               {(projects ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} · {p.name}</option>)}
             </select>
           </label>

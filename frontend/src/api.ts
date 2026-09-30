@@ -10,6 +10,8 @@ import type {
   Poll, DecisionEntry, KudosEntry, KudosWall, WikiPage, WikiPageSummary, WikiRevision, MeetingNote, MeetingKind, Standup,
   Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
   NotificationLevel, NotificationRule, NotificationSettings, Reminder, RunningTimer, TodayList, DaySummary, PersonalNotes,
+  ForecastResult, Burnup, AgingWip, BugTrends, SlaTarget, TaskSla, SlaReport, TrendWeek, ReportSubscription, ReportKind,
+  HealthCheckSummary, HealthCheckDetail,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -302,6 +304,8 @@ export const api = {
   setGithubAutoDone: (key: string, autoDone: boolean) => request<GithubSettings>('PUT', `/projects/${key}/github`, { autoDone }),
   disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
 
+  exportSearch: async (q: string, format: 'xlsx' | 'pdf') => (await send('GET', `/search/export${query({ q, format })}`)).blob(),
+  exportReports: async (key: string, format: 'xlsx' | 'pdf') => (await send('GET', `/projects/${key}/reports/export?format=${format}`)).blob(),
   exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
   customFields: (key: string) => request<CustomFieldDef[]>('GET', `/projects/${key}/fields`),
   createCustomField: (key: string, name: string, type: CustomFieldType, options: string[]) =>
@@ -564,6 +568,32 @@ export const api = {
   createReminder: (input: { taskId: number | null; remindAt: string; note: string }) =>
     request<Reminder>('POST', '/reminders', input),
   deleteReminder: (id: number) => request<void>('DELETE', `/reminders/${id}`),
+  forecast: (key: string, scope: { release?: number; epic?: number; sprint?: number; items?: number; by?: string } = {}) =>
+    request<ForecastResult>('GET', `/projects/${key}/forecast${query(scope)}`),
+  burnup: (releaseId: number) => request<Burnup>('GET', `/releases/${releaseId}/burnup`),
+  agingWip: (key: string) => request<AgingWip>('GET', `/projects/${key}/aging-wip`),
+  bugTrends: (key: string, weeks = 12) => request<BugTrends>('GET', `/projects/${key}/bug-trends?weeks=${weeks}`),
+  slaTargets: (key: string) => request<SlaTarget[]>('GET', `/projects/${key}/sla`),
+  saveSlaTargets: (key: string, targets: SlaTarget[]) => request<SlaTarget[]>('PUT', `/projects/${key}/sla`, { targets }),
+  taskSla: (taskId: number) => request<TaskSla | undefined>('GET', `/tasks/${taskId}/sla`),
+  slaReport: (key: string, days = 30) => request<SlaReport>('GET', `/projects/${key}/sla-report?days=${days}`),
+  searchTrend: (q: string, weeks = 12) => request<TrendWeek[]>('GET', `/search/trend${query({ q, weeks })}`),
+  reportSubscriptions: () => request<ReportSubscription[]>('GET', '/report-subscriptions'),
+  createReportSubscription: (input: { kind: ReportKind; target: string; title?: string; frequency: 'DAILY' | 'WEEKLY'; weekday: number; hour: number }) =>
+    request<ReportSubscription>('POST', '/report-subscriptions', input),
+  updateReportSubscription: (id: number, input: { kind: ReportKind; target: string; title?: string; frequency: 'DAILY' | 'WEEKLY'; weekday: number; hour: number }) =>
+    request<ReportSubscription>('PUT', `/report-subscriptions/${id}`, input),
+  deleteReportSubscription: (id: number) => request<void>('DELETE', `/report-subscriptions/${id}`),
+  previewReport: (id: number) => request<{ subject: string; body: string; sent: boolean; mailEnabled: boolean }>('GET', `/report-subscriptions/${id}/preview`),
+  sendReport: (id: number) => request<{ subject: string; body: string; sent: boolean; mailEnabled: boolean }>('POST', `/report-subscriptions/${id}/send`),
+  healthChecks: (key: string) => request<HealthCheckSummary[]>('GET', `/projects/${key}/health-checks`),
+  createHealthCheck: (key: string, title: string, categories?: string[]) =>
+    request<HealthCheckDetail>('POST', `/projects/${key}/health-checks`, { title, categories }),
+  healthCheck: (id: number) => request<HealthCheckDetail>('GET', `/health-checks/${id}`),
+  voteHealthCheck: (id: number, votes: { category: string; score: number; trend: number }[]) =>
+    request<HealthCheckDetail>('PUT', `/health-checks/${id}/votes`, { votes }),
+  toggleHealthCheck: (id: number) => request<HealthCheckDetail>('POST', `/health-checks/${id}/close`),
+  deleteHealthCheck: (id: number) => request<void>('DELETE', `/health-checks/${id}`),
   timer: () => request<RunningTimer | undefined>('GET', '/timer'),
   startTimer: (taskId: number) =>
     request<{ logged: TimeEntry | null; running: RunningTimer | null }>('POST', '/timer/start', { taskId }),

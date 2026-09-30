@@ -640,7 +640,9 @@ export interface Team {
   canEdit: boolean;
 }
 
-export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint';
+export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint' | 'trend' | 'report';
+
+export type ReportWidgetKind = 'forecast' | 'aging' | 'bugs' | 'sla';
 
 export interface Widget {
   type: WidgetType;
@@ -649,6 +651,12 @@ export interface Widget {
   groupBy?: string;
   project?: string;
   limit?: number;
+  /** Chart widgets: bars (default) or a donut. */
+  chartKind?: 'bars' | 'donut';
+  /** Trend widgets: how many weeks back. */
+  weeks?: number;
+  /** Report widgets: which project report. */
+  report?: ReportWidgetKind;
 }
 
 export interface Dashboard {
@@ -1123,4 +1131,122 @@ export interface Standup {
   date: string;
   since: string;
   people: StandupPerson[];
+}
+
+// ---- Reporting ----
+
+export interface ForecastResult {
+  scope: string;
+  remaining: number;
+  weeklyThroughput: number[];
+  enoughData: boolean;
+  completion: { confidence: number; weeks: number; date: string }[];
+  histogram: Record<string, number>;
+  targetDate: string | null;
+  targetProbability: number | null;
+  byTarget: { confidence: number; items: number }[];
+}
+
+export interface Burnup {
+  releaseId: number;
+  name: string;
+  releaseDate: string | null;
+  days: { date: string; scope: number; done: number; scopePoints: number; donePoints: number }[];
+  projectedDate: string | null;
+  dailyRate: number;
+}
+
+export interface AgingItem {
+  task: TaskRef;
+  status: Status;
+  column: string | null;
+  assignee: User | null;
+  startedAt: string;
+  ageDays: number;
+  level: 'ok' | 'watch' | 'late';
+}
+
+export interface AgingWip {
+  cycleP50: number | null;
+  cycleP85: number | null;
+  items: AgingItem[];
+}
+
+export interface BugTrends {
+  weeks: { weekStart: string; created: number; resolved: number; open: number }[];
+  openByPriority: Record<Priority, number>;
+  resolutions: Partial<Record<Resolution, number>>;
+  meanDaysToResolve: number | null;
+  oldestOpen: TaskRef[];
+}
+
+export interface SlaTarget {
+  priority: Priority;
+  responseHours: number | null;
+  resolveHours: number | null;
+}
+
+export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | null;
+
+export interface TaskSla {
+  priority: Priority;
+  responseDueAt: string | null;
+  respondedAt: string | null;
+  responseState: SlaState;
+  resolveDueAt: string | null;
+  resolvedAt: string | null;
+  resolveState: SlaState;
+}
+
+export interface SlaReport {
+  days: number;
+  priorities: {
+    priority: Priority; responseHours: number | null; resolveHours: number | null; tasks: number;
+    responseMet: number; responseBreached: number; resolveMet: number; resolveBreached: number;
+    averageResponseHours: number | null; averageResolveHours: number | null;
+  }[];
+  responseMetPercent: number | null;
+  resolveMetPercent: number | null;
+  attention: { task: TaskRef; priority: Priority; kind: 'response' | 'resolution'; state: SlaState; dueAt: string }[];
+}
+
+export interface TrendWeek {
+  weekStart: string;
+  created: number;
+  resolved: number;
+  open: number;
+}
+
+export type ReportKind = 'filter' | 'project' | 'dashboard';
+
+export interface ReportSubscription {
+  id: number;
+  kind: ReportKind;
+  target: string;
+  title: string;
+  frequency: 'DAILY' | 'WEEKLY';
+  weekday: number;
+  hour: number;
+  lastSentAt: string | null;
+  nextSendAt: string;
+}
+
+export interface HealthCheckSummary {
+  id: number;
+  title: string;
+  createdBy: User;
+  createdAt: string;
+  closed: boolean;
+  voters: number;
+  categories: string[];
+  averages: Record<string, number | null>;
+}
+
+export interface HealthCheckDetail {
+  check: HealthCheckSummary;
+  resultsVisible: boolean;
+  results: { category: string; red: number; amber: number; green: number; worse: number; stable: number; better: number; average: number | null }[];
+  mine: { category: string; score: number; trend: number }[];
+  canManage: boolean;
+  members: number;
 }
