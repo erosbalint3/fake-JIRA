@@ -36,6 +36,11 @@ const WikiPage = lazy(() => import('./pages/WikiPage').then((m) => ({ default: m
 const MeetingsPage = lazy(() => import('./pages/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
 const StandupPage = lazy(() => import('./pages/StandupPage').then((m) => ({ default: m.StandupPage })));
 const TodayPage = lazy(() => import('./pages/TodayPage').then((m) => ({ default: m.TodayPage })));
+const PortalPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PortalPage })));
+const TrackingPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.TrackingPage })));
+const PublicRoadmapPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PublicRoadmapPage })));
+const PublicChangelogPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PublicChangelogPage })));
+const EmbedPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.EmbedPage })));
 const KudosPage = lazy(() => import('./pages/KudosPage').then((m) => ({ default: m.KudosPage })));
 const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
@@ -86,6 +91,11 @@ export function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/oauth-complete" element={<OAuthCompletePage />} />
       <Route path="/share/:token" element={<SharedTaskPage />} />
+      <Route path="/portal/requests/:token" element={<TrackingPage />} />
+      <Route path="/portal/:key" element={<PortalPage />} />
+      <Route path="/public/:key/roadmap" element={<PublicRoadmapPage />} />
+      <Route path="/public/:key/changelog" element={<PublicChangelogPage />} />
+      <Route path="/embed/:key" element={<EmbedPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="/projects" element={<ProjectsPage />} />

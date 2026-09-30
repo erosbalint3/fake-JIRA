@@ -1250,3 +1250,92 @@ export interface HealthCheckDetail {
   canManage: boolean;
   members: number;
 }
+
+// ---- Service desk ----
+
+export type FormFieldKind = 'text' | 'textarea' | 'select' | 'number' | 'date' | 'checkbox' | 'url';
+
+export interface FormField {
+  id: string;
+  label: string;
+  kind: FormFieldKind;
+  required: boolean;
+  help?: string;
+  options?: string[];
+}
+
+export interface RequestTypeDef {
+  id: number;
+  name: string;
+  description: string;
+  taskType: TaskType;
+  priority: Priority;
+  fields: FormField[];
+}
+
+export interface ServiceDeskSettings {
+  portalEnabled: boolean;
+  intro: string;
+  roadmapPublic: boolean;
+  changelogPublic: boolean;
+  portalUrl: string;
+  roadmapUrl: string;
+  changelogUrl: string;
+  widgetSnippet: string;
+  requestTypes: RequestTypeDef[];
+}
+
+export interface PortalConversation {
+  requesterName: string;
+  requesterEmail: string;
+  requestType: string | null;
+  channel: 'portal' | 'widget';
+  answers: { label: string; value: string }[];
+  trackingUrl: string;
+  createdAt: string;
+  messages: { id: number; fromRequester: boolean; author: User | null; body: string; createdAt: string }[];
+  mailEnabled: boolean;
+}
+
+export interface SimilarTask {
+  task: TaskRef;
+  score: number;
+  done: boolean;
+}
+
+export interface PublicPortal {
+  projectKey: string;
+  projectName: string;
+  color: string | null;
+  intro: string;
+  requestTypes: { id: number; name: string; description: string; fields: FormField[] }[];
+  roadmap: boolean;
+  changelog: boolean;
+}
+
+export interface PublicTracking {
+  reference: string;
+  title: string;
+  projectName: string;
+  projectKey: string;
+  status: string;
+  resolved: boolean;
+  requestType: string | null;
+  createdAt: string;
+  messages: { fromRequester: boolean; author: string; body: string; createdAt: string }[];
+}
+
+export interface PublicRoadmap {
+  projectName: string;
+  projectKey: string;
+  portal: boolean;
+  items: { name: string; description: string; stage: 'now' | 'next' | 'later' | 'done'; startDate: string | null;
+    dueDate: string | null; percentDone: number; colorIndex: number }[];
+}
+
+export interface PublicChangelog {
+  projectName: string;
+  projectKey: string;
+  portal: boolean;
+  releases: { version: string; date: string | null; description: string; features: string[]; fixes: string[]; other: string[] }[];
+}

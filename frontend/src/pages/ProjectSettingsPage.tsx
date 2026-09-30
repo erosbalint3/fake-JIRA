@@ -19,6 +19,7 @@ import { TemplatesSection } from '../components/settings/TemplatesSection';
 import { WorkflowSection } from '../components/settings/WorkflowSection';
 import { ComponentsSection } from '../components/settings/ComponentsSection';
 import { TypeChecklistsSection } from '../components/settings/TypeChecklistsSection';
+import { ServiceDeskSection } from '../components/settings/ServiceDeskSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -159,6 +160,7 @@ export function ProjectSettingsPage() {
       <WorkflowSection projectKey={project.key} projectId={project.id} canEdit={canEdit} />
       <ComponentsSection projectKey={project.key} members={project.members} canEdit={canEdit} />
       <TypeChecklistsSection projectKey={project.key} canEdit={canEdit} />
+      <ServiceDeskSection projectKey={project.key} isOwner={isOwner} />
       <CustomFieldsSection projectKey={project.key} canEdit={canEdit} />
       <TemplatesSection projectKey={project.key} canEdit={canEdit} />
       <RecurringSection projectKey={project.key} members={project.members} canEdit={canEdit} />

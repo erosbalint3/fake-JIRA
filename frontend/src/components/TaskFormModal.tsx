@@ -6,6 +6,7 @@ import { useProjects } from '../projects';
 import {
   PRIORITIES, PRIORITY_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type CreateTaskInput, type TaskTemplate, type Epic, type Priority, type Sprint, type TaskInput, type User,
   type ProjectComponent,
+  type SimilarTask,
 } from '../types';
 import { Modal } from './Modal';
 import { PriorityBadge, TypeIcon } from './Badges';
@@ -61,8 +62,22 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [duplicates, setDuplicates] = useState<SimilarTask[]>([]);
   const collab = useCollaborativeText(mode.kind === 'edit' ? mode.taskId ?? null : null, form.description,
     (description) => setForm((current) => ({ ...current, description })), descriptionRef);
+
+  // While creating, point out existing tasks that look the same.
+  useEffect(() => {
+    const text = form.title.trim();
+    if (mode.kind !== 'create' || !projectKey || text.length < 8) {
+      setDuplicates([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      api.similarTasks(projectKey, text).then(setDuplicates).catch(() => setDuplicates([]));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [form.title, projectKey, mode.kind]);
 
   useEffect(() => {
     if (!projectKey) return;
@@ -189,6 +204,19 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             aria-invalid={!!errors.title}
           />
           {errors.title && <small className="field-error">{errors.title}</small>}
+          {duplicates.length > 0 && (
+            <div className="duplicate-hint" role="status">
+              <span className="small">{t('Similar tasks already exist:')}</span>
+              <ul>
+                {duplicates.slice(0, 3).map((d) => (
+                  <li key={d.task.id} className="small">
+                    <a href={`/tasks/${d.task.id}`} target="_blank" rel="noreferrer">{d.task.key}</a> {d.task.title}
+                    {d.done && <span className="muted"> · {t('done')}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </label>
         <div className="field">
           <span className="field-label-row">{t("Description")}

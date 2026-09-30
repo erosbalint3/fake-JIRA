@@ -55,8 +55,13 @@ public class NotificationService {
                 user.getEmailFrequency() == EmailFrequency.INSTANT, true));
     }
 
+    /** Something from outside the team (a portal requester) that {@code recipient} should hear about. */
+    public void notifyExternal(User recipient, String message, Long taskId, Long projectId) {
+        deliver(recipient, null, message, taskId, projectId, false);
+    }
+
     private void deliver(User recipient, User actor, String message, Long taskId, Long projectId, boolean direct) {
-        if (recipient == null || recipient.getId().equals(actor.getId())) {
+        if (recipient == null || actor != null && recipient.getId().equals(actor.getId())) {
             return;
         }
         Rules rules = rules(recipient, projectId);

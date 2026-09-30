@@ -22,6 +22,7 @@ import { PollsPanel } from '../components/task/PollsPanel';
 import { KudosPanel } from '../components/task/KudosPanel';
 import { PersonalPanel } from '../components/task/PersonalPanel';
 import { SlaPanel } from '../components/task/SlaPanel';
+import { RequesterPanel } from '../components/task/RequesterPanel';
 import { TimerButton } from '../components/Timer';
 import { usePresence } from '../collab';
 import { ChipPicker } from '../components/ChipPicker';
@@ -421,6 +422,8 @@ export function TaskDetailPage() {
                 }}><Markdown>{task.description}</Markdown></InlineComments>
               : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={startEditing}>{t("Add one")}</button></>}</p>}
           </section>
+
+          <RequesterPanel task={task} canEdit={canEdit} />
 
           <PollsPanel taskId={task.id} canCreate={canEdit} canVote={canComment} startSignal={pollSignal} />
 

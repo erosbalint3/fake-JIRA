@@ -48,10 +48,17 @@ public class SecurityConfig {
                         // Secret-token URLs: the personal calendar feed and the inbound email webhook.
                         .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**", "/api/metrics", "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()
+                        // The public service desk portal (and its embeddable widget).
+                        .requestMatchers(HttpMethod.POST, "/api/public/portal/*/requests", "/api/public/requests/*/messages").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                // Pages may only be framed by this site, except the feedback widget, which other sites embed.
+                .headers(headers -> headers.frameOptions(frame -> frame.disable())
+                        .addHeaderWriter(new org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter(
+                                request -> !request.getRequestURI().startsWith("/embed/"),
+                                new org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter(
+                                        org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN))))
                 .build();
     }
 

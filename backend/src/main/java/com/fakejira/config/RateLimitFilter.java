@@ -30,6 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private record Rule(String path, int limit, Duration window) {
+        boolean matches(String uri) {
+            return path.contains("*") ? uri.matches(path.replace("*", "[^/]+")) : uri.equals(path);
+        }
     }
 
     private static final List<Rule> RULES = List.of(
@@ -37,7 +40,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule("/api/auth/login/2fa", 10, Duration.ofMinutes(1)),
             new Rule("/api/auth/register", 5, Duration.ofHours(1)),
             new Rule("/api/auth/forgot-password", 5, Duration.ofHours(1)),
-            new Rule("/api/auth/reset-password", 10, Duration.ofHours(1)));
+            new Rule("/api/auth/reset-password", 10, Duration.ofHours(1)),
+            // Public service desk: anyone can file requests and reply, so keep it from being flooded.
+            new Rule("/api/public/portal/*/requests", 10, Duration.ofHours(1)),
+            new Rule("/api/public/requests/*/messages", 30, Duration.ofHours(1)));
 
     private static final int LOGIN_PER_ACCOUNT = 20;
     private static final Duration LOGIN_ACCOUNT_WINDOW = Duration.ofMinutes(15);
@@ -60,7 +66,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled || !"POST".equals(request.getMethod()) || !request.getRequestURI().startsWith("/api/auth/");
+        return !enabled || !"POST".equals(request.getMethod())
+                || !request.getRequestURI().startsWith("/api/auth/") && !request.getRequestURI().startsWith("/api/public/");
     }
 
     @Override
@@ -68,7 +75,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = request.getRequestURI();
         for (Rule rule : RULES) {
-            if (path.equals(rule.path())) {
+            if (rule.matches(path)) {
                 long retry = hit(rule.path() + "|ip|" + clientIp(request), rule.limit(), rule.window());
                 if (retry > 0) {
                     reject(response, retry);

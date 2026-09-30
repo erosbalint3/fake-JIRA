@@ -11,7 +11,7 @@ import type {
   Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
   NotificationLevel, NotificationRule, NotificationSettings, Reminder, RunningTimer, TodayList, DaySummary, PersonalNotes,
   ForecastResult, Burnup, AgingWip, BugTrends, SlaTarget, TaskSla, SlaReport, TrendWeek, ReportSubscription, ReportKind,
-  HealthCheckSummary, HealthCheckDetail,
+  HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, RequestTypeDef, PortalConversation, SimilarTask,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -594,6 +594,17 @@ export const api = {
     request<HealthCheckDetail>('PUT', `/health-checks/${id}/votes`, { votes }),
   toggleHealthCheck: (id: number) => request<HealthCheckDetail>('POST', `/health-checks/${id}/close`),
   deleteHealthCheck: (id: number) => request<void>('DELETE', `/health-checks/${id}`),
+  serviceDesk: (key: string) => request<ServiceDeskSettings>('GET', `/projects/${key}/service-desk`),
+  saveServiceDesk: (key: string, input: { portalEnabled: boolean; intro: string; roadmapPublic: boolean; changelogPublic: boolean }) =>
+    request<ServiceDeskSettings>('PUT', `/projects/${key}/service-desk`, input),
+  createRequestType: (key: string, input: Omit<RequestTypeDef, 'id'>) => request<RequestTypeDef>('POST', `/projects/${key}/request-types`, input),
+  updateRequestType: (id: number, input: Omit<RequestTypeDef, 'id'>) => request<RequestTypeDef>('PUT', `/request-types/${id}`, input),
+  deleteRequestType: (id: number) => request<void>('DELETE', `/request-types/${id}`),
+  reorderRequestTypes: (key: string, ids: number[]) => request<RequestTypeDef[]>('PUT', `/projects/${key}/request-types/order`, ids),
+  portalConversation: (taskId: number) => request<PortalConversation | undefined>('GET', `/tasks/${taskId}/portal`),
+  replyToRequester: (taskId: number, body: string) => request<PortalConversation>('POST', `/tasks/${taskId}/portal/messages`, { body }),
+  similarTasks: (key: string, q: string, exclude?: number) =>
+    request<SimilarTask[]>('GET', `/projects/${key}/similar${query({ q, exclude })}`),
   timer: () => request<RunningTimer | undefined>('GET', '/timer'),
   startTimer: (taskId: number) =>
     request<{ logged: TimeEntry | null; running: RunningTimer | null }>('POST', '/timer/start', { taskId }),
