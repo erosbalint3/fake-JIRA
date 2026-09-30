@@ -12,6 +12,7 @@ import { useAuth } from '../auth';
 import { useLive, useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
 import { SHORTCUTS, useShortcuts } from '../shortcuts';
+import { TimerWidget } from './Timer';
 import { useTheme } from '../theme';
 import { useToast } from '../toast';
 import { Avatar } from './Avatar';
@@ -180,6 +181,7 @@ export function Layout() {
         d: '/dashboard',
         s: '/search',
         c: '/calendar',
+        t: '/today',
       };
       navigate(paths[target]);
     },
@@ -279,6 +281,7 @@ export function Layout() {
             )}
             <span className="nav-heading">{t("Workspace")}</span>
             <NavLink to="/dashboard" className="nav-link"><LayoutDashboard size={18} /> {t("Dashboard")}</NavLink>
+            <NavLink to="/today" className="nav-link"><Sun size={18} /> {t("Today")}</NavLink>
             <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> {t("My work")}</NavLink>
             <NavLink to="/portfolio" className="nav-link"><Briefcase size={18} /> {t("Portfolio")}</NavLink>
             <NavLink to="/goals" className="nav-link"><Flag size={18} /> {t("Goals")}</NavLink>
@@ -344,6 +347,7 @@ export function Layout() {
           <Suspense fallback={<div className="page"><Spinner /></div>}>
             <Outlet />
           </Suspense>
+          <TimerWidget />
         </main>
 
         {creating && (

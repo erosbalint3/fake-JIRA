@@ -5,6 +5,7 @@ import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useFocusSearch } from '../shortcuts';
 import { TaskRow } from '../components/TaskRow';
+import { useListNavigation } from '../components/ListNavigation';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { dueState } from '../format';
 import { PRIORITY_ORDER, STATUSES, STATUS_LABEL, type Approval, type Task } from '../types';
@@ -20,6 +21,7 @@ export function MyWorkPage() {
   const [showDone, setShowDone] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   useFocusSearch(searchRef);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     setError('');
@@ -28,6 +30,7 @@ export function MyWorkPage() {
   }, []);
 
   useEffect(load, [load]);
+  const picker = useListNavigation(listRef, load);
   useLiveRefresh((m) => m.type === 'task' || m.type === 'project', load, 500);
 
   const filtered = useMemo(() => {
@@ -67,6 +70,7 @@ export function MyWorkPage() {
         </EmptyState>
       )}
 
+      <div ref={listRef}>
       {approvals.length > 0 && (
         <section className="group">
           <h2 className="group-title"><BadgeCheck size={16} /> {t("Waiting for my approval")} <span className="count">{approvals.length}</span></h2>
@@ -98,6 +102,9 @@ export function MyWorkPage() {
           </section>
         );
       })}
+      </div>
+      {tasks && tasks.length > 0 && <p className="muted small keyboard-hint">{t('Tip: j/k move, Enter opens, e edits, a assigns, s changes the status.')}</p>}
+      {picker}
     </div>
   );
 }

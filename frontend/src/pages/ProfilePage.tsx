@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { ErrorBanner, Spinner } from '../components/States';
 import { ConnectedAccounts } from '../components/profile/ConnectedAccounts';
 import { ApiTokensPanel } from '../components/profile/ApiTokensPanel';
+import { NotificationRulesPanel } from '../components/profile/NotificationRulesPanel';
 import { AwayPanel } from '../components/profile/AwayPanel';
 import { DataPanel } from '../components/profile/DataPanel';
 import { PasswordForm } from '../components/profile/PasswordForm';
@@ -213,6 +214,8 @@ export function ProfilePage() {
           <p className="muted">{t("This browser does not support push notifications.")}</p>
         )}
       </section>
+
+      <NotificationRulesPanel />
 
       <h2 className="section-heading" id="security">{t("Security")}</h2>
       <section className="panel">

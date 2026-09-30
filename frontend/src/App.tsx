@@ -35,6 +35,7 @@ const GoalsPage = lazy(() => import('./pages/GoalsPage').then((m) => ({ default:
 const WikiPage = lazy(() => import('./pages/WikiPage').then((m) => ({ default: m.WikiPage })));
 const MeetingsPage = lazy(() => import('./pages/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
 const StandupPage = lazy(() => import('./pages/StandupPage').then((m) => ({ default: m.StandupPage })));
+const TodayPage = lazy(() => import('./pages/TodayPage').then((m) => ({ default: m.TodayPage })));
 const KudosPage = lazy(() => import('./pages/KudosPage').then((m) => ({ default: m.KudosPage })));
 const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
@@ -102,6 +103,7 @@ export function App() {
         <Route path="/p/:key/automation" element={<AutomationPage />} />
         <Route path="/p/:key/sprints/:id" element={<SprintPage />} />
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
+        <Route path="/today" element={<TodayPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />

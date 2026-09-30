@@ -349,6 +349,62 @@ export interface Notification {
   taskId: number | null;
   read: boolean;
   createdAt: string;
+  snoozedUntil?: string | null;
+  doneAt?: string | null;
+}
+
+export type NotificationLevel = 'ALL' | 'DIRECT' | 'MUTED';
+
+export interface NotificationRule {
+  projectKey: string | null;
+  projectName: string | null;
+  /** Null on a project that has no rule of its own. */
+  level: NotificationLevel | null;
+  email: boolean | null;
+  push: boolean | null;
+}
+
+export interface NotificationSettings {
+  defaults: NotificationRule;
+  projects: NotificationRule[];
+  quietHours: { timeZone: string | null; from: string | null; to: string | null };
+}
+
+export interface Reminder {
+  id: number;
+  task: TaskRef | null;
+  note: string;
+  remindAt: string;
+}
+
+export interface RunningTimer {
+  task: TaskRef;
+  projectKey: string;
+  startedAt: string;
+  elapsedSeconds: number;
+}
+
+export interface TodayList {
+  date: string;
+  picks: Task[];
+  suggestions: Task[];
+  previousDay: string | null;
+  carryOver: Task[];
+}
+
+export interface DaySummary {
+  date: string;
+  completed: Task[];
+  unfinished: Task[];
+  minutesLogged: number;
+  comments: number;
+  text: string;
+}
+
+export interface PersonalNotes {
+  note: string;
+  updatedAt: string | null;
+  items: { id: number; text: string; done: boolean }[];
 }
 
 export interface Profile {

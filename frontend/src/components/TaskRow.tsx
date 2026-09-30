@@ -42,7 +42,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
   };
 
   return (
-    <li className={`task-row ${selected ? 'selected' : ''} ${className}`} {...rowProps}>
+    <li className={`task-row ${selected ? 'selected' : ''} ${className}`} data-task-id={task.id} {...rowProps}>
       {onToggleSelect && (
         <input type="checkbox" className="row-check" checked={!!selected} aria-label={`Select ${task.key}`}
           onClick={(e) => {

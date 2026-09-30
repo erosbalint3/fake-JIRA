@@ -1,4 +1,5 @@
 import { isReadOnlyRole } from '../types';
+import { ProjectNotifyButton } from '../components/ProjectNotifyButton';
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Eye, KanbanSquare, Users, Zap } from 'lucide-react';
@@ -364,6 +365,7 @@ export function BoardPage() {
           <label className="toggle">
             <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> {t('Only my tasks')}
           </label>
+          <ProjectNotifyButton projectKey={key!} />
         </div>
       </header>
 

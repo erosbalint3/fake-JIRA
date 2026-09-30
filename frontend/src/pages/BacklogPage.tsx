@@ -10,6 +10,7 @@ import { useRouteProject } from '../useProject';
 import { FILTERS_CHANGED, useCreateTask } from '../components/Layout';
 import { BulkBar } from '../components/BulkBar';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { useListNavigation } from '../components/ListNavigation';
 import { TaskRow } from '../components/TaskRow';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
@@ -109,6 +110,9 @@ export function BacklogPage() {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+
+  const pageRef = useRef<HTMLDivElement>(null);
+  const navPicker = useListNavigation(pageRef, load);
 
   if (!loading && !project) return <NotFoundPage />;
   if (!project) return <div className="page"><Spinner /></div>;
@@ -250,7 +254,7 @@ export function BacklogPage() {
   };
 
   return (
-    <div className="page page-wide">
+    <div className="page page-wide" ref={pageRef}>
       <header className="page-header">
         <div>
           <span className="eyebrow">{project.name}</span>
@@ -460,6 +464,7 @@ export function BacklogPage() {
           }}
         />
       )}
+      {navPicker}
     </div>
   );
 }

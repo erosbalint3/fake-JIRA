@@ -9,6 +9,7 @@ import type {
   PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
   Poll, DecisionEntry, KudosEntry, KudosWall, WikiPage, WikiPageSummary, WikiRevision, MeetingNote, MeetingKind, Standup,
   Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
+  NotificationLevel, NotificationRule, NotificationSettings, Reminder, RunningTimer, TodayList, DaySummary, PersonalNotes,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -543,7 +544,44 @@ export const api = {
   attachmentBlob: async (attachmentId: number) => (await send('GET', `/attachments/${attachmentId}/content`)).blob(),
   deleteAttachment: (attachmentId: number) => request<void>('DELETE', `/attachments/${attachmentId}`),
 
-  notifications: () => request<{ unread: number; items: Notification[] }>('GET', '/notifications'),
+  notifications: (view?: 'inbox' | 'snoozed' | 'done') =>
+    request<{ unread: number; items: Notification[] }>('GET', `/notifications${view && view !== 'inbox' ? `?view=${view}` : ''}`),
+  triage: (ids: number[], action: 'done' | 'undone' | 'snooze' | 'read', until?: string) =>
+    request<void>('POST', '/notifications/triage', { ids, action, until }),
+  doneRead: () => request<{ done: number }>('POST', '/notifications/done-read'),
+  notificationSettings: () => request<NotificationSettings>('GET', '/notifications/settings'),
+  saveNotificationDefaults: (rule: { level: NotificationLevel; email: boolean | null; push: boolean | null }) =>
+    request<NotificationSettings>('PUT', '/notifications/settings/defaults', rule),
+  projectNotificationRule: (key: string) => request<NotificationRule>('GET', `/notifications/settings/projects/${key}`),
+  saveProjectNotificationRule: (key: string, rule: { level: NotificationLevel; email: boolean | null; push: boolean | null }) =>
+    request<NotificationSettings>('PUT', `/notifications/settings/projects/${key}`, rule),
+  deleteProjectNotificationRule: (key: string) =>
+    request<NotificationSettings>('DELETE', `/notifications/settings/projects/${key}`),
+  saveQuietHours: (quiet: { timeZone: string | null; from: string | null; to: string | null }) =>
+    request<NotificationSettings>('PUT', '/notifications/settings/quiet-hours', quiet),
+  reminders: () => request<Reminder[]>('GET', '/reminders'),
+  taskReminders: (taskId: number) => request<Reminder[]>('GET', `/tasks/${taskId}/reminders`),
+  createReminder: (input: { taskId: number | null; remindAt: string; note: string }) =>
+    request<Reminder>('POST', '/reminders', input),
+  deleteReminder: (id: number) => request<void>('DELETE', `/reminders/${id}`),
+  timer: () => request<RunningTimer | undefined>('GET', '/timer'),
+  startTimer: (taskId: number) =>
+    request<{ logged: TimeEntry | null; running: RunningTimer | null }>('POST', '/timer/start', { taskId }),
+  stopTimer: (minutes?: number, note?: string) =>
+    request<{ logged: TimeEntry | null; running: null }>('POST', '/timer/stop', { minutes, note }),
+  discardTimer: () => request<void>('DELETE', '/timer'),
+  today: (date?: string) => request<TodayList>('GET', `/today${date ? `?date=${date}` : ''}`),
+  pickToday: (taskId: number, date?: string) => request<TodayList>('POST', '/today', { taskId, date }),
+  unpickToday: (taskId: number, date?: string) => request<TodayList>('DELETE', `/today/${taskId}${date ? `?date=${date}` : ''}`),
+  reorderToday: (taskIds: number[], date?: string) => request<TodayList>('PUT', '/today/order', { taskIds, date }),
+  carryOver: (date?: string) => request<TodayList>('POST', `/today/carry-over${date ? `?date=${date}` : ''}`),
+  daySummary: (date?: string) => request<DaySummary>('GET', `/today/summary${date ? `?date=${date}` : ''}`),
+  personalNotes: (taskId: number) => request<PersonalNotes>('GET', `/tasks/${taskId}/personal`),
+  savePersonalNote: (taskId: number, body: string) => request<PersonalNotes>('PUT', `/tasks/${taskId}/personal/note`, { body }),
+  addPrivateItem: (taskId: number, text: string) => request<PersonalNotes>('POST', `/tasks/${taskId}/personal/items`, { text }),
+  updatePrivateItem: (id: number, change: { text?: string; done?: boolean }) =>
+    request<PersonalNotes>('PATCH', `/personal-items/${id}`, change),
+  deletePrivateItem: (id: number) => request<PersonalNotes>('DELETE', `/personal-items/${id}`),
   unreadCount: () => request<number>('GET', '/notifications/unread-count'),
   markRead: (id: number) => request<void>('POST', `/notifications/${id}/read`),
   markAllRead: () => request<void>('POST', '/notifications/read-all'),
@@ -699,7 +737,7 @@ export function saveBlob(blob: Blob, filename: string) {
 }
 
 export interface LiveMessage {
-  type: 'task' | 'project' | 'notification' | 'ready' | 'presence' | 'collab';
+  type: 'task' | 'project' | 'notification' | 'ready' | 'presence' | 'collab' | 'timer' | 'today' | 'reminders';
   data: { projectId?: number; taskId?: number; deleted?: boolean; clientId?: string; update?: string };
 }
 

@@ -570,7 +570,7 @@ kbd {
 /* Badges: due, labels, checklist */
 .due { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 .due-overdue { color: var(--danger); }
-.due-today, .due-soon { color: var(--p-high); }
+.due-today, .due-soon { color: var(--warn-text, var(--p-high)); }
 .due-done { color: var(--text-muted); text-decoration: line-through; }
 .overdue-text { color: var(--danger); }
 .labels { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
@@ -1634,6 +1634,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 /* ---------- v5.0 phase A: work management ---------- */
 :root { --danger-text: color-mix(in srgb, var(--danger) 80%, #000); }
 :root[data-theme='dark'] { --danger-text: var(--danger); }
+:root { --warn-text: color-mix(in srgb, var(--p-high) 72%, #000); }
+:root[data-theme='dark'] { --warn-text: var(--p-high); }
 .subhead { font-size: 13px; font-weight: 700; margin: 16px 0 8px; }
 .center { text-align: center; }
 .chip-sm { height: 24px; padding: 0 9px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; cursor: default; }
@@ -1888,3 +1890,68 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 
 .with-unit { display: flex; align-items: center; gap: 6px; }
 .with-unit input { flex: 1; min-width: 0; }
+
+/* ---------- Personal productivity: Today, timer, inbox, reminders, notes ---------- */
+[data-nav-active] { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.keyboard-hint { margin: 0; }
+.row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.panel-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.panel-title-row h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; }
+.panel-title-row .group-title { margin: 0; }
+.today-progress { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+.today-progress .progress { flex: 1; margin: 0; }
+.task-row.is-done .task-title { text-decoration: line-through; color: var(--text-muted); }
+.carry-over { border-color: var(--accent); }
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.summary-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.summary-stats div { display: flex; flex-direction: column; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
+.summary-stats strong { font-size: 20px; }
+.picker-list { max-height: 50vh; overflow-y: auto; margin-top: 10px; }
+.quick-picker { list-style: none; margin: 10px 0 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+.quick-picker li { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.quick-picker li.active { background: var(--accent-soft); color: var(--accent-text); }
+.timer-pill {
+  position: fixed; left: calc(var(--sidebar-w) + 20px); bottom: 20px; z-index: 45;
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: var(--shadow-lg);
+}
+.timer-pill .timer-task { font-weight: 650; }
+.timer-pill .mono, .timer-running .mono { font-variant-numeric: tabular-nums; }
+.preset-row, .preset-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.preset-list { flex-direction: column; align-items: stretch; margin-bottom: 12px; }
+.preset-list .btn { justify-content: space-between; }
+.chip-button {
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+.chip-button:hover { border-color: var(--accent); }
+.reminder-list li { display: flex; align-items: center; gap: 10px; }
+.reminder-when { font-weight: 600; white-space: nowrap; min-width: 150px; }
+.reminder-what { flex: 1; min-width: 0; }
+.reminder-mini { font-size: 13px; }
+.reminder-mini .icon-button { margin-left: auto; }
+.personal-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.personal-panel textarea { min-height: 64px; }
+.private-checklist .icon-button { margin-left: auto; }
+.done-text { text-decoration: line-through; color: var(--text-muted); }
+.notification-item { display: flex; align-items: center; gap: 8px; }
+.notification-item .notification { flex: 1; min-width: 0; }
+.notification-item.selected .notification { background: var(--accent-soft); }
+.notification-actions { display: flex; gap: 2px; }
+.selection-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.rule-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.rule-controls select { width: auto; flex: 1; min-width: 160px; }
+.rule-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rule-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rule-project { min-width: 140px; }
+.rule-list .rule-controls { flex: 1; }
+.subheading { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 16px 0 6px; }
+.quiet-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.quiet-form .field { min-width: 120px; }
+.quiet-actions { display: flex; gap: 6px; }
+.menu-check { display: inline-flex; width: 16px; }
+@media (max-width: 860px) {
+  .timer-pill { left: 16px; bottom: 16px; }
+  .summary-stats { grid-template-columns: repeat(2, 1fr); }
+  .reminder-when { min-width: 0; }
+}
+.reminder-what a, .plain-list a { text-decoration: underline; }

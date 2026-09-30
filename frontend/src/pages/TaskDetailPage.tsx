@@ -1,6 +1,6 @@
 import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, BookOpen, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
   Pencil, Trash2, Upload, X,
@@ -20,6 +20,8 @@ import { PresenceBar } from '../components/task/PresenceBar';
 import { InlineComments } from '../components/task/InlineComments';
 import { PollsPanel } from '../components/task/PollsPanel';
 import { KudosPanel } from '../components/task/KudosPanel';
+import { PersonalPanel } from '../components/task/PersonalPanel';
+import { TimerButton } from '../components/Timer';
 import { usePresence } from '../collab';
 import { ChipPicker } from '../components/ChipPicker';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
@@ -152,6 +154,15 @@ export function TaskDetailPage() {
     setEditBase(task?.updatedAt ?? null);
     setEditing(true);
   };
+  // "e" in a task list opens the task straight in the editor.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (task && params.get('edit') === '1') {
+      setParams({}, { replace: true });
+      if (canEdit) startEditing();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task, canEdit, params]);
 
   if (deleted || error?.status === 404 || Number.isNaN(taskId)) {
     return (
@@ -359,6 +370,7 @@ export function TaskDetailPage() {
               {watching ? <EyeOff size={16} /> : <Eye size={16} />} {watching ? 'Unwatch' : 'Watch'}
               {watchers.length > 0 && <span className="count muted-count">{watchers.length}</span>}
             </button>
+            {canEdit && <TimerButton task={task} />}
             {canDelete && (
               <button className="btn btn-ghost danger" onClick={() => setConfirmDelete(true)}>
                 <Trash2 size={16} /> Delete
@@ -694,6 +706,7 @@ export function TaskDetailPage() {
           <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
           <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
           <KudosPanel task={task} me={user} canThank={canComment} />
+          <PersonalPanel task={task} />
           {wikiMentions.length > 0 && (
             <section className="side-section">
               <h3 className="side-title"><BookOpen size={15} /> {t("Mentioned in the wiki")}</h3>
