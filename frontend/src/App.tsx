@@ -29,6 +29,9 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ de
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then((m) => ({ default: m.TeamsPage })));
 const AutomationPage = lazy(() => import('./pages/AutomationPage').then((m) => ({ default: m.AutomationPage })));
 const SharedTaskPage = lazy(() => import('./pages/SharedTaskPage').then((m) => ({ default: m.SharedTaskPage })));
+const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then((m) => ({ default: m.PortfolioPage })));
+const GoalsPage = lazy(() => import('./pages/GoalsPage').then((m) => ({ default: m.GoalsPage })));
 const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -85,6 +88,7 @@ export function App() {
         <Route path="/p/:key/board" element={<BoardPage />} />
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
         <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
+        <Route path="/p/:key/timeline" element={<TimelinePage />} />
         <Route path="/p/:key/reports" element={<ReportsPage />} />
         <Route path="/p/:key/releases" element={<ReleasesPage />} />
         <Route path="/p/:key/automation" element={<AutomationPage />} />
@@ -92,6 +96,8 @@ export function App() {
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/goals" element={<GoalsPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/activity" element={<ActivityPage />} />

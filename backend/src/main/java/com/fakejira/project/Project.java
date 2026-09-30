@@ -68,6 +68,14 @@ public class Project {
     @Column(length = 7)
     private String color;
 
+    /** When set, tasks may only move between columns along the transitions defined in the workflow. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean restrictTransitions;
+
+    /** Move blocked tasks later automatically when a task blocking them slips. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean autoSchedule;
+
     /** Next task number to hand out within this project. */
     @Column(nullable = false)
     private int nextNumber = 1;
@@ -189,5 +197,21 @@ public class Project {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isRestrictTransitions() {
+        return restrictTransitions;
+    }
+
+    public void setRestrictTransitions(boolean restrictTransitions) {
+        this.restrictTransitions = restrictTransitions;
+    }
+
+    public boolean isAutoSchedule() {
+        return autoSchedule;
+    }
+
+    public void setAutoSchedule(boolean autoSchedule) {
+        this.autoSchedule = autoSchedule;
     }
 }

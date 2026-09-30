@@ -57,6 +57,9 @@ public class SearchService {
         FqlCompiler compiler = new FqlCompiler(user, ZoneId.systemDefault(), this::teamMemberIds,
                 name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds));
         Specification<Task> spec = visibleTo(user).and(compiler.where(query.where()));
+        if (!FqlCompiler.mentions(query.where(), "archived")) {
+            spec = spec.and((root, q, cb) -> cb.isNull(root.get("archivedAt")));
+        }
         Comparator<Task> order = compiler.order(query.order());
         List<Task> found = new ArrayList<>(tasks.findAll(spec));
         found.sort(order);
@@ -104,7 +107,7 @@ public class SearchService {
         List<Hit> hits = new ArrayList<>();
         String first = "%" + escape(words.get(0)) + "%";
 
-        List<Task> taskMatches = em.createQuery("select t from Task t where t.project.id in :projects and ("
+        List<Task> taskMatches = em.createQuery("select t from Task t where t.project.id in :projects and t.archivedAt is null and ("
                         + "lower(t.title) like :w escape '\\' or lower(t.description) like :w escape '\\' "
                         + "or lower(concat(t.project.key, '-', cast(t.number as string))) like :w escape '\\')", Task.class)
                 .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(400).getResultList();

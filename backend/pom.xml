@@ -13,7 +13,7 @@
 
     <groupId>com.fakejira</groupId>
     <artifactId>fake-jira</artifactId>
-    <version>4.0.0</version>
+    <version>5.0.0</version>
     <name>FakeJIRA</name>
     <description>FakeJIRA task tracker - Spring Boot backend</description>
 

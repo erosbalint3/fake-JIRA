@@ -43,6 +43,8 @@ public class EpicController {
     private final CurrentUser currentUser;
     private final TaskSupport taskSupport;
     private final LiveEvents live;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public EpicController(EpicRepository epics, TaskRepository tasks, ProjectAccess access, CurrentUser currentUser,
                           TaskSupport taskSupport, LiveEvents live) {
@@ -171,6 +173,7 @@ public class EpicController {
             other.getDependsOn().removeIf(e -> e.getId().equals(epic.getId()));
         }
         epic.getDependsOn().clear();
+        jdbc.update("delete from key_result_epics where epic_id = ?", epic.getId());
         live.projectChanged(epic.getProject());
         epics.delete(epic);
     }

@@ -5,6 +5,7 @@ import {
   Pencil, Trash2, Upload, X,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useTransitionGuard } from '../components/TransitionGuard';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
@@ -13,6 +14,8 @@ import { Avatar } from '../components/Avatar';
 import { PokerPanel } from '../components/task/PokerPanel';
 import { ShareModal } from '../components/task/ShareModal';
 import { CustomFieldsPanel } from '../components/task/CustomFieldsPanel';
+import { ApprovalsPanel } from '../components/task/ApprovalsPanel';
+import { ChipPicker } from '../components/ChipPicker';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
@@ -33,7 +36,8 @@ import { TaskFormModal } from '../components/TaskFormModal';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { fileSize, formatDate, formatDay, formatMinutes, timeAgo } from '../format';
 import {
-  PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Activity, type Attachment, type ChecklistItem, type Comment,
+  PRIORITIES, PRIORITY_LABEL, RESOLUTIONS, RESOLUTION_LABEL, STATUSES, STATUS_LABEL, type ProjectComponent, type Resolution,
+  type Activity, type Attachment, type ChecklistItem, type Comment,
   type DevLink, type Epic, type Release, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
   type User,
 } from '../types';
@@ -54,6 +58,7 @@ export function TaskDetailPage() {
   const { user } = useAuth();
   const { byKey } = useProjects();
   const toast = useToast();
+  const guard = useTransitionGuard();
   const navigate = useNavigate();
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -79,6 +84,7 @@ export function TaskDetailPage() {
   const [devLinks, setDevLinks] = useState<DevLink[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
+  const [components, setComponents] = useState<ProjectComponent[]>([]);
   const [watching, setWatching] = useState(false);
   const [watchers, setWatchers] = useState<User[]>([]);
   const openCreate = useCreateTask();
@@ -115,6 +121,7 @@ export function TaskDetailPage() {
     api.sprints(task.projectKey).then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED'))).catch(() => {});
     api.epics(task.projectKey).then(setEpics).catch(() => {});
     api.releases(task.projectKey).then(setReleases).catch(() => {});
+    api.components(task.projectKey).then(setComponents).catch(() => {});
   }, [task?.projectKey]);
 
   useLiveRefresh((m) => m.type === 'task' && m.data.taskId === taskId, () => {
@@ -350,9 +357,19 @@ export function TaskDetailPage() {
               } },
               { label: 'Move to another project…', hidden: !canEdit || !!task.parent, onSelect: () => setMoving(true) },
               { label: 'Share publicly…', hidden: !canEdit, onSelect: () => setSharing(true) },
+              { label: task.archivedAt ? 'Restore from archive' : 'Archive', hidden: !canEdit, onSelect: () => run(
+                () => (task.archivedAt ? api.unarchiveTask(task.id) : api.archiveTask(task.id)),
+                task.archivedAt ? 'Restored from the archive' : 'Archived — it no longer shows on boards and lists') },
             ]} />
           </div>
 
+          {task.archivedAt && (
+            <div className="alert info archived-note">
+              {t('This task is archived and hidden from boards, lists and search.')}{' '}
+              {canEdit && <button className="link" onClick={() => run(() => api.unarchiveTask(task.id), 'Restored from the archive')}>
+                {t('Restore')}</button>}
+            </div>
+          )}
           <section className="panel">
             <h2 className="panel-title"><FileText size={16} /> {t("Description")}</h2>
             {task.description
@@ -476,12 +493,29 @@ export function TaskDetailPage() {
               <select value={task.status} disabled={busy || !canEdit} aria-label={t("Status")}
                 onChange={(e) => {
                   const previous = task.status;
-                  run(() => api.setStatus(task.id, e.target.value as Status),
-                    `Moved to ${STATUS_LABEL[e.target.value as Status]}`, () => api.setStatus(task.id, previous));
+                  const next = e.target.value as Status;
+                  guard(task, (resolution) => api.setStatus(task.id, next, resolution)).then((moved) => {
+                    if (!moved) return;
+                    setTask(moved);
+                    toast(`Moved to ${STATUS_LABEL[next]}`, 'success',
+                      { action: { label: 'Undo', onClick: () => run(() => api.setStatus(task.id, previous), 'Change undone') } });
+                    api.activity(taskId).then(setActivity).catch(() => {});
+                  }).catch((err: ApiError) => toast(err.message, 'error'));
                 }}>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </dd>
+            {task.status === 'DONE' && (
+              <>
+                <dt>{t("Resolution")}</dt>
+                <dd>
+                  <select value={task.resolution ?? 'DONE'} disabled={busy || !canEdit} aria-label={t("Resolution")}
+                    onChange={(e) => run(() => api.setResolution(task.id, e.target.value as Resolution), 'Resolution updated')}>
+                    {RESOLUTIONS.map((r) => <option key={r} value={r}>{t(RESOLUTION_LABEL[r])}</option>)}
+                  </select>
+                </dd>
+              </>
+            )}
             <dt>{t("Assignee")}</dt>
             <dd>
               <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Assignee")}
@@ -502,6 +536,13 @@ export function TaskDetailPage() {
               {task.assignee?.awayUntil && (
                 <span className="away-note small">Away until {formatDay(task.assignee.awayUntil)}</span>
               )}
+            </dd>
+            <dt>{t("Helpers")}</dt>
+            <dd>
+              <ChipPicker label={t("Add a helper")} disabled={busy || !canEdit} max={5}
+                options={assignable.filter((m) => m.id !== task.assignee?.id).map((m) => ({ id: m.id, label: m.displayName }))}
+                selected={task.helpers.map((h) => h.id)}
+                onChange={(ids) => run(() => api.setHelpers(task.id, ids), 'Helpers updated')} />
             </dd>
             <dt>{t("Priority")}</dt>
             <dd>
@@ -531,6 +572,27 @@ export function TaskDetailPage() {
               <input type="date" value={task.dueDate ?? ''} disabled={busy || !canEdit} aria-label={t("Due date")}
                 onChange={(e) => update({ dueDate: e.target.value || null }, e.target.value ? 'Due date set' : 'Due date removed')} />
             </dd>
+            <dt>{t("Start date")}</dt>
+            <dd>
+              <input type="date" value={task.startDate ?? ''} disabled={busy || !canEdit} aria-label={t("Start date")}
+                max={task.dueDate ?? undefined}
+                onChange={(e) => run(() => api.schedule(task.id, { startDate: e.target.value || null, dueDate: task.dueDate,
+                  estimateMinutes: task.estimateMinutes }), e.target.value ? 'Start date set' : 'Start date removed')} />
+            </dd>
+            <dt>{t("Estimate")}</dt>
+            <dd>
+              <input type="number" min={0} step={0.5} key={`est-${task.estimateMinutes}`} placeholder="–"
+                defaultValue={task.estimateMinutes != null ? task.estimateMinutes / 60 : ''} disabled={busy || !canEdit}
+                aria-label={t("Estimate (hours)")} title={t("Estimate (hours)")}
+                onBlur={(e) => {
+                  const minutes = e.target.value === '' ? null : Math.round(Math.max(0, Number(e.target.value)) * 60);
+                  if (minutes !== task.estimateMinutes) {
+                    run(() => api.schedule(task.id, { startDate: task.startDate, dueDate: task.dueDate, estimateMinutes: minutes }),
+                      'Estimate updated');
+                  }
+                }} />
+              <span className="muted small"> h</span>
+            </dd>
             <dt>{t("Points")}</dt>
             <dd>
               <input type="number" min={0} max={100} key={`sp-${task.storyPoints}`} defaultValue={task.storyPoints ?? ''}
@@ -547,6 +609,13 @@ export function TaskDetailPage() {
                 <option value="">{t("No epic")}</option>
                 {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
               </select>
+            </dd>
+            <dt>{t("Components")}</dt>
+            <dd>
+              <ChipPicker label={t("Add a component")} disabled={busy || !canEdit} max={10}
+                options={components.map((c) => ({ id: c.id, label: c.name }))}
+                selected={task.components.map((c) => c.id)}
+                onChange={(ids) => run(() => api.setTaskComponents(task.id, ids), 'Components updated')} />
             </dd>
             <dt>{t("Release")}</dt>
             <dd>
@@ -572,7 +641,8 @@ export function TaskDetailPage() {
               </button>
             </dd>
             <dt>{t("Time spent")}</dt>
-            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">{t("None")}</span>}</dd>
+            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">{t("None")}</span>}
+              {task.estimateMinutes ? <span className="muted small"> {t('of {estimate}', { estimate: formatMinutes(task.estimateMinutes) })}</span> : null}</dd>
             <dt>{t("Reporter")}</dt>
             <dd><span className="person"><Avatar user={task.reporter} size={24} /> {task.reporter.displayName}</span></dd>
             <dt>{t("Created")}</dt>
@@ -581,6 +651,7 @@ export function TaskDetailPage() {
             <dd>{timeAgo(task.updatedAt)}</dd>
           </dl>
           <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
+          <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
           {!task.parent && <PokerPanel task={task} canEdit={canEdit} onAccepted={load} />}
         </aside>
       </div>

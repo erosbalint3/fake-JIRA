@@ -65,13 +65,21 @@ public final class FqlCompiler {
             Map.entry("updated", "date"),
             Map.entry("resolved", "date the task was done"),
             Map.entry("points", "story points (supports < >), EMPTY"),
-            Map.entry("parent", "parent task key, EMPTY for top-level tasks"));
+            Map.entry("parent", "parent task key, EMPTY for top-level tasks"),
+            Map.entry("resolution", "done, fixed, \"won't do\", duplicate, \"cannot reproduce\", EMPTY"),
+            Map.entry("component", "component name, EMPTY"),
+            Map.entry("helper", "username, me, EMPTY"),
+            Map.entry("archived", "true or false (archived tasks are hidden unless asked for)"),
+            Map.entry("start", "planned start date"),
+            Map.entry("estimate", "original estimate in hours (supports < >), EMPTY"));
 
     private static final Map<String, String> ALIASES = Map.ofEntries(
             Map.entry("labels", "label"), Map.entry("fixversion", "release"), Map.entry("version", "release"),
             Map.entry("duedate", "due"), Map.entry("storypoints", "points"), Map.entry("sp", "points"),
             Map.entry("completed", "resolved"), Map.entry("done", "resolved"), Map.entry("summary", "title"),
-            Map.entry("issuetype", "type"), Map.entry("watchers", "watcher"), Map.entry("comments", "comment"));
+            Map.entry("issuetype", "type"), Map.entry("watchers", "watcher"), Map.entry("comments", "comment"),
+            Map.entry("components", "component"), Map.entry("helpers", "helper"), Map.entry("startdate", "start"),
+            Map.entry("originalestimate", "estimate"));
 
     private static final Pattern RELATIVE = Pattern.compile("^([+-]?)(\\d+)([dwmy])$", Pattern.CASE_INSENSITIVE);
     private static final Pattern TASK_KEY = Pattern.compile("^([A-Za-z][A-Za-z0-9]{1,9})-(\\d+)$");
@@ -124,6 +132,9 @@ public final class FqlCompiler {
                         Comparator.nullsLast(Comparator.naturalOrder()));
                 case "project" -> Comparator.comparing((Task t) -> t.getProject().getKey());
                 case "type" -> Comparator.comparing(Task::getType);
+                case "start" -> Comparator.comparing(Task::getStartDate, Comparator.nullsLast(Comparator.naturalOrder()));
+                case "estimate" -> Comparator.comparing(Task::getEstimateMinutes, Comparator.nullsLast(Comparator.naturalOrder()));
+                case "resolution" -> Comparator.comparing(Task::getResolution, Comparator.nullsLast(Comparator.naturalOrder()));
                 default -> throw new FqlException("Cannot sort by " + sort.field() + ".", 0);
             };
             if (sort.descending()) {
@@ -163,7 +174,11 @@ public final class FqlCompiler {
                 case "status" -> statuses(clause);
                 case "priority" -> priorities(clause);
                 case "type" -> clause.values().forEach(this::type);
-                case "due" -> clause.values().forEach(this::date);
+                case "due", "start" -> clause.values().forEach(this::date);
+                case "estimate" -> clause.values().forEach(this::number);
+                case "resolution" -> clause.values().forEach(this::resolution);
+                case "helper" -> clause.values().forEach(this::users);
+                case "archived" -> clause.values().forEach(this::bool);
                 case "created", "updated", "resolved" -> clause.values().stream().filter(v -> hours(v) == null).forEach(this::date);
                 case "points" -> clause.values().forEach(this::number);
                 case "assignee", "reporter", "watcher" -> clause.values().forEach(this::users);
@@ -175,7 +190,7 @@ public final class FqlCompiler {
                 throw new FqlException("Use ~ (contains) or !~ with " + field + ".", clause.position());
             }
             if (!textField && (clause.op() == Op.CONTAINS || clause.op() == Op.NOT_CONTAINS)
-                    && !Set.of("epic", "release", "sprint", "label").contains(field)) {
+                    && !Set.of("epic", "release", "sprint", "label", "component").contains(field)) {
                 throw new FqlException("~ only works with text fields (text, title, description, comment) and names.",
                         clause.position());
             }
@@ -223,7 +238,134 @@ public final class FqlCompiler {
             case "resolved" -> dateField(c, cb, root.get("completedAt"), true);
             case "points" -> numberField(c, cb, root.get("storyPoints"));
             case "parent" -> parent(c, root, cb);
+            case "resolution" -> resolutionField(c, root, cb);
+            case "component" -> component(c, root, cb, query);
+            case "helper" -> helper(c, root, cb, query);
+            case "archived" -> archived(c, root, cb);
+            case "start" -> dateField(c, cb, root.get("startDate"), false);
+            case "estimate" -> estimate(c, root, cb);
             default -> custom(c, root, cb, query);
+        };
+    }
+
+    /** True when the query uses {@code field} anywhere. */
+    public static boolean mentions(Node node, String field) {
+        if (node == null) {
+            return false;
+        }
+        if (node instanceof Fql.And and) {
+            return mentions(and.left(), field) || mentions(and.right(), field);
+        }
+        if (node instanceof Fql.Or or) {
+            return mentions(or.left(), field) || mentions(or.right(), field);
+        }
+        if (node instanceof Fql.Not not) {
+            return mentions(not.inner(), field);
+        }
+        return node instanceof Clause clause && canonical(clause.field().toLowerCase(Locale.ROOT)).equals(field);
+    }
+
+    private com.fakejira.task.Resolution resolution(Value v) {
+        String text = v.lower().replace("'", "").replace('-', ' ').replace('_', ' ').trim();
+        return switch (text) {
+            case "done" -> com.fakejira.task.Resolution.DONE;
+            case "fixed" -> com.fakejira.task.Resolution.FIXED;
+            case "wont do", "won t do", "wontdo", "wontfix", "wont fix" -> com.fakejira.task.Resolution.WONT_DO;
+            case "duplicate" -> com.fakejira.task.Resolution.DUPLICATE;
+            case "cannot reproduce", "cant reproduce", "cannotreproduce" -> com.fakejira.task.Resolution.CANNOT_REPRODUCE;
+            default -> throw new FqlException("Unknown resolution '" + v.text()
+                    + "'. Use done, fixed, \"won't do\", duplicate or \"cannot reproduce\".", v.position());
+        };
+    }
+
+    private boolean bool(Value v) {
+        return switch (v.lower()) {
+            case "true", "yes", "1" -> true;
+            case "false", "no", "0" -> false;
+            default -> throw new FqlException("Use true or false.", v.position());
+        };
+    }
+
+    private Predicate resolutionField(Clause c, Root<Task> root, CriteriaBuilder cb) {
+        Path<Object> path = root.get("resolution");
+        // Tasks finished before resolutions existed count as "done".
+        Expression<Object> effective = cb.selectCase()
+                .when(cb.and(cb.isNull(path), cb.equal(root.get("status"), TaskStatus.DONE)), com.fakejira.task.Resolution.DONE)
+                .otherwise(path);
+        return switch (c.op()) {
+            case EMPTY -> cb.notEqual(root.get("status"), TaskStatus.DONE);
+            case NOT_EMPTY -> cb.equal(root.get("status"), TaskStatus.DONE);
+            case EQ, IN -> effective.in(c.values().stream().map(this::resolution).toList());
+            case NE, NOT_IN -> cb.or(cb.not(effective.in(c.values().stream().map(this::resolution).toList())),
+                    cb.notEqual(root.get("status"), TaskStatus.DONE));
+            default -> throw new FqlException("Use =, !=, IN or IS EMPTY with resolution.", c.position());
+        };
+    }
+
+    private Predicate component(Clause c, Root<Task> root, CriteriaBuilder cb, jakarta.persistence.criteria.CriteriaQuery<?> query) {
+        Subquery<Long> sub = query.subquery(Long.class);
+        Root<Task> t = sub.from(Task.class);
+        Join<Object, Object> component = t.join("components");
+        Expression<String> name = cb.lower(component.get("name"));
+        Predicate valueMatch = switch (c.op()) {
+            case EMPTY, NOT_EMPTY -> cb.conjunction();
+            case CONTAINS, NOT_CONTAINS -> cb.like(name, "%" + escape(c.values().get(0).lower()) + "%", '\\');
+            default -> name.in(c.values().stream().map(Value::lower).toList());
+        };
+        sub.select(t.get("id")).where(cb.equal(t.get("id"), root.get("id")), valueMatch);
+        Predicate exists = cb.exists(sub);
+        return switch (c.op()) {
+            case EQ, IN, NOT_EMPTY, CONTAINS -> exists;
+            case NE, NOT_IN, EMPTY, NOT_CONTAINS -> cb.not(exists);
+            default -> throw new FqlException("Use =, !=, IN, ~ or IS EMPTY with component.", c.position());
+        };
+    }
+
+    private Predicate helper(Clause c, Root<Task> root, CriteriaBuilder cb, jakarta.persistence.criteria.CriteriaQuery<?> query) {
+        Subquery<Long> sub = query.subquery(Long.class);
+        Root<Task> t = sub.from(Task.class);
+        Join<Task, User> h = t.join("helpers");
+        List<Predicate> any = new ArrayList<>();
+        if (c.op() != Op.EMPTY && c.op() != Op.NOT_EMPTY) {
+            for (Value v : c.values()) {
+                for (Object o : users(v)) {
+                    any.add(o instanceof Long id ? cb.equal(h.get("id"), id) : cb.equal(cb.lower(h.get("username")), o));
+                }
+            }
+        }
+        sub.select(t.get("id")).where(cb.equal(t.get("id"), root.get("id")),
+                any.isEmpty() ? cb.conjunction() : cb.or(any.toArray(Predicate[]::new)));
+        Predicate exists = cb.exists(sub);
+        return switch (c.op()) {
+            case EQ, IN, NOT_EMPTY -> exists;
+            case NE, NOT_IN, EMPTY -> cb.not(exists);
+            default -> throw new FqlException("Use =, !=, IN or IS EMPTY with helper.", c.position());
+        };
+    }
+
+    private Predicate archived(Clause c, Root<Task> root, CriteriaBuilder cb) {
+        if (c.op() != Op.EQ && c.op() != Op.NE) {
+            throw new FqlException("Use archived = true or archived = false.", c.position());
+        }
+        boolean wanted = bool(c.values().get(0)) == (c.op() == Op.EQ);
+        return wanted ? cb.isNotNull(root.get("archivedAt")) : cb.isNull(root.get("archivedAt"));
+    }
+
+    /** Estimates are stored in minutes and queried in hours. */
+    private Predicate estimate(Clause c, Root<Task> root, CriteriaBuilder cb) {
+        Path<Integer> path = root.get("estimateMinutes");
+        if (c.op() == Op.EMPTY || c.op() == Op.NOT_EMPTY) {
+            return c.op() == Op.EMPTY ? cb.isNull(path) : cb.isNotNull(path);
+        }
+        int minutes = number(c.values().get(0)) * 60;
+        return switch (c.op()) {
+            case EQ -> cb.equal(path, minutes);
+            case NE -> cb.or(cb.notEqual(path, minutes), cb.isNull(path));
+            case GT -> cb.greaterThan(path, minutes);
+            case GE -> cb.greaterThanOrEqualTo(path, minutes);
+            case LT -> cb.lessThan(path, minutes);
+            case LE -> cb.lessThanOrEqualTo(path, minutes);
+            default -> throw new FqlException("Use =, !=, < or > with estimate.", c.position());
         };
     }
 
@@ -697,10 +839,13 @@ public final class FqlCompiler {
             case "status" -> List.of("todo", "\"in progress\"", "review", "done");
             case "priority" -> List.of("low", "medium", "high", "critical");
             case "type" -> List.of("task", "bug", "story", "spike");
-            case "assignee", "reporter", "watcher" -> List.of("me", "EMPTY", "membersOf(");
+            case "assignee", "reporter", "watcher", "helper" -> List.of("me", "EMPTY", "membersOf(");
+            case "resolution" -> List.of("done", "fixed", "\"won't do\"", "duplicate", "\"cannot reproduce\"", "EMPTY");
+            case "archived" -> List.of("true", "false");
+            case "component" -> List.of("EMPTY");
             case "sprint" -> List.of("active", "open", "closed", "EMPTY");
             case "release" -> List.of("unreleased", "EMPTY");
-            case "due", "created", "updated", "resolved" -> List.of("today", "-7d", "+7d", "startOfWeek", "startOfMonth", "EMPTY");
+            case "due", "start", "created", "updated", "resolved" -> List.of("today", "-7d", "+7d", "startOfWeek", "startOfMonth", "EMPTY");
             default -> List.of();
         };
     }

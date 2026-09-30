@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import {
   BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
   Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
-  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users,
+  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users, GanttChart, Briefcase, Flag,
 } from 'lucide-react';
 import { filterPath } from '../filters';
 import { api, isOffline, OFFLINE_CHANGED } from '../api';
@@ -21,6 +21,7 @@ import { Spinner } from './States';
 import { TaskFormModal } from './TaskFormModal';
 import { PasswordForm } from './profile/PasswordForm';
 import { OnboardingTour, START_TOUR } from './OnboardingTour';
+import { TransitionProvider } from './TransitionGuard';
 import { useProjectAccess } from '../useProject';
 import type { SavedFilter } from '../types';
 import { t } from '../i18n';
@@ -187,6 +188,7 @@ export function Layout() {
 
   return (
     <CreateTaskContext.Provider value={openCreate}>
+      <TransitionProvider>
       <div className={`shell ${menuOpen ? 'menu-open' : ''}`}>
         <a href="#main" className="skip-link" onClick={(e) => {
           e.preventDefault();
@@ -253,6 +255,7 @@ export function Layout() {
                 <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> {t("Board")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> {t("Backlog")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> {t("Roadmap")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/timeline`} className="nav-link"><GanttChart size={18} /> {t("Timeline")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> {t("Releases")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/reports`} className="nav-link"><BarChart3 size={18} /> {t("Reports")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/automation`} className="nav-link"><Bot size={18} /> {t("Automation")}</NavLink>
@@ -273,6 +276,8 @@ export function Layout() {
             <span className="nav-heading">{t("Workspace")}</span>
             <NavLink to="/dashboard" className="nav-link"><LayoutDashboard size={18} /> {t("Dashboard")}</NavLink>
             <NavLink to="/my-work" className="nav-link"><UserSquare2 size={18} /> {t("My work")}</NavLink>
+            <NavLink to="/portfolio" className="nav-link"><Briefcase size={18} /> {t("Portfolio")}</NavLink>
+            <NavLink to="/goals" className="nav-link"><Flag size={18} /> {t("Goals")}</NavLink>
             <NavLink to="/search" className="nav-link"><SearchCode size={18} /> {t("Search")}</NavLink>
             <NavLink to="/calendar" className="nav-link"><CalendarDays size={18} /> {t("Calendar")}</NavLink>
             <NavLink to="/activity" className="nav-link"><Activity size={18} /> {t("Activity")}</NavLink>
@@ -386,6 +391,7 @@ export function Layout() {
           </Modal>
         )}
       </div>
+      </TransitionProvider>
     </CreateTaskContext.Provider>
   );
 }

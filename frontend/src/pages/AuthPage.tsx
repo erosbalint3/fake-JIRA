@@ -135,7 +135,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <li><Bell size={18} /> {t("Live updates, @mentions and email notifications")}</li>
           </ul>
         </div>
-        <span className="auth-foot">{t("FakeJIRA 4.0")}</span>
+        <span className="auth-foot">{t("FakeJIRA 5.0")}</span>
       </section>
 
       <section className="auth-panel">

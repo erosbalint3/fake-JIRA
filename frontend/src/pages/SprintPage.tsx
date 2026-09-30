@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCopy, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, Gauge, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
-import { useRouteProject } from '../useProject';
+import { useProjectAccess, useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import { PointsBadge, StatusBadge, TypeIcon } from '../components/Badges';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
@@ -12,6 +12,8 @@ import { NotFoundPage } from './NotFoundPage';
 import { formatDay } from '../format';
 import type { RetroItem, RetroKind, ReviewTask, SprintReview } from '../types';
 import { t } from '../i18n';
+import { SprintGoals } from '../components/sprint/SprintGoals';
+import { CapacityPanel } from '../components/sprint/CapacityPanel';
 
 const COLUMNS: { kind: RetroKind; title: string; hint: string }[] = [
   { kind: 'WENT_WELL', title: 'Went well', hint: 'What should we keep doing?' },
@@ -24,9 +26,10 @@ export function SprintPage() {
   const { id } = useParams();
   const sprintId = Number(id);
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'retro' ? 'retro' : 'review';
+  const tab = params.get('tab') === 'retro' ? 'retro' : params.get('tab') === 'capacity' ? 'capacity' : 'review';
   const [review, setReview] = useState<SprintReview | null>(null);
   const [error, setError] = useState('');
+  const { canEdit: canEditSprint } = useProjectAccess(project);
 
   const load = useCallback(() => {
     api.sprintReview(sprintId).then(setReview).catch((e: ApiError) => setError(e.message));
@@ -57,11 +60,15 @@ export function SprintPage() {
       <nav className="tabs" role="tablist" aria-label={t("Sprint")}>
         <button role="tab" aria-selected={tab === 'review'} className={`tab ${tab === 'review' ? 'active' : ''}`}
           onClick={() => setParams({}, { replace: true })}><Presentation size={15} /> {t("Review")}</button>
+        <button role="tab" aria-selected={tab === 'capacity'} className={`tab ${tab === 'capacity' ? 'active' : ''}`}
+          onClick={() => setParams({ tab: 'capacity' }, { replace: true })}><Gauge size={15} /> {t("Capacity")}</button>
         <button role="tab" aria-selected={tab === 'retro'} className={`tab ${tab === 'retro' ? 'active' : ''}`}
           onClick={() => setParams({ tab: 'retro' }, { replace: true })}><MessageSquareHeart size={15} /> {t("Retrospective")}</button>
       </nav>
-      {tab === 'review' ? <ReviewView review={review} /> : <RetroBoard sprintId={sprintId} projectId={project.id}
-        open={sprint.state !== 'PLANNED'} />}
+      <SprintGoals sprintId={sprintId} canEdit={canEditSprint && sprint.state !== 'COMPLETED'} />
+      {tab === 'review' ? <ReviewView review={review} />
+        : tab === 'capacity' ? <CapacityPanel sprintId={sprintId} projectId={project.id} canEdit={canEditSprint} />
+        : <RetroBoard sprintId={sprintId} projectId={project.id} open={sprint.state !== 'PLANNED'} />}
     </div>
   );
 }
@@ -87,6 +94,11 @@ function ReviewView({ review }: { review: SprintReview }) {
         <div className="stat panel"><span className="muted">{t("Scope change")}</span>
           <strong>+{review.added.length} / −{review.removed.length}</strong>
           <span className="muted small">{t("tasks added / removed after the start")}</span></div>
+        {review.goals.length > 0 && (
+          <div className="stat panel"><span className="muted">{t("Goals met")}</span>
+            <strong>{review.goalsMet} / {review.goals.length}</strong>
+            <span className="muted small">{Math.round((review.goalsMet / review.goals.length) * 100)}%</span></div>
+        )}
       </div>
       <div className="review-actions">
         <button className="btn btn-ghost btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy as Markdown")}</button>

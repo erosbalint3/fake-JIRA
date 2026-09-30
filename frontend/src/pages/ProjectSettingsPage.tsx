@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowDown, ArrowUp, Copy, Crown, Download, GitBranch, Link2, Plus, RefreshCw, Trash2, Upload, UserMinus, UserPlus,
+  Archive, ArrowDown, ArrowUp, Copy, Crown, Download, GitBranch, Link2, Plus, RefreshCw, Trash2, Upload, UserMinus, UserPlus,
 } from 'lucide-react';
 import { api, ApiError, githubWebhookUrl, inviteLink, saveBlob, type ColumnInput } from '../api';
 import { useAuth } from '../auth';
@@ -16,12 +16,15 @@ import { WebhooksSection } from '../components/settings/WebhooksSection';
 import { CustomFieldsSection } from '../components/settings/CustomFieldsSection';
 import { RecurringSection } from '../components/settings/RecurringSection';
 import { TemplatesSection } from '../components/settings/TemplatesSection';
+import { WorkflowSection } from '../components/settings/WorkflowSection';
+import { ComponentsSection } from '../components/settings/ComponentsSection';
+import { TypeChecklistsSection } from '../components/settings/TypeChecklistsSection';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
 import {
   STATUSES, STATUS_LABEL, type BoardColumn, type GithubSettings, type ImportResult, type Invite, type Member, type Project,
-  type Role, type Status,
+  type Role, type Status, type Task,
 } from '../types';
 import { t } from '../i18n';
 
@@ -139,6 +142,12 @@ export function ProjectSettingsPage() {
             </div>
             <span className="muted small">{t("Used for the project's accent while you work in it.")}</span>
           </div>
+          <label className="toggle">
+            <input type="checkbox" checked={project.autoSchedule} disabled={!isOwner || busy}
+              onChange={(e) => run(() => api.updateProject(key, project.name, project.description, { autoSchedule: e.target.checked }),
+                e.target.checked ? 'Automatic rescheduling on' : 'Automatic rescheduling off')} />
+            {t('Reschedule blocked tasks automatically when a task blocking them slips')}
+          </label>
         </div>
       </section>
 
@@ -147,6 +156,9 @@ export function ProjectSettingsPage() {
         onTransfer={(member) => setConfirm({ kind: 'transfer', member })} />
       {isOwner && <InvitesSection project={project} />}
       <ColumnsSection project={project} canEdit={canEdit} />
+      <WorkflowSection projectKey={project.key} projectId={project.id} canEdit={canEdit} />
+      <ComponentsSection projectKey={project.key} members={project.members} canEdit={canEdit} />
+      <TypeChecklistsSection projectKey={project.key} canEdit={canEdit} />
       <CustomFieldsSection projectKey={project.key} canEdit={canEdit} />
       <TemplatesSection projectKey={project.key} canEdit={canEdit} />
       <RecurringSection projectKey={project.key} members={project.members} canEdit={canEdit} />
@@ -155,6 +167,7 @@ export function ProjectSettingsPage() {
       {isOwner && <WebhooksSection projectKey={project.key} />}
       <CsvSection project={project} canEdit={canEdit} />
       {canEdit && <EmailInSection projectKey={project.key} />}
+      {canEdit && <ArchiveSection projectKey={project.key} />}
 
       <section className="panel danger-zone">
         <div>
@@ -707,5 +720,41 @@ function StorageLine({ projectKey }: { projectKey: string }) {
       Attachments: {usage.files} file{usage.files === 1 ? '' : 's'}, {mb(usage.usedBytes)}
       {usage.quotaBytes ? <> of {mb(usage.quotaBytes)} <span className="storage-bar"><span style={{ width: `${percent}%` }} /></span></> : ''}
     </p>
+  );
+}
+
+/** Hides old finished work from boards, lists and search without deleting it. */
+function ArchiveSection({ projectKey }: { projectKey: string }) {
+  const toast = useToast();
+  const [days, setDays] = useState(30);
+  const [archived, setArchived] = useState<Task[] | null>(null);
+  const loadArchived = () => api.archivedTasks(projectKey).then(setArchived).catch(() => setArchived([]));
+  return (
+    <section className="panel">
+      <h2 className="panel-title"><Archive size={16} /> {t('Archive')}</h2>
+      <p className="muted small hint">{t('Archived tasks disappear from boards, lists and search but keep their history. Find them with archived = true.')}</p>
+      <div className="inline-form">
+        <label className="inline-field">{t('Archive tasks done more than')}
+          <input type="number" min={0} max={3650} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label={t('Days')} />
+          {t('days ago')}</label>
+        <button className="btn btn-soft btn-sm" onClick={async () => {
+          try {
+            const result = await api.archiveDone(projectKey, days);
+            toast(result.archived ? t('{n} tasks archived', { n: result.archived }) : t('Nothing to archive'));
+            if (archived) loadArchived();
+          } catch (e) {
+            toast((e as ApiError).message, 'error');
+          }
+        }}>{t('Archive')}</button>
+        <button className="btn btn-ghost btn-sm" onClick={loadArchived}>{t('Show archived tasks')}</button>
+      </div>
+      {archived && (archived.length === 0 ? <p className="muted small">{t('No archived tasks.')}</p> : (
+        <ul className="mini-list">
+          {archived.slice(0, 50).map((task) => (
+            <li key={task.id}><Link to={`/tasks/${task.id}`}>{task.key}</Link> <span>{task.title}</span></li>
+          ))}
+        </ul>
+      ))}
+    </section>
   );
 }

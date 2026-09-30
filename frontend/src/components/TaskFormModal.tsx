@@ -3,6 +3,7 @@ import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
   PRIORITIES, PRIORITY_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type CreateTaskInput, type TaskTemplate, type Epic, type Priority, type Sprint, type TaskInput, type User,
+  type ProjectComponent,
 } from '../types';
 import { Modal } from './Modal';
 import { PriorityBadge, TypeIcon } from './Badges';
@@ -46,6 +47,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [checklist, setChecklist] = useState<string[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  const [components, setComponents] = useState<ProjectComponent[]>([]);
+  const [componentId, setComponentId] = useState<number | null>(null);
   const [sprintId, setSprintId] = useState<number | null>(mode.kind === 'create' ? mode.sprintId ?? null : null);
   const [members, setMembers] = useState<User[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -62,6 +65,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
       api.templates(projectKey).then(setTemplates).catch(() => setTemplates([]));
+      api.components(projectKey).then(setComponents).catch(() => setComponents([]));
       api.sprints(projectKey)
         .then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED')))
         .catch(() => setSprints([]));
@@ -104,7 +108,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
     const input = { ...form, title: form.title.trim(), dueDate: form.dueDate || null };
     try {
       if (mode.kind === 'create') {
-        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist });
+        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist,
+          componentIds: componentId ? [componentId] : [] });
         if (draftKey) draftStore.clear(draftKey);
       } else {
         await mode.onSubmit(input);
@@ -230,6 +235,17 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
               <select value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">{t("Unassigned")}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
+              </select>
+            </label>
+          )}
+          {mode.kind === 'create' && components.length > 0 && (
+            <label className="field">
+              <span>{t("Component")}</span>
+              <select value={componentId ?? ''} onChange={(e) => setComponentId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{t("None")}</option>
+                {components.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{c.lead && !assigneeId ? ` → ${c.lead.displayName}` : ''}</option>
+                ))}
               </select>
             </label>
           )}

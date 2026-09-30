@@ -47,6 +47,8 @@ public class TaskController {
     private final TaskDetailsService details;
     private final CurrentUser currentUser;
     private final TaskCopyService copies;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScheduleService schedule;
 
     public TaskController(TaskService taskService, TaskDetailsService details, CurrentUser currentUser,
                           TaskCopyService copies) {
@@ -67,9 +69,48 @@ public class TaskController {
                                    @RequestParam(required = false) String sprint,
                                    @RequestParam(required = false) String assignee,
                                    @RequestParam(required = false) String epic,
-                                   @RequestParam(required = false) TaskType type) {
+                                   @RequestParam(required = false) TaskType type,
+                                   @RequestParam(required = false) String archived) {
         return taskService.search(currentUser.from(jwt),
-                new TaskFilter(project, scope, q, priority, status, label, sprint, assignee, epic, type));
+                new TaskFilter(project, scope, q, priority, status, label, sprint, assignee, epic, type, archived));
+    }
+
+    @PutMapping("/{id}/resolution")
+    public TaskResponse resolution(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                   @Valid @RequestBody TaskDtos.ResolutionRequest request) {
+        return taskService.setResolution(currentUser.from(jwt), id, request.resolution());
+    }
+
+    @PutMapping("/{id}/schedule")
+    public TaskResponse schedule(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                 @Valid @RequestBody TaskDtos.ScheduleRequest request) {
+        return schedule.schedule(currentUser.from(jwt), id, request);
+    }
+
+    @PutMapping("/{id}/helpers")
+    public TaskResponse helpers(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
+                                @Valid @RequestBody TaskDtos.HelpersRequest request) {
+        return taskService.setHelpers(currentUser.from(jwt), id, request.userIds());
+    }
+
+    @PostMapping("/{id}/archive")
+    public TaskResponse archive(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.setArchived(currentUser.from(jwt), id, true);
+    }
+
+    @DeleteMapping("/{id}/archive")
+    public TaskResponse unarchive(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return taskService.setArchived(currentUser.from(jwt), id, false);
+    }
+
+    public record ArchiveDoneResponse(int archived) {
+    }
+
+    /** Archives a project's tasks finished more than {@code days} days ago. */
+    @PostMapping("/archive-done")
+    public ArchiveDoneResponse archiveDone(@AuthenticationPrincipal Jwt jwt, @RequestParam String project,
+                                           @RequestParam(defaultValue = "30") int days) {
+        return new ArchiveDoneResponse(taskService.archiveDone(currentUser.from(jwt), project, days));
     }
 
     @PostMapping
@@ -102,13 +143,13 @@ public class TaskController {
     @PatchMapping("/{id}/status")
     public TaskResponse changeStatus(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                      @Valid @RequestBody StatusRequest request) {
-        return taskService.changeStatus(currentUser.from(jwt), id, request.status());
+        return taskService.changeStatus(currentUser.from(jwt), id, request.status(), request.resolution());
     }
 
     @PatchMapping("/{id}/column")
     public TaskResponse moveToColumn(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id,
                                      @Valid @RequestBody ColumnRequest request) {
-        return taskService.moveToColumn(currentUser.from(jwt), id, request.columnId());
+        return taskService.moveToColumn(currentUser.from(jwt), id, request.columnId(), request.resolution());
     }
 
     @PutMapping("/{id}/assignee")

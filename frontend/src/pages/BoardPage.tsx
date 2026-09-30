@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNo
 import { Link } from 'react-router-dom';
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Eye, KanbanSquare, Users, Zap } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useTransitionGuard } from '../components/TransitionGuard';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -96,6 +97,7 @@ export function BoardPage() {
   const { key, project, loading, canEdit } = useRouteProject();
   const { user } = useAuth();
   const toast = useToast();
+  const guard = useTransitionGuard();
   const openCreate = useCreateTask();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -152,7 +154,12 @@ export function BoardPage() {
     const previous = tasks;
     setTasks((current) => current?.map((t) => (t.id === task.id ? { ...t, status: column.status, columnId: column.id } : t)) ?? null);
     try {
-      await api.moveToColumn(task.id, column.id);
+      const moved = await guard(task, (resolution) => api.moveToColumn(task.id, column.id, resolution));
+      if (!moved) {
+        setTasks(previous);
+        return;
+      }
+      setTasks((current) => current?.map((t) => (t.id === moved.id ? moved : t)) ?? null);
       const undo = !isUndo && from ? {
         action: { label: 'Undo', onClick: () => move({ ...task, status: column.status, columnId: column.id }, from, true) },
       } : {};
@@ -260,9 +267,12 @@ export function BoardPage() {
             </button>
           </>
         )}
-        {task.assignee
-          ? <Avatar user={task.assignee} size={24} />
-          : <span className="avatar-empty sm" title={t("Unassigned")} />}
+        <span className="avatar-stack">
+          {task.assignee
+            ? <Avatar user={task.assignee} size={24} />
+            : <span className="avatar-empty sm" title={t("Unassigned")} />}
+          {task.helpers.map((h) => <Avatar key={h.id} user={h} size={20} />)}
+        </span>
       </footer>
     </article>
   );

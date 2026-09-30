@@ -7,6 +7,7 @@ import type {
   SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
   AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
   PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
+  Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -179,7 +180,7 @@ export const api = {
   project: (key: string) => request<Project>('GET', `/projects/${key}`),
   createProject: (key: string, name: string, description: string, template?: string) =>
     request<Project>('POST', '/projects', { key, name, description, template: template || undefined }),
-  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string } = {}) =>
+  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string; autoSchedule?: boolean } = {}) =>
     request<Project>('PUT', `/projects/${key}`, { name, description, ...extra }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
   addMember: (key: string, login: string, role: Role = 'MEMBER') =>
@@ -371,10 +372,66 @@ export const api = {
   taskByKey: (key: string) => request<Task>('GET', `/tasks/key/${encodeURIComponent(key)}`),
   subtasks: (id: number) => request<Task[]>('GET', `/tasks/${id}/subtasks`),
   bulk: (taskIds: number[], change: BulkChange) => request<Task[]>('POST', '/tasks/bulk', { taskIds, ...change }),
-  moveToColumn: (id: number, columnId: number) => request<Task>('PATCH', `/tasks/${id}/column`, { columnId }),
+  moveToColumn: (id: number, columnId: number, resolution?: Resolution | null) =>
+    request<Task>('PATCH', `/tasks/${id}/column`, { columnId, resolution: resolution ?? null }),
   createTask: (input: CreateTaskInput) => request<Task>('POST', '/tasks', input),
   updateTask: (id: number, input: TaskInput) => request<Task>('PUT', `/tasks/${id}`, input),
-  setStatus: (id: number, status: Status) => request<Task>('PATCH', `/tasks/${id}/status`, { status }),
+  setStatus: (id: number, status: Status, resolution?: Resolution | null) =>
+    request<Task>('PATCH', `/tasks/${id}/status`, { status, resolution: resolution ?? null }),
+  setResolution: (id: number, resolution: Resolution) => request<Task>('PUT', `/tasks/${id}/resolution`, { resolution }),
+  schedule: (id: number, input: { startDate: string | null; dueDate: string | null; estimateMinutes: number | null }) =>
+    request<Task>('PUT', `/tasks/${id}/schedule`, input),
+  setHelpers: (id: number, userIds: number[]) => request<Task>('PUT', `/tasks/${id}/helpers`, { userIds }),
+  archiveTask: (id: number) => request<Task>('POST', `/tasks/${id}/archive`),
+  unarchiveTask: (id: number) => request<Task>('DELETE', `/tasks/${id}/archive`),
+  archiveDone: (projectKey: string, days: number) =>
+    request<{ archived: number }>('POST', `/tasks/archive-done?project=${encodeURIComponent(projectKey)}&days=${days}`),
+  archivedTasks: (projectKey: string) =>
+    request<Task[]>('GET', `/tasks?project=${encodeURIComponent(projectKey)}&archived=only`),
+  setTaskComponents: (id: number, ids: number[]) => request<Task>('PUT', `/tasks/${id}/components`, { ids }),
+
+  workflow: (key: string) => request<Workflow>('GET', `/projects/${key}/workflow`),
+  saveWorkflow: (key: string, workflow: { restricted: boolean; columns: { id: number; required: string[] }[];
+    transitions: { fromId: number | null; toId: number }[] }) => request<Workflow>('PUT', `/projects/${key}/workflow`, workflow),
+  components: (key: string) => request<ProjectComponent[]>('GET', `/projects/${key}/components`),
+  createComponent: (key: string, input: { name: string; description: string; leadId: number | null }) =>
+    request<ProjectComponent>('POST', `/projects/${key}/components`, input),
+  updateComponent: (id: number, input: { name: string; description: string; leadId: number | null }) =>
+    request<ProjectComponent>('PUT', `/components/${id}`, input),
+  deleteComponent: (id: number) => request<void>('DELETE', `/components/${id}`),
+  typeChecklists: (key: string) => request<Record<TaskType, string[]>>('GET', `/projects/${key}/type-checklists`),
+  saveTypeChecklist: (key: string, type: TaskType, items: string[]) =>
+    request<string[]>('PUT', `/projects/${key}/type-checklists/${type}`, { items }),
+
+  approvals: (id: number) => request<Approval[]>('GET', `/tasks/${id}/approvals`),
+  requestApproval: (id: number, approverId: number, note: string) =>
+    request<Approval>('POST', `/tasks/${id}/approvals`, { approverId, note }),
+  decideApproval: (id: number, approve: boolean, note: string) =>
+    request<Approval>('POST', `/approvals/${id}/decision`, { approve, note }),
+  withdrawApproval: (id: number) => request<void>('DELETE', `/approvals/${id}`),
+  myApprovals: () => request<Approval[]>('GET', '/approvals/mine'),
+
+  sprintGoals: (sprintId: number) => request<SprintGoal[]>('GET', `/sprints/${sprintId}/goals`),
+  addSprintGoal: (sprintId: number, text: string) => request<SprintGoal>('POST', `/sprints/${sprintId}/goals`, { text }),
+  updateSprintGoal: (id: number, change: { text?: string; done?: boolean }) =>
+    request<SprintGoal>('PATCH', `/sprint-goals/${id}`, change),
+  deleteSprintGoal: (id: number) => request<void>('DELETE', `/sprint-goals/${id}`),
+  sprintCapacity: (sprintId: number) => request<SprintCapacity>('GET', `/sprints/${sprintId}/capacity`),
+  setCapacity: (sprintId: number, userId: number, hoursPerDay: number, daysOff: number) =>
+    request<SprintCapacity>('PUT', `/sprints/${sprintId}/capacity/${userId}`, { hoursPerDay, daysOff }),
+
+  timeline: (key: string) => request<Timeline>('GET', `/projects/${key}/timeline`),
+  portfolio: () => request<PortfolioRow[]>('GET', '/portfolio'),
+  goals: (quarter?: string) => request<Goal[]>('GET', `/goals${quarter ? `?quarter=${encodeURIComponent(quarter)}` : ''}`),
+  createGoal: (input: { title: string; description: string; quarter: string; shared: boolean }) =>
+    request<Goal>('POST', '/goals', input),
+  updateGoal: (id: number, input: { title: string; description: string; quarter: string; shared: boolean }) =>
+    request<Goal>('PUT', `/goals/${id}`, input),
+  deleteGoal: (id: number) => request<void>('DELETE', `/goals/${id}`),
+  addKeyResult: (goalId: number, input: KeyResultInput) => request<Goal>('POST', `/goals/${goalId}/key-results`, input),
+  updateKeyResult: (id: number, input: KeyResultInput) => request<Goal>('PUT', `/key-results/${id}`, input),
+  deleteKeyResult: (id: number) => request<Goal>('DELETE', `/key-results/${id}`),
+  epicGoals: (epicId: number) => request<Goal[]>('GET', `/epics/${epicId}/goals`),
   assign: (id: number, assigneeId: number | null) => request<Task>('PUT', `/tasks/${id}/assignee`, { assigneeId }),
   moveToSprint: (id: number, sprintId: number | null) => request<Task>('PUT', `/tasks/${id}/sprint`, { sprintId }),
   acceptTask: (id: number) => request<Task>('POST', `/tasks/${id}/accept`),

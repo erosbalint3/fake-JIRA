@@ -38,6 +38,10 @@ export interface Project {
   kanban: boolean;
   /** Accent colour (#rrggbb) or null for the default. */
   color: string | null;
+  /** Blocked tasks move later automatically when a blocker slips. */
+  autoSchedule: boolean;
+  /** Only the workflow's transitions are allowed. */
+  restrictTransitions: boolean;
 }
 
 export interface SprintRef {
@@ -87,6 +91,8 @@ export interface BoardColumn {
   status: Status;
   position: number;
   wipLimit: number | null;
+  /** What a task needs before entering this column (see Requirement). */
+  required: string[];
 }
 
 export interface Task {
@@ -119,6 +125,12 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   release: ReleaseRef | null;
+  resolution: Resolution | null;
+  startDate: string | null;
+  estimateMinutes: number | null;
+  archivedAt: string | null;
+  helpers: User[];
+  components: { id: number; name: string }[];
 }
 
 export interface TaskInput {
@@ -138,6 +150,7 @@ export interface CreateTaskInput extends TaskInput {
   sprintId: number | null;
   parentId?: number | null;
   checklist?: string[];
+  componentIds?: number[];
 }
 
 export interface BulkChange {
@@ -435,6 +448,8 @@ export interface SprintReview {
   removed: ReviewTask[];
   people: { user: User; tasks: number; points: number }[];
   markdown: string;
+  goals: { id: number; text: string; done: boolean }[];
+  goalsMet: number;
 }
 
 export interface PokerState {
@@ -771,4 +786,168 @@ export interface OffsiteStatus {
   lastUploadAt: string | null;
   lastFile: string | null;
   lastError: string | null;
+}
+
+// ---------------------------------------------------------------- 5.0: work management
+
+export type Resolution = 'DONE' | 'FIXED' | 'WONT_DO' | 'DUPLICATE' | 'CANNOT_REPRODUCE';
+export const RESOLUTIONS: Resolution[] = ['DONE', 'FIXED', 'WONT_DO', 'DUPLICATE', 'CANNOT_REPRODUCE'];
+export const RESOLUTION_LABEL: Record<Resolution, string> = {
+  DONE: 'Done', FIXED: 'Fixed', WONT_DO: "Won't do", DUPLICATE: 'Duplicate', CANNOT_REPRODUCE: 'Cannot reproduce',
+};
+
+export interface WorkflowColumn {
+  id: number;
+  name: string;
+  status: Status;
+  required: string[];
+}
+
+export interface Workflow {
+  restricted: boolean;
+  columns: WorkflowColumn[];
+  transitions: { fromId: number | null; toId: number }[];
+  /** Requirement key → human label. */
+  requirements: Record<string, string>;
+}
+
+export interface ProjectComponent {
+  id: number;
+  name: string;
+  description: string;
+  lead: User | null;
+  taskCount: number;
+}
+
+export type ApprovalState = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Approval {
+  id: number;
+  approver: User;
+  requestedBy: User;
+  state: ApprovalState;
+  request: string;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  canDecide: boolean;
+  task: TaskRef;
+}
+
+export interface SprintGoal {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
+export interface PersonCapacity {
+  user: User;
+  workingDays: number;
+  awayDays: number;
+  daysOff: number;
+  hoursPerDay: number;
+  availableHours: number;
+  remainingHours: number;
+  tasks: number;
+  unestimated: number;
+  points: number;
+  over: boolean;
+}
+
+export interface SprintCapacity {
+  start: string;
+  end: string;
+  datesAssumed: boolean;
+  workingDays: number;
+  people: PersonCapacity[];
+  availableHours: number;
+  remainingHours: number;
+}
+
+export interface TimelineBar {
+  id: number;
+  key: string;
+  title: string;
+  status: Status;
+  type: TaskType;
+  assignee: User | null;
+  epic: EpicRef | null;
+  start: string;
+  due: string;
+  days: number;
+  points: number | null;
+  critical: boolean;
+  slack: number;
+  conflict: boolean;
+}
+
+export interface Timeline {
+  tasks: TimelineBar[];
+  dependencies: { from: number; to: number }[];
+  criticalPath: number[];
+  criticalDays: number;
+  unscheduled: number;
+  autoSchedule: boolean;
+}
+
+export type Risk = 'OK' | 'WATCH' | 'AT_RISK';
+
+export interface PortfolioRow {
+  key: string;
+  name: string;
+  color: string | null;
+  kanban: boolean;
+  open: number;
+  inProgress: number;
+  done: number;
+  percentDone: number;
+  overdue: number;
+  unassigned: number;
+  sprint: { id: number; name: string; end: string | null; done: number; total: number; percentDone: number;
+    percentTime: number; behind: boolean } | null;
+  release: { id: number; name: string; date: string | null; open: number; late: boolean } | null;
+  lateEpics: number;
+  lastActivity: string;
+  risk: Risk;
+  reasons: string[];
+}
+
+export type KeyResultKind = 'MANUAL' | 'EPICS';
+
+export interface KeyResult {
+  id: number;
+  title: string;
+  kind: KeyResultKind;
+  startValue: number | null;
+  target: number | null;
+  current: number | null;
+  unit: string | null;
+  percent: number;
+  epics: { id: number | null; name: string; projectKey: string; done: number; total: number }[];
+}
+
+export type GoalHealth = 'none' | 'done' | 'on_track' | 'at_risk' | 'off_track';
+
+export interface Goal {
+  id: number;
+  title: string;
+  description: string;
+  quarter: string;
+  owner: User;
+  shared: boolean;
+  canEdit: boolean;
+  percent: number;
+  expected: number;
+  health: GoalHealth;
+  keyResults: KeyResult[];
+}
+
+export interface KeyResultInput {
+  title: string;
+  kind: KeyResultKind;
+  startValue?: number | null;
+  target?: number | null;
+  current?: number | null;
+  unit?: string | null;
+  epicIds?: number[];
 }

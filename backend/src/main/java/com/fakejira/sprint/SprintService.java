@@ -31,6 +31,9 @@ import java.util.List;
 @Transactional
 public class SprintService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationEventPublisher events;
+
     static final int DEFAULT_LENGTH_DAYS = 14;
 
     private final SprintRepository sprints;
@@ -147,6 +150,7 @@ public class SprintService {
         }
         tasks.findBySprintId(sprint.getId()).forEach(task -> task.setSprint(null));
         live.projectChanged(sprint.getProject());
+        events.publishEvent(new SprintDeleting(sprint.getId()));
         sprints.delete(sprint);
     }
 

@@ -24,10 +24,11 @@ public class BoardService {
     public record ColumnInput(String name, TaskStatus status, Integer wipLimit) {
     }
 
-    public record ColumnResponse(Long id, String name, TaskStatus status, int position, Integer wipLimit) {
+    public record ColumnResponse(Long id, String name, TaskStatus status, int position, Integer wipLimit,
+                                 java.util.List<String> required) {
         static ColumnResponse of(BoardColumn column) {
             return new ColumnResponse(column.getId(), column.getName(), column.getStatus(), column.getPosition(),
-                    column.getWipLimit());
+                    column.getWipLimit(), column.getRequiredFields());
         }
     }
 
@@ -35,8 +36,14 @@ public class BoardService {
     private final TaskRepository tasks;
     private final ProjectAccess access;
     private final LiveEvents live;
+    private final com.fakejira.workflow.WorkflowTransitionRepository transitions;
+    private final com.fakejira.project.ProjectRepository projects;
 
-    public BoardService(BoardColumnRepository columns, TaskRepository tasks, ProjectAccess access, LiveEvents live) {
+    public BoardService(BoardColumnRepository columns, TaskRepository tasks, ProjectAccess access, LiveEvents live,
+                        com.fakejira.workflow.WorkflowTransitionRepository transitions,
+                        com.fakejira.project.ProjectRepository projects) {
+        this.projects = projects;
+        this.transitions = transitions;
         this.columns = columns;
         this.tasks = tasks;
         this.access = access;
@@ -82,6 +89,9 @@ public class BoardService {
             }
         }
         column.setName(input.name().trim());
+        if (input.status() != TaskStatus.DONE) {
+            column.setRequiredFields(column.getRequiredFields().stream().filter(r -> !r.equals("resolution")).toList());
+        }
         column.setStatus(input.status());
         column.setWipLimit(normalizeLimit(input.wipLimit()));
         live.projectChanged(column.getProject());
@@ -110,6 +120,7 @@ public class BoardService {
             task.setBoardColumn(null);
         }
         all.remove(indexOf(all, column));
+        transitions.deleteForColumn(column.getId());
         columns.delete(column);
         renumber(all);
         live.projectChanged(column.getProject());
@@ -119,8 +130,14 @@ public class BoardService {
     /** Creates the standard four columns the first time a project's board is configured or read. */
     public List<BoardColumn> ensureDefaults(Project project) {
         List<BoardColumn> list = new java.util.ArrayList<>(columns.findByProjectIdOrderByPositionAscIdAsc(project.getId()));
-        Set<TaskStatus> covered = list.stream().map(BoardColumn::getStatus).collect(Collectors.toCollection(
-                () -> EnumSet.noneOf(TaskStatus.class)));
+        Set<TaskStatus> covered = covered(list);
+        if (list.isEmpty() || covered.size() < TaskStatus.values().length) {
+            // Two requests can get here at once (a page loads the board and the workflow together): lock the
+            // project row and look again so only one of them creates the missing columns.
+            projects.lockById(project.getId());
+            list = new java.util.ArrayList<>(columns.findByProjectIdOrderByPositionAscIdAsc(project.getId()));
+            covered = covered(list);
+        }
         if (list.isEmpty() || covered.size() < TaskStatus.values().length) {
             for (TaskStatus status : TaskStatus.values()) {
                 if (!covered.contains(status)) {
@@ -133,6 +150,10 @@ public class BoardService {
             renumber(list);
         }
         return list;
+    }
+
+    private static Set<TaskStatus> covered(List<BoardColumn> list) {
+        return list.stream().map(BoardColumn::getStatus).collect(Collectors.toCollection(() -> EnumSet.noneOf(TaskStatus.class)));
     }
 
     private BoardColumn editable(Long id, User user) {

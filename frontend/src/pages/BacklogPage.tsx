@@ -18,6 +18,7 @@ import { PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, type Epic, type Priority, t
   type VelocityEntry,
 } from '../types';
 import { t } from '../i18n';
+import { SprintGoals } from '../components/sprint/SprintGoals';
 
 type SprintDialog = { kind: 'edit' | 'start'; sprint: Sprint } | { kind: 'create' } | null;
 
@@ -353,6 +354,7 @@ export function BacklogPage() {
                 {sprint.state === 'ACTIVE' && (
                   <Link className="btn btn-ghost btn-sm" to={`/p/${key}/sprints/${sprint.id}`}>{t("Review & retro")}</Link>
                 )}
+                <Link className="btn btn-ghost btn-sm" to={`/p/${key}/sprints/${sprint.id}?tab=capacity`}>{t("Capacity")}</Link>
                 <SprintMenu
                   onEdit={() => setDialog({ kind: 'edit', sprint })}
                   onDelete={sprint.state === 'PLANNED' ? () => setConfirm({ kind: 'delete', sprint }) : undefined}
@@ -361,6 +363,7 @@ export function BacklogPage() {
               </div>}
             </header>
             {sprint.goal && <p className="sprint-goal muted">{sprint.goal}</p>}
+            <SprintGoals sprintId={sprint.id} canEdit={canEdit} compact />
             {items.length > 0 && (
               <div className={`capacity ${overCapacity ? 'over' : ''}`} aria-label={t("Sprint capacity")}>
                 <strong>{planned} pts planned</strong>

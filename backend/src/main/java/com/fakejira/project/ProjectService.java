@@ -27,6 +27,9 @@ import java.util.Set;
 @Transactional
 public class ProjectService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fakejira.board.BoardService board;
+
     private final ProjectRepository projects;
     private final ProjectAccess access;
     private final UserRepository users;
@@ -82,6 +85,8 @@ public class ProjectService {
         }
         Project project = projects.save(new Project(key, request.name().trim(), trim(request.description()), user));
         projectTemplates.apply(project, user, request.template());
+        // Create the board columns now rather than on first view, when several requests could race to do it.
+        board.ensureDefaults(project);
         audit.record(user, "project.create", key, project.getName() + (request.template() == null ? "" : " (" + request.template() + ")"));
         return ProjectResponse.of(project);
     }
@@ -101,6 +106,9 @@ public class ProjectService {
         }
         if (request.color() != null) {
             project.setColor(request.color());
+        }
+        if (request.autoSchedule() != null) {
+            project.setAutoSchedule(request.autoSchedule());
         }
         live.projectChanged(project);
         return ProjectResponse.of(project);
@@ -176,6 +184,7 @@ public class ProjectService {
             throw ApiException.notFound("That user is not a member of this project.");
         }
         tasks.unassignInProject(project.getId(), memberId);
+        events.publishEvent(new MemberRemoved(project.getId(), memberId));
         audit.record(user, leaving ? "project.leave" : "project.member_remove", project.getKey(), "user #" + memberId);
         live.projectChangedFor(project, Set.of(memberId));
     }

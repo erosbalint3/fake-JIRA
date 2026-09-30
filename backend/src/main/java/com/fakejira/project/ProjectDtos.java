@@ -48,10 +48,13 @@ public final class ProjectDtos {
 
             /** Accent colour like #2a78d6; empty clears it. Unchanged when null. */
             @jakarta.validation.constraints.Pattern(regexp = "^(#[0-9a-fA-F]{6})?$", message = "Use a colour like #2a78d6")
-            String color) {
+            String color,
+
+            /** Reschedule blocked tasks automatically when a blocker slips. Unchanged when null. */
+            Boolean autoSchedule) {
 
         public UpdateProjectRequest(String name, String description) {
-            this(name, description, null, null);
+            this(name, description, null, null, null);
         }
     }
 
@@ -82,7 +85,9 @@ public final class ProjectDtos {
             boolean githubAutoDone,
             Instant createdAt,
             boolean kanban,
-            String color) {
+            String color,
+            boolean autoSchedule,
+            boolean restrictTransitions) {
 
         public static ProjectResponse of(Project project) {
             return new ProjectResponse(
@@ -105,7 +110,9 @@ public final class ProjectDtos {
                     project.isGithubAutoDone(),
                     project.getCreatedAt(),
                     project.isKanban(),
-                    project.getColor());
+                    project.getColor(),
+                    project.isAutoSchedule(),
+                    project.isRestrictTransitions());
         }
     }
 }

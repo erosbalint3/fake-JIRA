@@ -65,13 +65,14 @@ public class TaskSupport {
         activity.save(new TaskActivity(task, actor, message, before, after));
     }
 
-    /** Reporter, assignee and watchers, without duplicates. */
+    /** Reporter, assignee, helpers and watchers, without duplicates. */
     public Set<User> participants(Task task) {
         Map<Long, User> byId = new LinkedHashMap<>();
         byId.put(task.getReporter().getId(), task.getReporter());
         if (task.getAssignee() != null) {
             byId.put(task.getAssignee().getId(), task.getAssignee());
         }
+        task.getHelpers().forEach(helper -> byId.putIfAbsent(helper.getId(), helper));
         task.getWatchers().forEach(watcher -> byId.putIfAbsent(watcher.getId(), watcher));
         return new LinkedHashSet<>(byId.values());
     }
