@@ -1396,3 +1396,22 @@ export interface LinkPreviewData {
   embed: string | null;
   kind: string;
 }
+
+// ---- Claude assistant ----------------------------------------------------------------------------------------------
+
+export interface AiStatus { enabled: boolean; model: string | null }
+export interface AiTaskDraft {
+  title: string; description: string; type: TaskType; priority: Priority; labels: string[]; storyPoints: number;
+  checklist: string[];
+}
+export interface AiThreadSummary { summary: string; decisions: string[]; openQuestions: string[]; changes: string[] }
+export interface AiProposedTask { title: string; description: string; type: TaskType; priority: Priority; storyPoints: number }
+export interface AiNotes { markdown: string }
+export interface AiFql { fql: string; explanation: string; total: number }
+export interface AiEstimate {
+  storyPoints: number; estimateHours: number | null; confidence: 'low' | 'medium' | 'high'; reasoning: string;
+  similar: { task: TaskRef; storyPoints: number | null; estimateMinutes: number | null; loggedMinutes: number }[];
+}
+export interface AiTriage {
+  type: TaskType; priority: Priority; assignee: User | null; labels: string[]; duplicateOf: TaskRef | null; reasoning: string;
+}

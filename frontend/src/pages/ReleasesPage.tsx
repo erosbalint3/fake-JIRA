@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ClipboardCopy, FileText, Package, PackageCheck, Pencil, Plus, Rocket, Trash2, Undo2 } from 'lucide-react';
+import { ChevronDown, ClipboardCopy, FileText, Package, PackageCheck, Pencil, Plus, Rocket, Sparkles, Trash2, Undo2 } from 'lucide-react';
+import { AiNotesModal, useAiEnabled } from '../components/Ai';
 import { api, ApiError, type ReleaseInput } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -24,6 +25,8 @@ export function ReleasesPage() {
   const [shipping, setShipping] = useState<Release | null>(null);
   const [deleting, setDeleting] = useState<Release | null>(null);
   const [notes, setNotes] = useState<{ release: Release; markdown: string } | null>(null);
+  const aiEnabled = useAiEnabled();
+  const [drafting, setDrafting] = useState<Release | null>(null);
   const [open, setOpen] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -73,6 +76,10 @@ export function ReleasesPage() {
           <span className="spacer" />
           <button className="btn btn-ghost btn-sm" onClick={() => api.releaseNotes(release.id).then(setNotes)
             .catch((e: ApiError) => toast(e.message, 'error'))}><FileText size={15} /> {t("Notes")}</button>
+          {aiEnabled && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setDrafting(release)}
+              aria-label={t('Write release notes for {name} with Claude', { name: release.name })}><Sparkles size={15} aria-hidden /> {t('Claude')}</button>
+          )}
           {canEdit && !release.released && (
             <button className="btn btn-soft btn-sm" onClick={() => setShipping(release)}><Rocket size={15} /> {t("Release")}</button>
           )}
@@ -154,6 +161,16 @@ export function ReleasesPage() {
           }} />
       )}
       {notes && <NotesModal notes={notes} onClose={() => setNotes(null)} />}
+      {drafting && (
+        <AiNotesModal title={t('Release notes for {name} by Claude', { name: drafting.name })}
+          load={() => api.aiReleaseNotes(drafting.id)} onClose={() => setDrafting(null)}
+          useLabel={canEdit ? t('Use as description') : undefined}
+          onUse={canEdit ? async (markdown) => {
+            await api.updateRelease(drafting.id, { name: drafting.name, description: markdown, releaseDate: drafting.releaseDate });
+            toast(t('Release description updated'), 'success');
+            load();
+          } : undefined} />
+      )}
     </div>
   );
 }

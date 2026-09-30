@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCopy, Gauge, NotebookPen, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, Gauge, NotebookPen, ListPlus, MessageSquareHeart, Pencil, Presentation, Sparkles, ThumbsUp, Trash2 } from 'lucide-react';
+import { AiNotesModal, useAiEnabled } from '../components/Ai';
 import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -80,6 +81,8 @@ export function SprintPage() {
 
 function ReviewView({ review }: { review: SprintReview }) {
   const toast = useToast();
+  const aiEnabled = useAiEnabled();
+  const [drafting, setDrafting] = useState(false);
   const percent = review.committedPoints ? Math.round((review.completedPoints / review.committedPoints) * 100) : null;
   const copy = async () => {
     try {
@@ -107,7 +110,13 @@ function ReviewView({ review }: { review: SprintReview }) {
       </div>
       <div className="review-actions">
         <button className="btn btn-ghost btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy as Markdown")}</button>
+        {aiEnabled && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setDrafting(true)}><Sparkles size={15} aria-hidden /> {t('Write the review with Claude')}</button>
+        )}
       </div>
+      {drafting && (
+        <AiNotesModal title={t('Sprint review by Claude')} load={() => api.aiSprintReview(review.sprint.id)} onClose={() => setDrafting(false)} />
+      )}
       <div className="report-grid">
         <ReviewList title={t("Completed")} tasks={review.completed} empty="Nothing was finished." />
         <ReviewList title={t("Not finished")} tasks={review.unfinished} empty="Everything was finished." />

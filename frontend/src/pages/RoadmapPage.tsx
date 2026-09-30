@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Map as MapIcon, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AiSplitEpicModal, useAiEnabled } from '../components/Ai';
 import { api, ApiError, type EpicInput } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -35,6 +36,8 @@ export function RoadmapPage() {
   const [epics, setEpics] = useState<Epic[] | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Epic | 'new' | null>(null);
+  const aiEnabled = useAiEnabled();
+  const [splitting, setSplitting] = useState<Epic | null>(null);
   const [deleting, setDeleting] = useState<Epic | null>(null);
 
   const load = useCallback(() => {
@@ -170,6 +173,12 @@ export function RoadmapPage() {
                     <Link to={`/p/${key}/backlog?epic=${epic.id}`} title={t("Show this epic's tasks")}>{epic.name}</Link>
                     {canEdit && (
                       <span className="roadmap-actions">
+                        {aiEnabled && (
+                          <button className="icon-button sm" aria-label={t('Split {name} into tasks with Claude', { name: epic.name })}
+                            title={t('Split into tasks with Claude')} onClick={() => setSplitting(epic)}>
+                            <Sparkles size={14} />
+                          </button>
+                        )}
                         <button className="icon-button sm" aria-label={`Edit ${epic.name}`} onClick={() => setEditing(epic)}>
                           <Pencil size={14} />
                         </button>
@@ -233,6 +242,14 @@ export function RoadmapPage() {
             }
             toast(editing === 'new' ? `Epic “${input.name}” created` : 'Epic saved');
             setEditing(null);
+            load();
+          }} />
+      )}
+      {splitting && project && (
+        <AiSplitEpicModal epicId={splitting.id} epicName={splitting.name} projectKey={project.key}
+          onClose={() => setSplitting(null)}
+          onCreated={(count) => {
+            toast(t('{count} tasks added to {name}', { count, name: splitting.name }), 'success');
             load();
           }} />
       )}

@@ -125,6 +125,14 @@ app:
     # Set APP_JWT_SECRET (32+ chars) in production so sessions survive restarts.
     secret: ${APP_JWT_SECRET:}
     validity: 12h
+  ai:
+    # The Claude assistant (draft tasks, summaries, epic splitting, notes, natural-language search, estimates,
+    # triage). Off unless an Anthropic API key is set. Task text is sent to the Anthropic API when someone uses it.
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${APP_AI_MODEL:claude-opus-5-5}
+    # If Claude declines a request, retry it server-side on Anthropic's recommended fallback model.
+    fallbacks: ${APP_AI_FALLBACKS:true}
+    requests-per-hour: ${APP_AI_REQUESTS_PER_HOUR:60}
 
 springdoc:
   swagger-ui:

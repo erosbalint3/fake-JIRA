@@ -13,6 +13,7 @@ import type {
   ForecastResult, Burnup, AgingWip, BugTrends, SlaTarget, TaskSla, SlaReport, TrendWeek, ReportSubscription, ReportKind,
   HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, TaskGithub, BuildInfo, GithubRepoSettings, ChatCommandSettings,
   CalendarStatus, LinkPreviewData, RequestTypeDef, PortalConversation, SimilarTask,
+  AiStatus, AiTaskDraft, AiThreadSummary, AiProposedTask, AiNotes, AiFql, AiEstimate, AiTriage,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -604,6 +605,16 @@ export const api = {
   reorderRequestTypes: (key: string, ids: number[]) => request<RequestTypeDef[]>('PUT', `/projects/${key}/request-types/order`, ids),
   portalConversation: (taskId: number) => request<PortalConversation | undefined>('GET', `/tasks/${taskId}/portal`),
   replyToRequester: (taskId: number, body: string) => request<PortalConversation>('POST', `/tasks/${taskId}/portal/messages`, { body }),
+  aiStatus: () => request<AiStatus>('GET', '/ai/status'),
+  aiDraftTask: (key: string, prompt: string) => request<AiTaskDraft>('POST', `/projects/${key}/ai/draft-task`, { prompt }),
+  aiSummary: (taskId: number, since?: string) => request<AiThreadSummary>('POST', `/tasks/${taskId}/ai/summary`, { since: since ?? null }),
+  aiSplitEpic: (epicId: number, guidance: string) =>
+    request<{ tasks: AiProposedTask[] }>('POST', `/epics/${epicId}/ai/split`, { guidance }),
+  aiSprintReview: (sprintId: number) => request<AiNotes>('POST', `/sprints/${sprintId}/ai/review`),
+  aiReleaseNotes: (releaseId: number) => request<AiNotes>('POST', `/releases/${releaseId}/ai/notes`),
+  aiFql: (question: string, projectKey?: string) => request<AiFql>('POST', '/ai/fql', { question, projectKey: projectKey ?? null }),
+  aiEstimate: (taskId: number) => request<AiEstimate>('POST', `/tasks/${taskId}/ai/estimate`),
+  aiTriage: (taskId: number) => request<AiTriage>('POST', `/tasks/${taskId}/ai/triage`),
   similarTasks: (key: string, q: string, exclude?: number) =>
     request<SimilarTask[]>('GET', `/projects/${key}/similar${query({ q, exclude })}`),
   taskGithub: (taskId: number) => request<TaskGithub>('GET', `/tasks/${taskId}/github`),

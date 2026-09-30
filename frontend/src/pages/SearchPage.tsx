@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bookmark, Download, FileSpreadsheet, FileText, Link2, Mail, Search as SearchIcon } from 'lucide-react';
+import { Bookmark, Download, FileSpreadsheet, FileText, Link2, Mail, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { aiErrorMessage, useAiEnabled } from '../components/Ai';
 import { ScheduleReportModal } from '../components/reports/ScheduleReportModal';
 import { api, ApiError, saveBlob } from '../api';
 import { useToast } from '../toast';
@@ -142,6 +143,11 @@ export function SearchPage() {
         <button className="btn btn-primary" disabled={loading}><SearchIcon size={16} /> {t("Search")}</button>
       </form>
       {error && <div className="alert fql-error" role="alert">{error.message}</div>}
+      <AskClaude onQuery={(q) => {
+        setText(q);
+        setSort(null);
+        setParams({ q }, { replace: false });
+      }} />
       <div className="chip-row fql-examples">
         {EXAMPLES.map((e) => (
           <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{e.label}</button>
@@ -264,5 +270,38 @@ function SaveSearchModal({ query, onClose, onSaved }: { query: string; onClose: 
         <p className="muted small">{t("Saved filters appear in the sidebar and the command palette.")}</p>
       </form>
     </Modal>
+  );
+}
+
+/** "Ask Claude": a plain-language question becomes an FQL query, which is shown and run. */
+function AskClaude({ onQuery }: { onQuery: (fql: string) => void }) {
+  const enabled = useAiEnabled();
+  const [question, setQuestion] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+  if (!enabled) return null;
+  const ask = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!question.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const answer = await api.aiFql(question);
+      onQuery(answer.fql);
+      setNote({ text: answer.explanation, error: false });
+    } catch (e) {
+      setNote({ text: aiErrorMessage(e), error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="ai-ask" onSubmit={ask}>
+      <Sparkles size={16} aria-hidden className="ai-ask-icon" />
+      <input value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={1000}
+        placeholder={t('Or ask in plain words, e.g. “bugs assigned to me that are overdue”')} aria-label={t('Ask Claude to write the query')} />
+      <button className="btn btn-ghost btn-sm" disabled={busy || !question.trim()}>{busy ? t('Thinking…') : t('Ask Claude')}</button>
+      {note && <p className={note.error ? 'field-error ai-ask-note' : 'muted small ai-ask-note'} role="status">{note.text}</p>}
+    </form>
   );
 }

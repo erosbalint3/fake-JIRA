@@ -1,5 +1,6 @@
 import { isReadOnlyRole } from '../types';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { AiDraftBox, useAiEnabled } from './Ai';
 import { useCollaborativeText } from '../collab';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
@@ -63,6 +64,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
   const [duplicates, setDuplicates] = useState<SimilarTask[]>([]);
+  const aiEnabled = useAiEnabled();
   const collab = useCollaborativeText(mode.kind === 'edit' ? mode.taskId ?? null : null, form.description,
     (description) => setForm((current) => ({ ...current, description })), descriptionRef);
 
@@ -193,6 +195,16 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             </select>
             {errors.projectKey && <small className="field-error">{errors.projectKey}</small>}
           </label>
+        )}
+        {mode.kind === 'create' && aiEnabled && (
+          <AiDraftBox projectKey={projectKey} onDraft={(draft) => {
+            setForm({
+              ...form, title: draft.title, description: draft.description, type: draft.type, priority: draft.priority,
+              storyPoints: draft.storyPoints || form.storyPoints,
+              labels: [...new Set([...form.labels, ...draft.labels])].slice(0, 10),
+            });
+            if (draft.checklist.length) setChecklist(draft.checklist);
+          }} />
         )}
         <label className="field">
           <span>{t("Title")}</span>

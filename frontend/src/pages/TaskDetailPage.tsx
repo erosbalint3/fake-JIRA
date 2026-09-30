@@ -22,6 +22,7 @@ import { PollsPanel } from '../components/task/PollsPanel';
 import { KudosPanel } from '../components/task/KudosPanel';
 import { PersonalPanel } from '../components/task/PersonalPanel';
 import { SlaPanel } from '../components/task/SlaPanel';
+import { AiPanel } from '../components/task/AiPanel';
 import { RequesterPanel } from '../components/task/RequesterPanel';
 import { TimerButton } from '../components/Timer';
 import { usePresence } from '../collab';
@@ -711,6 +712,7 @@ export function TaskDetailPage() {
           <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
           <KudosPanel task={task} me={user} canThank={canComment} />
           <SlaPanel task={task} />
+          <AiPanel task={task} canEdit={canEdit} update={update} onChanged={load} />
           <PersonalPanel task={task} />
           {wikiMentions.length > 0 && (
             <section className="side-section">
