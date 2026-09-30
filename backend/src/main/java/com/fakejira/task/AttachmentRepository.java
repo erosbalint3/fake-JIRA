@@ -24,4 +24,9 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
     @Query("select a.task.project.key, a.task.project.name, sum(a.size), count(a) from Attachment a "
             + "group by a.task.project.key, a.task.project.name order by sum(a.size) desc")
     List<Object[]> usageByProject();
+
+    /** Pictures attached anywhere in the project, newest first (the project gallery). */
+    @Query("select a from Attachment a join fetch a.task t join fetch a.uploader where t.project.id = :projectId "
+            + "and lower(a.contentType) like 'image/%' and t.archivedAt is null order by a.createdAt desc")
+    List<Attachment> imagesInProject(@Param("projectId") Long projectId, org.springframework.data.domain.Pageable page);
 }

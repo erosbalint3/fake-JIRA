@@ -78,6 +78,18 @@ public class Project {
     @Column(length = 7)
     private String color;
 
+    /** An emoji shown next to the name (optional). */
+    @Column(length = 16)
+    private String icon;
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
     /** When set, tasks may only move between columns along the transitions defined in the workflow. */
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean restrictTransitions;

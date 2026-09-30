@@ -65,7 +65,10 @@ public class EpicController {
 
     public record EpicResponse(Long id, String name, String description, int colorIndex, LocalDate startDate,
                                LocalDate dueDate, int taskCount, int doneCount, int points, int donePoints,
-                               List<Long> dependsOn) {
+                               List<Long> dependsOn, String icon) {
+    }
+
+    public record IconRequest(String icon) {
     }
 
     public record DependenciesRequest(List<Long> dependsOn) {
@@ -180,6 +183,17 @@ public class EpicController {
         epics.delete(epic);
     }
 
+    /** Sets or clears (empty) the epic's emoji. */
+    @org.springframework.web.bind.annotation.PutMapping("/api/epics/{id}/icon")
+    @Transactional
+    public EpicResponse setIcon(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @RequestBody IconRequest request) {
+        User user = currentUser.from(jwt);
+        Epic epic = editable(id, user);
+        epic.setIcon(com.fakejira.project.Icons.clean(request.icon()));
+        live.projectChanged(epic.getProject());
+        return response(epic, new int[4]);
+    }
+
     private Epic editable(Long id, User user) {
         Epic epic = epics.findById(id).orElseThrow(() -> ApiException.notFound("Epic not found."));
         access.require(epic.getProject(), user, com.fakejira.project.Permission.MANAGE_EPICS);
@@ -195,7 +209,7 @@ public class EpicController {
     private static EpicResponse response(Epic epic, int[] s) {
         return new EpicResponse(epic.getId(), epic.getName(), epic.getDescription(), epic.getColorIndex(),
                 epic.getStartDate(), epic.getDueDate(), s[0], s[1], s[2], s[3],
-                epic.getDependsOn().stream().map(Epic::getId).sorted().toList());
+                epic.getDependsOn().stream().map(Epic::getId).sorted().toList(), epic.getIcon());
     }
 
     private static String trim(String value) {

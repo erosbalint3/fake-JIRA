@@ -91,6 +91,14 @@ public class ProjectService {
         return ProjectResponse.of(project);
     }
 
+    public ProjectResponse setIcon(User user, String key, String icon) {
+        Project project = access.memberProject(key, user);
+        access.requireOwner(project, user);
+        project.setIcon(Icons.clean(icon));
+        live.projectChanged(project);
+        return ProjectResponse.of(project);
+    }
+
     public ProjectResponse update(User user, String key, UpdateProjectRequest request) {
         Project project = access.memberProject(key, user);
         access.requireOwner(project, user);

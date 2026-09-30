@@ -87,7 +87,8 @@ public final class ProjectDtos {
             boolean kanban,
             String color,
             boolean autoSchedule,
-            boolean restrictTransitions) {
+            boolean restrictTransitions,
+            String icon) {
 
         /** As seen by {@code viewer}: guests do not get other people's email addresses or integration settings. */
         public static ProjectResponse of(Project project, com.fakejira.user.User viewer) {
@@ -103,7 +104,7 @@ public final class ProjectDtos {
             return new ProjectResponse(full.id(), full.key(), full.name(), full.description(),
                     new UserSummary(owner.id(), owner.username(), null, owner.displayName(), owner.avatarUrl(), owner.awayUntil()),
                     members, false, false, full.createdAt(), full.kanban(), full.color(), full.autoSchedule(),
-                    full.restrictTransitions());
+                    full.restrictTransitions(), full.icon());
         }
 
         public static ProjectResponse of(Project project) {
@@ -130,7 +131,8 @@ public final class ProjectDtos {
                     project.isKanban(),
                     project.getColor(),
                     project.isAutoSchedule(),
-                    project.isRestrictTransitions());
+                    project.isRestrictTransitions(),
+                    project.getIcon());
         }
     }
 }

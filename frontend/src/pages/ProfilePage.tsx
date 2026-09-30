@@ -1,3 +1,4 @@
+import { AppearancePanel } from '../components/profile/AppearancePanel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { BellRing, Camera, Languages, CheckCircle2, Clock, ListChecks, Mail, PenSquare, Trash2 } from 'lucide-react';
 import { api, ApiError } from '../api';
@@ -217,6 +218,7 @@ export function ProfilePage() {
         )}
       </section>
 
+      <AppearancePanel />
       <NotificationRulesPanel />
       <ScheduledReportsPanel />
       <CalendarSyncPanel />

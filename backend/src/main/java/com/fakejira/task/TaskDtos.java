@@ -236,9 +236,9 @@ public final class TaskDtos {
         }
     }
 
-    public record EpicRef(Long id, String name, int colorIndex) {
+    public record EpicRef(Long id, String name, int colorIndex, String icon) {
         public static EpicRef of(Epic epic) {
-            return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex());
+            return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex(), epic.getIcon());
         }
     }
 

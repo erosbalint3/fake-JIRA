@@ -27,6 +27,8 @@ export interface Member extends User {
 }
 
 export interface Project {
+  /** An emoji shown next to the name. */
+  icon?: string | null;
   id: number;
   key: string;
   name: string;
@@ -62,6 +64,7 @@ export interface Sprint extends SprintRef {
 }
 
 export interface EpicRef {
+  icon?: string | null;
   id: number;
   name: string;
   colorIndex: number;
@@ -1442,3 +1445,5 @@ export type Permission = 'CREATE_TASKS' | 'EDIT_TASKS' | 'DELETE_TASKS' | 'COMME
   | 'MANAGE_RELEASES' | 'MANAGE_EPICS' | 'VIEW_INTERNAL';
 export interface CustomRole { id: number; name: string; description: string; permissions: Permission[]; memberIds: number[] }
 export interface RolesCatalog { roles: CustomRole[]; permissions: { id: Permission; label: string }[] }
+
+export interface GalleryImage { id: number; filename: string; size: number; createdAt: string; task: TaskRef; uploader: User }

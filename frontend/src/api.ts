@@ -15,7 +15,7 @@ import type {
   CalendarStatus, LinkPreviewData, RequestTypeDef, PortalConversation, SimilarTask,
   AiStatus, AiTaskDraft, AiThreadSummary, AiProposedTask, AiNotes, AiFql, AiEstimate, AiTriage,
   SecurityOverview, SecurityPolicy, RetentionPolicy, RetentionCounts, EncryptionStatus, RestoreStatus, HealthCheck,
-  HealthThresholds, CustomRole, RolesCatalog, Permission,
+  HealthThresholds, CustomRole, RolesCatalog, Permission, GalleryImage,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -608,6 +608,12 @@ export const api = {
   reorderRequestTypes: (key: string, ids: number[]) => request<RequestTypeDef[]>('PUT', `/projects/${key}/request-types/order`, ids),
   portalConversation: (taskId: number) => request<PortalConversation | undefined>('GET', `/tasks/${taskId}/portal`),
   replyToRequester: (taskId: number, body: string) => request<PortalConversation>('POST', `/tasks/${taskId}/portal/messages`, { body }),
+  preferences: () => request<Record<string, unknown>>('GET', '/preferences'),
+  setPreference: (key: string, value: unknown) => request<unknown>('PUT', `/preferences/${encodeURIComponent(key)}`, value),
+  deletePreference: (key: string) => request<void>('DELETE', `/preferences/${encodeURIComponent(key)}`),
+  setProjectIcon: (key: string, icon: string) => request<Project>('PUT', `/projects/${key}/icon`, { icon }),
+  setEpicIcon: (id: number, icon: string) => request<Epic>('PUT', `/epics/${id}/icon`, { icon }),
+  gallery: (key: string) => request<GalleryImage[]>('GET', `/projects/${key}/gallery`),
   aiStatus: () => request<AiStatus>('GET', '/ai/status'),
   aiDraftTask: (key: string, prompt: string) => request<AiTaskDraft>('POST', `/projects/${key}/ai/draft-task`, { prompt }),
   aiSummary: (taskId: number, since?: string) => request<AiThreadSummary>('POST', `/tasks/${taskId}/ai/summary`, { since: since ?? null }),
