@@ -1,10 +1,10 @@
+import { usePageDrop } from '../components/PageDrop';
+import { isReadOnlyRole } from '../types';
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip,
-  Pencil, Trash2, Upload, X,
-} from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, BookOpen, CheckSquare, CornerLeftUp, Download, Eye, EyeOff, FileQuestion, FileText, History, MessageSquare, Paperclip, Pencil, Trash2, Upload, X, Lock } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useTransitionGuard } from '../components/TransitionGuard';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
 import { useProjects } from '../projects';
@@ -13,6 +13,18 @@ import { Avatar } from '../components/Avatar';
 import { PokerPanel } from '../components/task/PokerPanel';
 import { ShareModal } from '../components/task/ShareModal';
 import { CustomFieldsPanel } from '../components/task/CustomFieldsPanel';
+import { ApprovalsPanel } from '../components/task/ApprovalsPanel';
+import { PresenceBar } from '../components/task/PresenceBar';
+import { InlineComments } from '../components/task/InlineComments';
+import { PollsPanel } from '../components/task/PollsPanel';
+import { KudosPanel } from '../components/task/KudosPanel';
+import { PersonalPanel } from '../components/task/PersonalPanel';
+import { SlaPanel } from '../components/task/SlaPanel';
+import { AiPanel } from '../components/task/AiPanel';
+import { RequesterPanel } from '../components/task/RequesterPanel';
+import { TimerButton } from '../components/Timer';
+import { usePresence } from '../collab';
+import { ChipPicker } from '../components/ChipPicker';
 import { BlockedBadge, DueBadge, EpicChip, Labels, PriorityBadge, StatusBadge, TypeIcon,
 } from '../components/Badges';
 import { useCreateTask } from '../components/Layout';
@@ -33,7 +45,8 @@ import { TaskFormModal } from '../components/TaskFormModal';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
 import { fileSize, formatDate, formatDay, formatMinutes, timeAgo } from '../format';
 import {
-  PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL, type Activity, type Attachment, type ChecklistItem, type Comment,
+  PRIORITIES, PRIORITY_LABEL, RESOLUTIONS, RESOLUTION_LABEL, STATUSES, STATUS_LABEL, type ProjectComponent, type Resolution,
+  type Activity, type Attachment, type ChecklistItem, type Comment,
   type DevLink, type Epic, type Release, type Priority, type Sprint, type Status, type Task, type TaskInput, type TaskLink, type TimeEntry,
   type User,
 } from '../types';
@@ -54,6 +67,7 @@ export function TaskDetailPage() {
   const { user } = useAuth();
   const { byKey } = useProjects();
   const toast = useToast();
+  const guard = useTransitionGuard();
   const navigate = useNavigate();
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -64,10 +78,18 @@ export function TaskDetailPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [deleted, setDeleted] = useState(false);
   const [editing, setEditing] = useState(false);
+  // The task's updatedAt when the edit form opened, to catch someone else saving in the meantime.
+  const [editBase, setEditBase] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ input: TaskInput; message: string } | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [pollSignal, setPollSignal] = useState(0);
+  const [wikiMentions, setWikiMentions] = useState<{ title: string; slug: string }[]>([]);
   const [editingLabels, setEditingLabels] = useState<string[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [comment, setComment, clearComment] = useDraft(`comment:${taskId}`);
+  const [internalComment, setInternalComment] = useState(false);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [diff, setDiff] = useState<Activity | null>(null);
   const [moving, setMoving] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -79,6 +101,7 @@ export function TaskDetailPage() {
   const [devLinks, setDevLinks] = useState<DevLink[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
+  const [components, setComponents] = useState<ProjectComponent[]>([]);
   const [watching, setWatching] = useState(false);
   const [watchers, setWatchers] = useState<User[]>([]);
   const openCreate = useCreateTask();
@@ -115,7 +138,14 @@ export function TaskDetailPage() {
     api.sprints(task.projectKey).then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED'))).catch(() => {});
     api.epics(task.projectKey).then(setEpics).catch(() => {});
     api.releases(task.projectKey).then(setReleases).catch(() => {});
+    api.myPermissions(task.projectKey).then(setPermissions).catch(() => setPermissions([]));
+    api.components(task.projectKey).then(setComponents).catch(() => {});
   }, [task?.projectKey]);
+
+  const present = usePresence(Number.isNaN(taskId) ? null : taskId, editing, user?.id);
+  useEffect(() => {
+    if (!Number.isNaN(taskId)) api.taskWikiMentions(taskId).then(setWikiMentions).catch(() => {});
+  }, [taskId]);
 
   useLiveRefresh((m) => m.type === 'task' && m.data.taskId === taskId, () => {
     // A live "deleted" event arrives after someone else removed the task.
@@ -123,13 +153,28 @@ export function TaskDetailPage() {
   });
 
   const project = task ? byKey(task.projectKey) : undefined;
-  const { canEdit, isOwner } = useProjectAccess(project);
+  const { canEdit, isOwner, canComment } = useProjectAccess(project);
+  const uploadRef = useRef<(files: File[]) => void>(() => {});
+  const dropOverlay = usePageDrop(!!task && canEdit, t('Drop to attach to {key}', { key: task?.key ?? '' }), (files) => uploadRef.current(files));
+  const startEditing = () => {
+    setEditBase(task?.updatedAt ?? null);
+    setEditing(true);
+  };
+  // "e" in a task list opens the task straight in the editor.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (task && params.get('edit') === '1') {
+      setParams({}, { replace: true });
+      if (canEdit) startEditing();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task, canEdit, params]);
 
   if (deleted || error?.status === 404 || Number.isNaN(taskId)) {
     return (
       <div className="page">
-        <EmptyState icon={<FileQuestion size={28} />} title={deleted ? 'This task was deleted' : 'Task not found'}>
-          It may have been deleted, or you are not a member of its project. <Link to="/my-work">{t("Go to my work")}</Link>
+        <EmptyState icon={<FileQuestion size={28} />} title={deleted ? t('This task was deleted') : t('Task not found')}>
+          {t('It may have been deleted, or you are not a member of its project.')} <Link to="/my-work">{t("Go to my work")}</Link>
         </EmptyState>
       </div>
     );
@@ -138,7 +183,7 @@ export function TaskDetailPage() {
   if (!task || !user) return <div className="page"><Spinner /></div>;
 
   const members = project?.members ?? [];
-  const assignable = members.filter((m) => m.role !== 'VIEWER');
+  const assignable = members.filter((m) => !isReadOnlyRole(m.role));
   const isAssignee = task.assignee?.id === user.id;
   const canDelete = canEdit && (task.reporter.id === user.id || isOwner);
 
@@ -147,7 +192,7 @@ export function TaskDetailPage() {
     setBusy(true);
     try {
       setTask(await action());
-      if (message) toast(message, 'success', undo ? { action: { label: 'Undo', onClick: () => run(undo, 'Change undone') } } : {});
+      if (message) toast(message, 'success', undo ? { action: { label: t('Undo'), onClick: () => run(undo, t('Change undone')) } } : {});
       api.activity(taskId).then(setActivity).catch(() => {});
     } catch (e) {
       toast((e as ApiError).message, 'error');
@@ -169,8 +214,8 @@ export function TaskDetailPage() {
     const cancel = deleteLater([deletedId], (error) => error && toast(error.message, 'error'));
     setConfirmDelete(false);
     navigate(`/p/${projectKey}/backlog`, { replace: true });
-    toast(`${deletedKey} deleted`, 'success', {
-      action: { label: 'Undo', onClick: () => {
+    toast(t('{key} deleted', { key: deletedKey }), 'success', {
+      action: { label: t('Undo'), onClick: () => {
         cancel();
         navigate(`/tasks/${deletedId}`);
       } },
@@ -182,9 +227,11 @@ export function TaskDetailPage() {
     if (!comment.trim()) return;
     setBusy(true);
     try {
-      const created = await api.addComment(task.id, comment.trim());
+      const created = await api.addComment(task.id, comment.trim(), anchor, internalComment);
       setComments([...comments, created]);
       clearComment();
+      setInternalComment(false);
+      setAnchor(null);
     } catch (e) {
       toast((e as ApiError).message, 'error');
     } finally {
@@ -228,13 +275,13 @@ export function TaskDetailPage() {
   const upload = async (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
       if (file.size > MAX_UPLOAD) {
-        toast(`${file.name} is larger than 10 MB`, 'error');
+        toast(t('{name} is larger than 10 MB', { name: file.name }), 'error');
         continue;
       }
       try {
         const created = await api.uploadAttachment(task.id, file);
         setAttachments((current) => [...current, created]);
-        toast(`${created.filename} attached`);
+        toast(t('{name} attached', { name: created.filename }));
       } catch (e) {
         toast((e as ApiError).message, 'error');
       }
@@ -242,10 +289,14 @@ export function TaskDetailPage() {
     api.activity(taskId).then(setActivity).catch(() => {});
   };
 
+  uploadRef.current = (files) => {
+    upload(files);
+  };
+
   /** Pasted or dropped images become attachments, shown inline with attachment:<id>. */
   const uploadImage = async (file: File) => {
     if (file.size > MAX_UPLOAD) {
-      toast(`${file.name || 'The image'} is larger than 10 MB`, 'error');
+      toast(t('{name} is larger than 10 MB', { name: file.name || t('The image') }), 'error');
       throw new Error('too large');
     }
     const named = file.name ? file : new File([file], `pasted-${Date.now()}.png`, { type: file.type });
@@ -257,9 +308,9 @@ export function TaskDetailPage() {
   const copyText = async (text: string, what: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast(`${what} copied`);
+      toast(t('{what} copied', { what }));
     } catch {
-      window.prompt(`Copy the ${what.toLowerCase()}:`, text);
+      window.prompt(t('Copy the {what}:', { what: what.toLowerCase() }), text);
     }
   };
 
@@ -269,15 +320,17 @@ export function TaskDetailPage() {
 
   return (
     <div className="page page-detail">
+      {dropOverlay}
       <div className="detail-nav">
         <button className="back" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/my-work'))}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {t('Back')}
         </button>
         <span className="breadcrumb muted">
           <Link to={`/p/${task.projectKey}/board`}>{task.projectName}</Link>
           {task.parent && <> / <Link to={`/tasks/${task.parent.id}`}>{task.parent.key}</Link></>} / {task.key}
         </span>
-        {!canEdit && <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
+        {!canEdit && <span className="readonly-badge"><Eye size={13} /> {canComment ? t("Guest") : t("Read-only")}</span>}
+        <PresenceBar present={present} />
       </div>
 
       <div className="detail">
@@ -291,7 +344,7 @@ export function TaskDetailPage() {
           </div>
           {task.parent && (
             <Link to={`/tasks/${task.parent.id}`} className="parent-link">
-              <CornerLeftUp size={14} /> Subtask of {task.parent.key} · {task.parent.title}
+              <CornerLeftUp size={14} /> {t('Subtask of')} {task.parent.key} · {task.parent.title}
             </Link>
           )}
           <h1 className="detail-title">{task.title}</h1>
@@ -303,62 +356,86 @@ export function TaskDetailPage() {
           <div className="detail-actions">
             {canEdit && !task.assignee && (
               <button className="btn btn-primary" disabled={busy}
-                onClick={() => run(() => api.acceptTask(task.id), `${task.key} assigned to you`)}>
-                Accept task
+                onClick={() => run(() => api.acceptTask(task.id), t('{key} assigned to you', { key: task.key }))}>
+                {t('Accept task')}
               </button>
             )}
             {canEdit && isAssignee && (
               <button className="btn btn-soft" disabled={busy}
-                onClick={() => run(() => api.releaseTask(task.id), `${task.key} released`)}>
-                Release
+                onClick={() => run(() => api.releaseTask(task.id), t('{key} released', { key: task.key }))}>
+                {t('Release')}
               </button>
             )}
             {canEdit && (
-              <button className="btn btn-ghost" onClick={() => setEditing(true)}>
-                <Pencil size={16} /> Edit
+              <button className="btn btn-ghost" onClick={startEditing}>
+                <Pencil size={16} /> {t('Edit')}
               </button>
             )}
             <button className="btn btn-ghost" aria-pressed={watching}
-              title={watchers.length ? `Watching: ${watchers.map((w) => w.displayName).join(', ')}` : 'Nobody else is watching'}
+              title={watchers.length ? t('Watching: {names}', { names: watchers.map((w) => w.displayName).join(', ') }) : t('Nobody else is watching')}
               onClick={async () => {
                 const result = await api.watch(task.id, !watching);
                 setWatching(result.watching);
                 setWatchers(result.watchers);
-                toast(result.watching ? 'You will be notified about changes' : 'Stopped watching');
+                toast(result.watching ? t('You will be notified about changes') : t('Stopped watching'));
               }}>
-              {watching ? <EyeOff size={16} /> : <Eye size={16} />} {watching ? 'Unwatch' : 'Watch'}
+              {watching ? <EyeOff size={16} /> : <Eye size={16} />} {watching ? t('Unwatch') : t('Watch')}
               {watchers.length > 0 && <span className="count muted-count">{watchers.length}</span>}
             </button>
+            {canEdit && <TimerButton task={task} />}
             {canDelete && (
               <button className="btn btn-ghost danger" onClick={() => setConfirmDelete(true)}>
-                <Trash2 size={16} /> Delete
+                <Trash2 size={16} /> {t('Delete')}
               </button>
             )}
             <ActionMenu label={t("More actions")} actions={[
-              { label: 'Copy branch name', onSelect: () => copyText(branchName(task), 'Branch name') },
-              { label: 'Copy git checkout command', onSelect: () => copyText(`git checkout -b ${branchName(task)}`, 'Command') },
-              { label: 'Copy commit message', onSelect: () => copyText(`${task.key}: ${task.title}`, 'Commit message') },
-              { label: 'Copy link', onSelect: () => copyText(`${window.location.origin}/tasks/${task.id}`, 'Link') },
-              { label: 'Clone', hidden: !canEdit, onSelect: async () => {
+              { label: t('Copy branch name'), onSelect: () => copyText(branchName(task), t('Branch name')) },
+              { label: t('Copy git checkout command'), onSelect: () => copyText(`git checkout -b ${branchName(task)}`, t('Command')) },
+              { label: t('Copy commit message'), onSelect: () => copyText(`${task.key}: ${task.title}`, t('Commit message')) },
+              { label: t('Copy link'), onSelect: () => copyText(`${window.location.origin}/tasks/${task.id}`, t('Link')) },
+              { label: t('Clone'), hidden: !canEdit, onSelect: async () => {
                 try {
                   const copy = await api.cloneTask(task.id, subtasks.length > 0);
-                  toast(`Cloned as ${copy.key}`);
+                  toast(t('Cloned as {key}', { key: copy.key }));
                   navigate(`/tasks/${copy.id}`);
                 } catch (e) {
                   toast((e as ApiError).message, 'error');
                 }
               } },
-              { label: 'Move to another project…', hidden: !canEdit || !!task.parent, onSelect: () => setMoving(true) },
-              { label: 'Share publicly…', hidden: !canEdit, onSelect: () => setSharing(true) },
+              { label: t('Move to another project…'), hidden: !canEdit || !!task.parent, onSelect: () => setMoving(true) },
+              { label: t('Share publicly…'), hidden: !canEdit, onSelect: () => setSharing(true) },
+              { label: t('Start a poll…'), hidden: !canEdit, onSelect: () => setPollSignal((n) => n + 1) },
+              { label: task.archivedAt ? t('Restore from archive') : t('Archive'), hidden: !canEdit, onSelect: () => run(
+                () => (task.archivedAt ? api.unarchiveTask(task.id) : api.archiveTask(task.id)),
+                task.archivedAt ? t('Restored from the archive') : t('Archived — it no longer shows on boards and lists')) },
             ]} />
           </div>
 
+          {task.archivedAt && (
+            <div className="alert info archived-note">
+              {t('This task is archived and hidden from boards, lists and search.')}{' '}
+              {canEdit && <button className="link" onClick={() => run(() => api.unarchiveTask(task.id), t('Restored from the archive'))}>
+                {t('Restore')}</button>}
+            </div>
+          )}
           <section className="panel">
             <h2 className="panel-title"><FileText size={16} /> {t("Description")}</h2>
             {task.description
-              ? <Markdown>{task.description}</Markdown>
-              : <p className="muted">No description yet.{canEdit && <> <button className="link" onClick={() => setEditing(true)}>{t("Add one")}</button></>}</p>}
+              ? <InlineComments comments={comments} canComment={canComment} onComment={(quote) => {
+                  setAnchor(quote);
+                  setTab('comments');
+                  window.setTimeout(() => {
+                    const box = document.querySelector<HTMLTextAreaElement>('.comment-form textarea');
+                    box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    box?.focus();
+                  }, 50);
+                }}><Markdown>{task.description}</Markdown></InlineComments>
+              : <p className="muted">{t('No description yet.')}{canEdit && <> <button className="link" onClick={startEditing}>{t("Add one")}</button></>}</p>}
           </section>
+
+          <RequesterPanel task={task} canEdit={canEdit} />
+
+          <PollsPanel taskId={task.id} canCreate={canEdit} canVote={canComment} startSignal={pollSignal} />
 
           {!task.parent && (
             <SubtasksPanel subtasks={subtasks} canEdit={canEdit}
@@ -367,7 +444,7 @@ export function TaskDetailPage() {
 
           <section className="panel">
             <h2 className="panel-title">
-              <CheckSquare size={16} /> Checklist
+              <CheckSquare size={16} /> {t('Checklist')}
               {checklist.length > 0 && <span className="muted small">{doneCount}/{checklist.length}</span>}
             </h2>
             {checklist.length > 0 && (
@@ -384,7 +461,7 @@ export function TaskDetailPage() {
                     <span>{item.text}</span>
                   </label>
                   {canEdit && (
-                    <button className="icon-button sm" onClick={() => removeItem(item)} aria-label={`Delete ${item.text}`}>
+                    <button className="icon-button sm" onClick={() => removeItem(item)} aria-label={t('Delete {name}', { name: item.text })}>
                       <X size={14} />
                     </button>
                   )}
@@ -415,7 +492,7 @@ export function TaskDetailPage() {
             }} />
 
           <TimePanel taskId={task.id} entries={timeEntries} userId={user.id} isOwner={isOwner} canEdit={canEdit} onChange={load} />
-          <DevPanel links={devLinks} />
+          <DevPanel taskId={task.id} links={devLinks} onChanged={() => api.devLinks(task.id).then(setDevLinks).catch(() => {})} />
 
           <section className="panel">
             <div className="tabs compact" role="tablist">
@@ -425,7 +502,7 @@ export function TaskDetailPage() {
               </button>
               <button role="tab" aria-selected={tab === 'activity'} className={`tab ${tab === 'activity' ? 'active' : ''}`}
                 onClick={() => setTab('activity')}>
-                <History size={15} /> Activity
+                <History size={15} /> {t('Activity')}
               </button>
             </div>
 
@@ -433,20 +510,36 @@ export function TaskDetailPage() {
               <>
                 <ul className="comments">
                   {threads.map((c) => (
-                    <CommentItem key={c.id} taskId={task.id} comment={c} me={user} canEdit={canEdit} isOwner={isOwner}
+                    <CommentItem key={c.id} taskId={task.id} comment={c} me={user} canEdit={canComment} isOwner={isOwner}
                       members={members} replies={repliesOf(c.id)} uploadImage={canEdit ? uploadImage : undefined}
                       onReplied={(reply) => setComments((list) => [...list, reply])}
                       onChanged={(updated) => setComments((list) => list.map((x) => (x.id === updated.id ? updated : x)))}
                       onDeleted={(id) => setComments((list) => list.filter((x) => x.id !== id && x.parentId !== id))} />
                   ))}
                 </ul>
-                {canEdit && <form className="comment-form" onSubmit={postComment}>
+                {canComment && <form className="comment-form" onSubmit={postComment}>
                   <Avatar user={user} size={32} />
                   <div className="comment-input">
+                    {anchor && (
+                      <div className="comment-anchor-draft">
+                        <blockquote className="comment-anchor">“{anchor}”</blockquote>
+                        <button type="button" className="icon-button sm" aria-label={t("Comment on the whole task instead")}
+                          onClick={() => setAnchor(null)}><X size={13} /></button>
+                      </div>
+                    )}
                     <MarkdownEditor value={comment} onChange={setComment} members={members} rows={3} maxLength={2000}
                       label={t("Comment")} placeholder={t("Add a comment… Type @ to mention someone. Ctrl+Enter to send.")}
-                      onSubmitShortcut={() => postComment()} onUploadImage={uploadImage} />
-                    <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>{t("Comment")}</button>
+                      onSubmitShortcut={() => postComment()} onUploadImage={canEdit ? uploadImage : undefined} />
+                    <div className="comment-submit">
+                      {permissions.includes('VIEW_INTERNAL') && (
+                        <label className="toggle small internal-toggle" title={t('Hidden from guests, viewers and limited roles')}>
+                          <input type="checkbox" checked={internalComment} onChange={(e) => setInternalComment(e.target.checked)} />
+                          <Lock size={13} aria-hidden /> {t('Internal (team only)')}
+                        </label>
+                      )}
+                      <button className="btn btn-primary btn-sm" disabled={busy || !comment.trim()}>
+                        {internalComment ? t('Add internal comment') : t('Comment')}</button>
+                    </div>
                   </div>
                 </form>}
               </>
@@ -476,12 +569,29 @@ export function TaskDetailPage() {
               <select value={task.status} disabled={busy || !canEdit} aria-label={t("Status")}
                 onChange={(e) => {
                   const previous = task.status;
-                  run(() => api.setStatus(task.id, e.target.value as Status),
-                    `Moved to ${STATUS_LABEL[e.target.value as Status]}`, () => api.setStatus(task.id, previous));
+                  const next = e.target.value as Status;
+                  guard(task, (resolution) => api.setStatus(task.id, next, resolution)).then((moved) => {
+                    if (!moved) return;
+                    setTask(moved);
+                    toast(t('Moved to {status}', { status: t(STATUS_LABEL[next]) }), 'success',
+                      { action: { label: t('Undo'), onClick: () => run(() => api.setStatus(task.id, previous), t('Change undone')) } });
+                    api.activity(taskId).then(setActivity).catch(() => {});
+                  }).catch((err: ApiError) => toast(err.message, 'error'));
                 }}>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
               </select>
             </dd>
+            {task.status === 'DONE' && (
+              <>
+                <dt>{t("Resolution")}</dt>
+                <dd>
+                  <select value={task.resolution ?? 'DONE'} disabled={busy || !canEdit} aria-label={t("Resolution")}
+                    onChange={(e) => run(() => api.setResolution(task.id, e.target.value as Resolution), t('Resolution updated'))}>
+                    {RESOLUTIONS.map((r) => <option key={r} value={r}>{t(RESOLUTION_LABEL[r])}</option>)}
+                  </select>
+                </dd>
+              </>
+            )}
             <dt>{t("Assignee")}</dt>
             <dd>
               <select value={task.assignee?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Assignee")}
@@ -489,8 +599,8 @@ export function TaskDetailPage() {
                   const previous = task.assignee?.id ?? null;
                   const next = assignable.find((m) => m.id === Number(e.target.value));
                   run(() => api.assign(task.id, e.target.value ? Number(e.target.value) : null),
-                    !e.target.value ? 'Unassigned' : next?.awayUntil ? `Assigned — note: ${next.displayName} is away until ${formatDay(next.awayUntil)}`
-                      : 'Assignee updated', () => api.assign(task.id, previous));
+                    !e.target.value ? t('Unassigned') : next?.awayUntil ? t('Assigned — note: {name} is away until {date}', { name: next.displayName, date: formatDay(next.awayUntil) })
+                      : t('Assignee updated'), () => api.assign(task.id, previous));
                 }}>
                 <option value="">{t("Unassigned")}</option>
                 {assignable.map((m) => (
@@ -500,16 +610,23 @@ export function TaskDetailPage() {
                 ))}
               </select>
               {task.assignee?.awayUntil && (
-                <span className="away-note small">Away until {formatDay(task.assignee.awayUntil)}</span>
+                <span className="away-note small">{t('Away until {date}', { date: formatDay(task.assignee.awayUntil) })}</span>
               )}
+            </dd>
+            <dt>{t("Helpers")}</dt>
+            <dd>
+              <ChipPicker label={t("Add a helper")} disabled={busy || !canEdit} max={5}
+                options={assignable.filter((m) => m.id !== task.assignee?.id).map((m) => ({ id: m.id, label: m.displayName }))}
+                selected={task.helpers.map((h) => h.id)}
+                onChange={(ids) => run(() => api.setHelpers(task.id, ids), t('Helpers updated'))} />
             </dd>
             <dt>{t("Priority")}</dt>
             <dd>
               <div className="with-icon">
                 <PriorityBadge priority={task.priority} compact />
                 <select value={task.priority} disabled={busy || !canEdit} aria-label={t("Priority")}
-                  onChange={(e) => update({ priority: e.target.value as Priority }, 'Priority updated')}>
-                  {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                  onChange={(e) => update({ priority: e.target.value as Priority }, t('Priority updated'))}>
+                  {PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
                 </select>
               </div>
             </dd>
@@ -519,17 +636,38 @@ export function TaskDetailPage() {
                 onChange={(e) => {
                   const previous = task.sprint?.state === 'COMPLETED' ? null : task.sprint?.id ?? null;
                   run(() => api.moveToSprint(task.id, e.target.value ? Number(e.target.value) : null),
-                    e.target.value ? 'Moved to sprint' : 'Moved to backlog', () => api.moveToSprint(task.id, previous));
+                    e.target.value ? t('Moved to sprint') : t('Moved to backlog'), () => api.moveToSprint(task.id, previous));
                 }}>
                 <option value="">{t("Backlog")}</option>
-                {task.sprint?.state === 'COMPLETED' && <option value={task.sprint.id}>{task.sprint.name} (completed)</option>}
+                {task.sprint?.state === 'COMPLETED' && <option value={task.sprint.id}>{task.sprint.name} ({t('completed')})</option>}
                 {sprints.map((s) => <option key={s.id} value={s.id}>{s.name}{s.state === 'ACTIVE' ? ' (active)' : ''}</option>)}
               </select>
             </dd>
             <dt>{t("Due date")}</dt>
             <dd>
               <input type="date" value={task.dueDate ?? ''} disabled={busy || !canEdit} aria-label={t("Due date")}
-                onChange={(e) => update({ dueDate: e.target.value || null }, e.target.value ? 'Due date set' : 'Due date removed')} />
+                onChange={(e) => update({ dueDate: e.target.value || null }, e.target.value ? t('Due date set') : t('Due date removed'))} />
+            </dd>
+            <dt>{t("Start date")}</dt>
+            <dd>
+              <input type="date" value={task.startDate ?? ''} disabled={busy || !canEdit} aria-label={t("Start date")}
+                max={task.dueDate ?? undefined}
+                onChange={(e) => run(() => api.schedule(task.id, { startDate: e.target.value || null, dueDate: task.dueDate,
+                  estimateMinutes: task.estimateMinutes }), e.target.value ? t('Start date set') : t('Start date removed'))} />
+            </dd>
+            <dt>{t("Estimate")}</dt>
+            <dd className="with-unit">
+              <input type="number" min={0} step={0.5} key={`est-${task.estimateMinutes}`} placeholder="–"
+                defaultValue={task.estimateMinutes != null ? task.estimateMinutes / 60 : ''} disabled={busy || !canEdit}
+                aria-label={t("Estimate (hours)")} title={t("Estimate (hours)")}
+                onBlur={(e) => {
+                  const minutes = e.target.value === '' ? null : Math.round(Math.max(0, Number(e.target.value)) * 60);
+                  if (minutes !== task.estimateMinutes) {
+                    run(() => api.schedule(task.id, { startDate: task.startDate, dueDate: task.dueDate, estimateMinutes: minutes }),
+                      t('Estimate updated'));
+                  }
+                }} />
+              <span className="muted small"> h</span>
             </dd>
             <dt>{t("Points")}</dt>
             <dd>
@@ -537,16 +675,23 @@ export function TaskDetailPage() {
                 disabled={busy || !canEdit} aria-label={t("Story points")} placeholder="–"
                 onBlur={(e) => {
                   const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value)));
-                  if (value !== task.storyPoints) update({ storyPoints: value }, 'Estimate updated');
+                  if (value !== task.storyPoints) update({ storyPoints: value }, t('Estimate updated'));
                 }} />
             </dd>
             <dt>{t("Epic")}</dt>
             <dd>
               <select value={task.epic?.id ?? ''} disabled={busy || !canEdit} aria-label={t("Epic")}
-                onChange={(e) => update({ epicId: e.target.value ? Number(e.target.value) : null }, 'Epic updated')}>
+                onChange={(e) => update({ epicId: e.target.value ? Number(e.target.value) : null }, t('Epic updated'))}>
                 <option value="">{t("No epic")}</option>
                 {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
               </select>
+            </dd>
+            <dt>{t("Components")}</dt>
+            <dd>
+              <ChipPicker label={t("Add a component")} disabled={busy || !canEdit} max={10}
+                options={components.map((c) => ({ id: c.id, label: c.name }))}
+                selected={task.components.map((c) => c.id)}
+                onChange={(ids) => run(() => api.setTaskComponents(task.id, ids), t('Components updated'))} />
             </dd>
             <dt>{t("Release")}</dt>
             <dd>
@@ -554,7 +699,7 @@ export function TaskDetailPage() {
                 onChange={(e) => {
                   const previous = task.release?.id ?? null;
                   run(() => api.setTaskRelease(task.id, e.target.value ? Number(e.target.value) : null),
-                    e.target.value ? 'Release updated' : 'Removed from release', () => api.setTaskRelease(task.id, previous));
+                    e.target.value ? t('Release updated') : t('Removed from release'), () => api.setTaskRelease(task.id, previous));
                 }}>
                 <option value="">{t("No release")}</option>
                 {task.release && !releases.some((r) => r.id === task.release!.id) && (
@@ -572,7 +717,8 @@ export function TaskDetailPage() {
               </button>
             </dd>
             <dt>{t("Time spent")}</dt>
-            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">{t("None")}</span>}</dd>
+            <dd>{task.timeSpentMinutes ? formatMinutes(task.timeSpentMinutes) : <span className="muted">{t("None")}</span>}
+              {task.estimateMinutes ? <span className="muted small"> {t('of {estimate}', { estimate: formatMinutes(task.estimateMinutes) })}</span> : null}</dd>
             <dt>{t("Reporter")}</dt>
             <dd><span className="person"><Avatar user={task.reporter} size={24} /> {task.reporter.displayName}</span></dd>
             <dt>{t("Created")}</dt>
@@ -581,20 +727,44 @@ export function TaskDetailPage() {
             <dd>{timeAgo(task.updatedAt)}</dd>
           </dl>
           <CustomFieldsPanel taskId={task.id} canEdit={canEdit} />
+          <ApprovalsPanel taskId={task.id} members={members} canEdit={canEdit} userId={user.id} />
+          <KudosPanel task={task} me={user} canThank={canComment} />
+          <SlaPanel task={task} />
+          <AiPanel task={task} canEdit={canEdit} update={update} onChanged={load} />
+          <PersonalPanel task={task} />
+          {wikiMentions.length > 0 && (
+            <section className="side-section">
+              <h3 className="side-title"><BookOpen size={15} /> {t("Mentioned in the wiki")}</h3>
+              <ul className="mini-list">
+                {wikiMentions.map((p) => <li key={p.slug}><Link to={`/p/${task.projectKey}/wiki/${p.slug}`}>{p.title}</Link></li>)}
+              </ul>
+            </section>
+          )}
           {!task.parent && <PokerPanel task={task} canEdit={canEdit} onAccepted={load} />}
         </aside>
       </div>
 
       {editing && (
         <TaskFormModal
-          title={`Edit ${task.key}`}
-          submitLabel="Save changes"
+          title={t('Edit {name}', { name: task.key })}
+          submitLabel={t('Save changes')}
           mode={{
             kind: 'edit',
             projectKey: task.projectKey,
             initial: inputOf(task),
+            taskId: task.id,
+            coEditors: present.filter((p) => p.editing).map((p) => p.user.displayName),
             onSubmit: async (input) => {
-              setTask(await api.updateTask(task.id, input));
+              try {
+                setTask(await api.updateTask(task.id, input, editBase ?? undefined));
+              } catch (e) {
+                const err = e as ApiError;
+                if (err.status === 409) {
+                  setConflict({ input, message: err.message });
+                  return;
+                }
+                throw e;
+              }
               setEditing(false);
               toast(t("Changes saved"));
               api.activity(taskId).then(setActivity).catch(() => {});
@@ -604,12 +774,28 @@ export function TaskDetailPage() {
           uploadImage={uploadImage}
         />
       )}
+      {conflict && (
+        <ConfirmDialog title={t("Someone else changed this task")} message={conflict.message}
+          confirmLabel={t("Save mine anyway")} onClose={() => setConflict(null)}
+          onConfirm={async () => {
+            try {
+              setTask(await api.updateTask(task.id, conflict.input));
+              toast(t("Changes saved"));
+              setEditing(false);
+            } catch (e) {
+              toast((e as ApiError).message, 'error');
+            }
+            setConflict(null);
+          }}>
+          <p className="muted small">{t("Saving replaces their title, priority, due date, labels and description with yours. Cancel to keep editing; your text stays in the form.")}</p>
+        </ConfirmDialog>
+      )}
       {diff && <DiffModal activity={diff} onClose={() => setDiff(null)} />}
       {sharing && <ShareModal task={task} onClose={() => setSharing(false)} />}
       {moving && (
         <MoveModal task={task} onClose={() => setMoving(false)} onMoved={(moved) => {
           setMoving(false);
-          toast(`${task.key} is now ${moved.key}`);
+          toast(t('{old} is now {key}', { old: task.key, key: moved.key }));
           setTask(moved);
           navigate(`/tasks/${moved.id}`, { replace: true });
         }} />
@@ -618,12 +804,12 @@ export function TaskDetailPage() {
         <LabelsModal projectKey={task.projectKey} value={editingLabels} onClose={() => setEditingLabels(null)}
           onSave={(labels) => {
             setEditingLabels(null);
-            update({ labels }, 'Labels updated');
+            update({ labels }, t('Labels updated'));
           }} />
       )}
       {confirmDelete && (
         <ConfirmDialog
-          title={`Delete ${task.key}?`}
+          title={t('Delete {key}?', { key: task.key })}
           message={t("This removes the task with its subtasks, comments, checklist and files. You can undo for a few seconds.")}
           confirmLabel={t("Delete task")}
           danger
@@ -695,13 +881,13 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
   const { projects } = useProjects();
   const { user } = useAuth();
   const targets = (projects ?? []).filter((p) => p.key !== task.projectKey
-    && p.members.some((m) => m.id === user?.id && m.role !== 'VIEWER'));
+    && p.members.some((m) => m.id === user?.id && !isReadOnlyRole(m.role)));
   const [target, setTarget] = useState(targets[0]?.key ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   return (
-    <Modal title={`Move ${task.key}`} onClose={onClose} footer={<>
+    <Modal title={t('Move {key}', { key: task.key })} onClose={onClose} footer={<>
       <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
       <button className="btn btn-primary" disabled={busy || !target} onClick={async () => {
         setBusy(true);
@@ -711,7 +897,7 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
           setError((e as ApiError).message);
           setBusy(false);
         }
-      }}>Move</button>
+      }}>{t('Move')}</button>
     </>}>
       <div className="form">
         {error && <div className="alert">{error}</div>}
@@ -724,8 +910,8 @@ function MoveModal({ task, onClose, onMoved }: { task: Task; onClose: () => void
           </label>
         )}
         <p className="muted small">
-          The task{task.subtaskTotal ? ' and its subtasks' : ''} get a new key there; {task.key} keeps working as a link.
-          Sprint, epic and board column are cleared.
+          {t(task.subtaskTotal ? 'The task and its subtasks get a new key there; {key} keeps working as a link.' : 'The task gets a new key there; {key} keeps working as a link.', { key: task.key })}
+          {t('Sprint, epic and board column are cleared.')}
         </p>
       </div>
     </Modal>
@@ -825,7 +1011,7 @@ function Attachments({ attachments, userId, ownerId, canEdit, onUpload, onDelete
       }}
     >
       <h2 className="panel-title">
-        <Paperclip size={16} /> Attachments {attachments.length > 0 && <span className="count">{attachments.length}</span>}
+        <Paperclip size={16} /> {t('Attachments')} {attachments.length > 0 && <span className="count">{attachments.length}</span>}
         <span className="spacer" />
         {canEdit && (
           <button className="btn btn-soft btn-sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
@@ -838,13 +1024,13 @@ function Attachments({ attachments, userId, ownerId, canEdit, onUpload, onDelete
         }} />
       </h2>
       {attachments.length === 0 ? (
-        <p className={canEdit ? 'muted drop-hint' : 'muted'}>{canEdit ? 'Drop files here or use Upload (max 10 MB each).' : 'No attachments.'}</p>
+        <p className={canEdit ? 'muted drop-hint' : 'muted'}>{canEdit ? t('Drop files here or use Upload (max 10 MB each).') : t('No attachments.')}</p>
       ) : (
         <ul className="attachment-grid">
           {attachments.map((a) => (
             <li key={a.id} className="attachment">
               {previews[a.id] ? (
-                <button className="attachment-thumb" onClick={() => setViewing(a)} aria-label={`Preview ${a.filename}`}>
+                <button className="attachment-thumb" onClick={() => setViewing(a)} aria-label={t('Preview {name}', { name: a.filename })}>
                   <img src={previews[a.id]} alt={a.filename} />
                 </button>
               ) : (
@@ -855,11 +1041,11 @@ function Attachments({ attachments, userId, ownerId, canEdit, onUpload, onDelete
                 <span className="muted small">{fileSize(a.size)} · {a.uploader.displayName}</span>
               </div>
               <div className="attachment-actions">
-                <button className="icon-button sm" onClick={() => download(a)} aria-label={`Download ${a.filename}`}>
+                <button className="icon-button sm" onClick={() => download(a)} aria-label={t('Download {name}', { name: a.filename })}>
                   <Download size={15} />
                 </button>
                 {canEdit && (a.uploader.id === userId || ownerId === userId) && (
-                  <button className="icon-button sm" onClick={() => onDelete(a)} aria-label={`Delete ${a.filename}`}>
+                  <button className="icon-button sm" onClick={() => onDelete(a)} aria-label={t('Delete {name}', { name: a.filename })}>
                     <Trash2 size={15} />
                   </button>
                 )}

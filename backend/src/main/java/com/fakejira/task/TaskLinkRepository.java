@@ -13,6 +13,10 @@ public interface TaskLinkRepository extends JpaRepository<TaskLink, Long> {
     @Query("select l from TaskLink l join fetch l.source join fetch l.target where l.source.id = :taskId or l.target.id = :taskId")
     List<TaskLink> findForTask(@Param("taskId") Long taskId);
 
+    @Query("select l from TaskLink l join fetch l.source s join fetch l.target where s.project.id = :projectId "
+            + "and l.target.project.id = :projectId and l.type = com.fakejira.task.LinkType.BLOCKS")
+    List<TaskLink> blocksInProject(@Param("projectId") Long projectId);
+
     boolean existsBySourceIdAndTargetIdAndType(Long sourceId, Long targetId, LinkType type);
 
     /** Ids of tasks (among the given) blocked by a task that is not done yet. */

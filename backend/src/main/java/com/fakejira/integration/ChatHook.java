@@ -25,7 +25,7 @@ import java.util.Set;
 @Table(name = "chat_hooks")
 public class ChatHook {
 
-    public enum Kind { SLACK, DISCORD }
+    public enum Kind { SLACK, DISCORD, TEAMS, MATTERMOST }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

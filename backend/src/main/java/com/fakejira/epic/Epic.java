@@ -54,6 +54,18 @@ public class Epic {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** An emoji shown next to the name (optional). */
+    @Column(length = 16)
+    private String icon;
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
     protected Epic() {
     }
 

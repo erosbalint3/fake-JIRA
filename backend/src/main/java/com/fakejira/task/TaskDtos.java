@@ -58,7 +58,18 @@ public final class TaskDtos {
 
             /** Checklist items to start with (e.g. from a template). */
             @Size(max = 50, message = "At most 50 checklist items")
-            List<@Size(max = 200, message = "Checklist items are at most 200 characters") String> checklist) {
+            List<@Size(max = 200, message = "Checklist items are at most 200 characters") String> checklist,
+
+            /** Components; when nobody is assigned, the first component's lead gets the task. */
+            @Size(max = 10, message = "At most 10 components")
+            List<Long> componentIds) {
+
+        public CreateTaskRequest(String projectKey, String title, String description, TaskPriority priority,
+                                 LocalDate dueDate, List<String> labels, Long assigneeId, Long sprintId,
+                                 Integer storyPoints, Long epicId, Long parentId, TaskType type, List<String> checklist) {
+            this(projectKey, title, description, priority, dueDate, labels, assigneeId, sprintId, storyPoints, epicId,
+                    parentId, type, checklist, null);
+        }
 
         /** A plain task with defaults, for tasks created by the app itself (templates, recurring, email…). */
         public static CreateTaskRequest of(String projectKey, String title, String description, TaskPriority priority,
@@ -69,22 +80,22 @@ public final class TaskDtos {
 
         public CreateTaskRequest withLabels(List<String> labels) {
             return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, assigneeId, sprintId,
-                    storyPoints, epicId, parentId, type, checklist);
+                    storyPoints, epicId, parentId, type, checklist, componentIds);
         }
 
         public CreateTaskRequest withAssignee(Long id) {
             return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, id, sprintId,
-                    storyPoints, epicId, parentId, type, checklist);
+                    storyPoints, epicId, parentId, type, checklist, componentIds);
         }
 
         public CreateTaskRequest withParent(Long id) {
             return new CreateTaskRequest(projectKey, title, description, priority, dueDate, labels, assigneeId, sprintId,
-                    storyPoints, epicId, id, type, checklist);
+                    storyPoints, epicId, id, type, checklist, componentIds);
         }
 
         public CreateTaskRequest withDetails(LocalDate due, Integer points, Long epic, Long sprint, List<String> items) {
             return new CreateTaskRequest(projectKey, title, description, priority, due, labels, assigneeId, sprint,
-                    points, epic, parentId, type, items);
+                    points, epic, parentId, type, items, componentIds);
         }
     }
 
@@ -114,7 +125,21 @@ public final class TaskDtos {
             TaskType type) {
     }
 
-    public record StatusRequest(@NotNull(message = "Status is required") TaskStatus status) {
+    /** {@code resolution} applies when moving to Done (defaults to "Done"). */
+    public record StatusRequest(@NotNull(message = "Status is required") TaskStatus status, Resolution resolution) {
+    }
+
+    public record ResolutionRequest(@NotNull(message = "Choose a resolution") Resolution resolution) {
+    }
+
+    /** Planning dates and the original estimate; all nullable. */
+    public record ScheduleRequest(LocalDate startDate, LocalDate dueDate,
+                                  @Min(value = 0, message = "The estimate cannot be negative")
+                                  @Max(value = 60 * 24 * 90, message = "At most 90 days")
+                                  Integer estimateMinutes) {
+    }
+
+    public record HelpersRequest(@NotNull @Size(max = 5, message = "At most 5 helpers") List<Long> userIds) {
     }
 
     /** {@code assigneeId} null means unassign. */
@@ -125,7 +150,7 @@ public final class TaskDtos {
     public record SprintRequest(Long sprintId) {
     }
 
-    public record ColumnRequest(@NotNull(message = "Column is required") Long columnId) {
+    public record ColumnRequest(@NotNull(message = "Column is required") Long columnId, Resolution resolution) {
     }
 
     /**
@@ -154,7 +179,18 @@ public final class TaskDtos {
             String body,
 
             /** Replies to this comment (replies are one level deep). */
-            Long parentId) {
+            Long parentId,
+
+            /** Inline comment: the passage of the description it refers to. */
+            @Size(max = 300, message = "The quoted passage is at most 300 characters")
+            String anchor,
+
+            /** Only for the team (not guests or viewers); replies to internal comments are internal too. */
+            Boolean internal) {
+
+        public CommentRequest(String body, Long parentId, String anchor) {
+            this(body, parentId, anchor, null);
+        }
     }
 
     public record ReactionRequest(@NotBlank String emoji) {
@@ -200,10 +236,13 @@ public final class TaskDtos {
         }
     }
 
-    public record EpicRef(Long id, String name, int colorIndex) {
+    public record EpicRef(Long id, String name, int colorIndex, String icon) {
         public static EpicRef of(Epic epic) {
-            return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex());
+            return epic == null ? null : new EpicRef(epic.getId(), epic.getName(), epic.getColorIndex(), epic.getIcon());
         }
+    }
+
+    public record ComponentRef(Long id, String name) {
     }
 
     public record TaskRef(Long id, String key, String title, TaskStatus status, UserSummary assignee) {
@@ -243,7 +282,13 @@ public final class TaskDtos {
             Instant createdAt,
             Instant updatedAt,
             Instant completedAt,
-            ReleaseRef release) {
+            ReleaseRef release,
+            Resolution resolution,
+            LocalDate startDate,
+            Integer estimateMinutes,
+            Instant archivedAt,
+            List<UserSummary> helpers,
+            List<ComponentRef> components) {
 
         public static TaskResponse of(Task task, int checklistTotal, int checklistDone, int subtaskTotal,
                                       int subtaskDone, int timeSpentMinutes, boolean blocked) {
@@ -276,12 +321,18 @@ public final class TaskDtos {
                     task.getCreatedAt(),
                     task.getUpdatedAt(),
                     task.getCompletedAt(),
-                    ReleaseRef.of(task.getRelease()));
+                    ReleaseRef.of(task.getRelease()),
+                    task.getStatus() == TaskStatus.DONE && task.getResolution() == null ? Resolution.DONE : task.getResolution(),
+                    task.getStartDate(),
+                    task.getEstimateMinutes(),
+                    task.getArchivedAt(),
+                    task.getHelpers().stream().map(UserSummary::of).toList(),
+                    task.getComponents().stream().map(c -> new ComponentRef(c.getId(), c.getName())).toList());
         }
     }
 
     public record CommentResponse(Long id, UserSummary author, String body, Instant createdAt, Instant editedAt,
-                                  Long parentId, List<ReactionSummary> reactions) {
+                                  Long parentId, List<ReactionSummary> reactions, String anchor, boolean internal) {
 
         public static CommentResponse of(Comment comment) {
             return of(comment, List.of());
@@ -290,7 +341,8 @@ public final class TaskDtos {
         public static CommentResponse of(Comment comment, List<ReactionSummary> reactions) {
             return new CommentResponse(comment.getId(), UserSummary.of(comment.getAuthor()), comment.getBody(),
                     comment.getCreatedAt(), comment.getEditedAt(),
-                    comment.getParent() == null ? null : comment.getParent().getId(), reactions);
+                    comment.getParent() == null ? null : comment.getParent().getId(), reactions, comment.getAnchor(),
+                    comment.isInternal());
         }
     }
 

@@ -13,6 +13,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class FakeJiraApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(FakeJiraApplication.class, args);
+        SpringApplication app = new SpringApplication(FakeJiraApplication.class);
+        // Applies a restore an admin scheduled, before the database opens.
+        app.addListeners(new com.fakejira.ops.RestoreOnStartup());
+        app.run(args);
     }
 }

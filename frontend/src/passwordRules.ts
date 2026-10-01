@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PasswordRules } from './api';
+import { t } from './i18n';
 
 export interface PasswordRule {
   label: string;
@@ -11,11 +12,11 @@ let cached: PasswordRules | null = null;
 
 function toRules(policy: PasswordRules): PasswordRule[] {
   const rules: PasswordRule[] = [
-    { label: `At least ${policy.minLength} characters`, test: (p) => p.length >= policy.minLength },
+    { label: t('At least {n} characters', { n: policy.minLength }), test: (p) => p.length >= policy.minLength },
   ];
-  if (policy.upper) rules.push({ label: 'An uppercase letter', test: (p) => /\p{Lu}/u.test(p) });
-  if (policy.digit) rules.push({ label: 'A number', test: (p) => /\d/.test(p) });
-  if (policy.special) rules.push({ label: 'A special character', test: (p) => /[^\p{L}\p{N}]/u.test(p) });
+  if (policy.upper) rules.push({ label: t('An uppercase letter'), test: (p) => /\p{Lu}/u.test(p) });
+  if (policy.digit) rules.push({ label: t('A number'), test: (p) => /\d/.test(p) });
+  if (policy.special) rules.push({ label: t('A special character'), test: (p) => /[^\p{L}\p{N}]/u.test(p) });
   return rules;
 }
 

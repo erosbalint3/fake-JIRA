@@ -39,12 +39,21 @@ public class SearchService {
     private final com.fakejira.field.CustomFieldRepository customFields;
 
     public SearchService(TaskRepository tasks, TeamRepository teams, ProjectRepository projects, EntityManager em,
-                         com.fakejira.field.CustomFieldRepository customFields) {
+                         com.fakejira.field.CustomFieldRepository customFields, com.fakejira.project.ProjectAccess access) {
+        this.access = access;
         this.customFields = customFields;
         this.tasks = tasks;
         this.teams = teams;
         this.projects = projects;
         this.em = em;
+    }
+
+    private final com.fakejira.project.ProjectAccess access;
+
+    /** The user's projects where they may read internal comments. */
+    private java.util.Set<Long> internalProjects(User user) {
+        return projects.findForMember(user.getId()).stream().filter(p -> access.canSeeInternal(p, user))
+                .map(Project::getId).collect(java.util.stream.Collectors.toSet());
     }
 
     public record Result(List<Task> tasks, int total) {
@@ -55,8 +64,12 @@ public class SearchService {
         Fql.Query query = Fql.parse(fql);
         List<Long> projectIds = projects.findForMember(user.getId()).stream().map(Project::getId).toList();
         FqlCompiler compiler = new FqlCompiler(user, ZoneId.systemDefault(), this::teamMemberIds,
-                name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds));
+                name -> !projectIds.isEmpty() && customFields.existsNamed(name, projectIds))
+                .internalCommentsIn(internalProjects(user));
         Specification<Task> spec = visibleTo(user).and(compiler.where(query.where()));
+        if (!FqlCompiler.mentions(query.where(), "archived")) {
+            spec = spec.and((root, q, cb) -> cb.isNull(root.get("archivedAt")));
+        }
         Comparator<Task> order = compiler.order(query.order());
         List<Task> found = new ArrayList<>(tasks.findAll(spec));
         found.sort(order);
@@ -83,7 +96,7 @@ public class SearchService {
 
     // ------------------------------------------------------------------ free text
 
-    public enum HitKind { TASK, COMMENT, ATTACHMENT, EPIC, RELEASE }
+    public enum HitKind { TASK, COMMENT, ATTACHMENT, EPIC, RELEASE, WIKI }
 
     public record Hit(HitKind kind, Long id, Long taskId, String key, String title, String snippet, String projectKey,
                       int score) {
@@ -104,7 +117,7 @@ public class SearchService {
         List<Hit> hits = new ArrayList<>();
         String first = "%" + escape(words.get(0)) + "%";
 
-        List<Task> taskMatches = em.createQuery("select t from Task t where t.project.id in :projects and ("
+        List<Task> taskMatches = em.createQuery("select t from Task t where t.project.id in :projects and t.archivedAt is null and ("
                         + "lower(t.title) like :w escape '\\' or lower(t.description) like :w escape '\\' "
                         + "or lower(concat(t.project.key, '-', cast(t.number as string))) like :w escape '\\')", Task.class)
                 .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(400).getResultList();
@@ -122,12 +135,16 @@ public class SearchService {
             }
         }
 
-        List<Object[]> comments = em.createQuery("select c.id, c.body, t from Comment c join c.task t "
+        java.util.Set<Long> internal = internalProjects(user);
+        List<Object[]> comments = em.createQuery("select c.id, c.body, t, c.internal from Comment c join c.task t "
                         + "where t.project.id in :projects and lower(c.body) like :w escape '\\' order by c.createdAt desc")
                 .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(200).getResultList();
         for (Object[] row : comments) {
             String body = (String) row[1];
             Task t = (Task) row[2];
+            if (Boolean.TRUE.equals(row[3]) && !internal.contains(t.getProject().getId())) {
+                continue;
+            }
             if (words.stream().allMatch(body.toLowerCase(Locale.ROOT)::contains)) {
                 hits.add(new Hit(HitKind.COMMENT, (Long) row[0], t.getId(), t.getKey(), t.getTitle(), snippet(body, words),
                         t.getProject().getKey(), 0));
@@ -165,6 +182,20 @@ public class SearchService {
             if (words.stream().allMatch(name.toLowerCase(Locale.ROOT)::contains)) {
                 hits.add(new Hit(HitKind.RELEASE, (Long) row[0], null, null, name, snippet((String) row[2], words),
                         (String) row[3], 2));
+            }
+        }
+        // Wiki pages: key carries the page's slug.
+        List<Object[]> wiki = em.createQuery("select p.id, p.title, p.body, p.project.key, p.slug from WikiPage p "
+                        + "where p.project.id in :projects and (lower(p.title) like :w escape '\\' or lower(p.body) like :w escape '\\')")
+                .setParameter("projects", projectIds).setParameter("w", first).setMaxResults(80).getResultList();
+        for (Object[] row : wiki) {
+            String title = (String) row[1];
+            String body = (String) row[2];
+            String haystack = (title + "\n" + body).toLowerCase(Locale.ROOT);
+            if (words.stream().allMatch(haystack::contains)) {
+                boolean inTitle = words.stream().allMatch(title.toLowerCase(Locale.ROOT)::contains);
+                hits.add(new Hit(HitKind.WIKI, (Long) row[0], null, (String) row[4], title, snippet(body, words),
+                        (String) row[3], inTitle ? 3 : 1));
             }
         }
         hits.sort(Comparator.comparingInt(Hit::score).reversed());

@@ -103,7 +103,7 @@ export function CalendarPage() {
             <button className="btn btn-ghost btn-sm" onClick={() => {
               const d = new Date();
               setMonth({ year: d.getFullYear(), month: d.getMonth() });
-            }}>Today</button>
+            }}>{t('Today')}</button>
             <button className="icon-button" aria-label={t("Next month")} onClick={() => shift(1)}><ChevronRight size={18} /></button>
           </div>
           <button className="btn btn-soft btn-sm" onClick={() => setSubscribing(true)}><CalendarPlus size={15} /> {t("Subscribe")}</button>
@@ -114,7 +114,7 @@ export function CalendarPage() {
           <label key={kind} className={`chip ${show[kind] ? 'active' : ''}`}>
             <input type="checkbox" className="sr-only" checked={show[kind]} onChange={(e) => setShow({ ...show, [kind]: e.target.checked })} />
             <span className={`cal-dot cal-${kind.toLowerCase()}`} />
-            {{ TASK: 'Due dates', SPRINT: 'Sprints', RELEASE: 'Releases', EPIC: 'Epics', AWAY: 'Time off' }[kind]}
+            {t({ TASK: 'Due dates', SPRINT: 'Sprints', RELEASE: 'Releases', EPIC: 'Epics', AWAY: 'Time off' }[kind])}
           </label>
         ))}
       </div>
@@ -128,7 +128,7 @@ export function CalendarPage() {
             const inMonth = Number(day.slice(5, 7)) - 1 === month.month;
             return (
               <div key={day} role="group" className={`cal-day ${inMonth ? '' : 'other'} ${day === today ? 'today' : ''}`}
-                aria-label={`${day}: ${list.length} item${list.length === 1 ? '' : 's'}`}>
+                aria-label={`${day}: ${list.length === 1 ? t('1 item') : t('{n} items', { n: list.length })}`}>
                 <span className="cal-date">{Number(day.slice(8))}</span>
                 <ul>
                   {list.slice(0, 4).map((e) => {
@@ -142,7 +142,7 @@ export function CalendarPage() {
                       </li>
                     );
                   })}
-                  {list.length > 4 && <li className="muted small">+{list.length - 4} more</li>}
+                  {list.length > 4 && <li className="muted small">{t('+{n} more', { n: list.length - 4 })}</li>}
                 </ul>
               </div>
             );
@@ -177,8 +177,8 @@ export function SubscribeModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title={t("Subscribe in your calendar app")} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}>
       <div className="form">
-        <p className="muted">Add FakeJIRA to Google Calendar, Outlook or Apple Calendar: your tasks' due dates, sprints and releases.
-          The link is private — anyone who has it can see these events.</p>
+        <p className="muted">{t("Add FakeJIRA to Google Calendar, Outlook or Apple Calendar: your tasks' due dates, sprints and releases. The link is private — anyone who has it can see these events.")}
+          </p>
         {url === undefined ? <Spinner /> : url ? (
           <>
             <div className="copy-field">
@@ -186,14 +186,14 @@ export function SubscribeModal({ onClose }: { onClose: () => void }) {
               <button className="btn btn-primary btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy")}</button>
             </div>
             <div className="chip-row">
-              <button className="btn btn-ghost btn-sm" onClick={() => run(api.resetCalendarFeed, 'New link created; the old one stopped working')}>
-                Reset link</button>
-              <button className="btn btn-ghost btn-sm danger" onClick={() => run(api.disableCalendarFeed, 'Calendar feed turned off')}>
-                Turn off</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => run(api.resetCalendarFeed, t('New link created; the old one stopped working'))}>
+                {t('Reset link')}</button>
+              <button className="btn btn-ghost btn-sm danger" onClick={() => run(api.disableCalendarFeed, t('Calendar feed turned off'))}>
+                {t('Turn off')}</button>
             </div>
           </>
         ) : (
-          <div><button className="btn btn-primary" onClick={() => run(api.resetCalendarFeed, 'Calendar feed created')}>
+          <div><button className="btn btn-primary" onClick={() => run(api.resetCalendarFeed, t('Calendar feed created'))}>
             <CalendarPlus size={16} /> {t("Create my feed link")}</button></div>
         )}
       </div>

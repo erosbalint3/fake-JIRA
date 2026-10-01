@@ -1,3 +1,5 @@
+import { TablePage } from './pages/TablePage';
+import { GalleryPage } from './pages/GalleryPage';
 import { useLanguage } from './i18n';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
@@ -29,6 +31,19 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ de
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then((m) => ({ default: m.TeamsPage })));
 const AutomationPage = lazy(() => import('./pages/AutomationPage').then((m) => ({ default: m.AutomationPage })));
 const SharedTaskPage = lazy(() => import('./pages/SharedTaskPage').then((m) => ({ default: m.SharedTaskPage })));
+const TimelinePage = lazy(() => import('./pages/TimelinePage').then((m) => ({ default: m.TimelinePage })));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then((m) => ({ default: m.PortfolioPage })));
+const GoalsPage = lazy(() => import('./pages/GoalsPage').then((m) => ({ default: m.GoalsPage })));
+const WikiPage = lazy(() => import('./pages/WikiPage').then((m) => ({ default: m.WikiPage })));
+const MeetingsPage = lazy(() => import('./pages/MeetingsPage').then((m) => ({ default: m.MeetingsPage })));
+const StandupPage = lazy(() => import('./pages/StandupPage').then((m) => ({ default: m.StandupPage })));
+const TodayPage = lazy(() => import('./pages/TodayPage').then((m) => ({ default: m.TodayPage })));
+const PortalPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PortalPage })));
+const TrackingPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.TrackingPage })));
+const PublicRoadmapPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PublicRoadmapPage })));
+const PublicChangelogPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.PublicChangelogPage })));
+const EmbedPage = lazy(() => import('./pages/PortalPages').then((m) => ({ default: m.EmbedPage })));
+const KudosPage = lazy(() => import('./pages/KudosPage').then((m) => ({ default: m.KudosPage })));
 const OAuthCompletePage = lazy(() => import('./pages/OAuthCompletePage').then((m) => ({ default: m.OAuthCompletePage })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -78,6 +93,11 @@ export function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/oauth-complete" element={<OAuthCompletePage />} />
       <Route path="/share/:token" element={<SharedTaskPage />} />
+      <Route path="/portal/requests/:token" element={<TrackingPage />} />
+      <Route path="/portal/:key" element={<PortalPage />} />
+      <Route path="/public/:key/roadmap" element={<PublicRoadmapPage />} />
+      <Route path="/public/:key/changelog" element={<PublicChangelogPage />} />
+      <Route path="/embed/:key" element={<EmbedPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="/projects" element={<ProjectsPage />} />
@@ -85,13 +105,24 @@ export function App() {
         <Route path="/p/:key/board" element={<BoardPage />} />
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
         <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
+        <Route path="/p/:key/table" element={<TablePage />} />
+        <Route path="/p/:key/gallery" element={<GalleryPage />} />
+        <Route path="/p/:key/timeline" element={<TimelinePage />} />
+        <Route path="/p/:key/wiki" element={<WikiPage />} />
+        <Route path="/p/:key/wiki/:slug" element={<WikiPage />} />
+        <Route path="/p/:key/meetings" element={<MeetingsPage />} />
+        <Route path="/p/:key/standup" element={<StandupPage />} />
         <Route path="/p/:key/reports" element={<ReportsPage />} />
         <Route path="/p/:key/releases" element={<ReleasesPage />} />
         <Route path="/p/:key/automation" element={<AutomationPage />} />
         <Route path="/p/:key/sprints/:id" element={<SprintPage />} />
         <Route path="/p/:key/settings" element={<ProjectSettingsPage />} />
+        <Route path="/today" element={<TodayPage />} />
         <Route path="/my-work" element={<MyWorkPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/goals" element={<GoalsPage />} />
+        <Route path="/kudos" element={<KudosPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/activity" element={<ActivityPage />} />

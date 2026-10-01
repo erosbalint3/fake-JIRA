@@ -5,6 +5,7 @@ import { useToast } from '../../toast';
 import { formatDay, todayIso } from '../../format';
 import { SubscribeModal } from '../../pages/CalendarPage';
 import type { Profile } from '../../types';
+import { t } from '../../i18n';
 
 /** Out-of-office dates (shown to teammates next to your name) and the personal calendar feed. */
 export function AwayPanel({ profile, onChange }: { profile: Profile; onChange: () => void }) {
@@ -24,7 +25,7 @@ export function AwayPanel({ profile, onChange }: { profile: Profile; onChange: (
     setError('');
     try {
       await api.setAway(from || null, until, message);
-      toast('Out-of-office saved');
+      toast(t('Out-of-office saved'));
       onChange();
     } catch (e) {
       const err = e as ApiError;
@@ -36,48 +37,49 @@ export function AwayPanel({ profile, onChange }: { profile: Profile; onChange: (
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><Palmtree size={17} /> Out of office</h2>
+      <h2 className="panel-title"><Palmtree size={17} /> {t('Out of office')}</h2>
       <p className="muted small hint">
         {active
-          ? <>You're marked away{away.from ? ` from ${formatDay(away.from)}` : ''} until <strong>{formatDay(away.until!)}</strong>.
-            Teammates see this when they assign or mention you.</>
-          : 'Let teammates know when you are away. It shows next to your name and on the team calendar.'}
+          ? <>{away.from ? t("You're marked away from {from} until {until}.", { from: formatDay(away.from), until: formatDay(away.until!) })
+              : t("You're marked away until {until}.", { until: formatDay(away.until!) })}{' '}
+            {t('Teammates see this when they assign or mention you.')}</>
+          : t('Let teammates know when you are away. It shows next to your name and on the team calendar.')}
       </p>
       <form className="form narrow" onSubmit={save}>
         {error && <div className="alert">{error}</div>}
         <div className="form-grid two">
           <label className="field">
-            <span>First day</span>
+            <span>{t('First day')}</span>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </label>
           <label className="field">
-            <span>Last day</span>
+            <span>{t('Last day')}</span>
             <input type="date" value={until} min={from || todayIso()} required onChange={(e) => setUntil(e.target.value)} />
           </label>
         </div>
         <label className="field">
-          <span>Note <span className="muted">(optional)</span></span>
-          <input value={message} maxLength={200} placeholder="On holiday — ask Bob about releases" onChange={(e) => setMessage(e.target.value)} />
+          <span>{t('Note')} <span className="muted">{t('(optional)')}</span></span>
+          <input value={message} maxLength={200} placeholder={t('On holiday — ask Bob about releases')} onChange={(e) => setMessage(e.target.value)} />
         </label>
         <div className="button-row">
-          <button className="btn btn-primary" disabled={busy || !until}>{active ? 'Update' : 'Set out of office'}</button>
+          <button className="btn btn-primary" disabled={busy || !until}>{active ? t('Update') : t('Set out of office')}</button>
           {away.until && (
             <button type="button" className="btn btn-ghost" disabled={busy} onClick={async () => {
               await api.clearAway();
               setUntil('');
               setMessage('');
-              toast("Welcome back! You're no longer marked away");
+              toast(t("Welcome back! You're no longer marked away"));
               onChange();
-            }}>I'm back</button>
+            }}>{t("I'm back")}</button>
           )}
         </div>
       </form>
       <hr className="rule" />
-      <h3 className="subsection-title">Calendar feed</h3>
+      <h3 className="subsection-title">{t('Calendar feed')}</h3>
       <p className="muted small hint">
-        {profile.calendarFeed ? 'Your calendar app is subscribed to your FakeJIRA dates.' : 'See due dates, sprints and releases in your own calendar app.'}
+        {profile.calendarFeed ? t('Your calendar app is subscribed to your FakeJIRA dates.') : t('See due dates, sprints and releases in your own calendar app.')}
       </p>
-      <button className="btn btn-soft" onClick={() => setSubscribing(true)}><CalendarPlus size={16} /> {profile.calendarFeed ? 'Manage feed' : 'Subscribe'}</button>
+      <button className="btn btn-soft" onClick={() => setSubscribing(true)}><CalendarPlus size={16} /> {profile.calendarFeed ? t('Manage feed') : t('Subscribe')}</button>
       {subscribing && <SubscribeModal onClose={() => {
         setSubscribing(false);
         onChange();

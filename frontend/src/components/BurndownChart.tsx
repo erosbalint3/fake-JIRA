@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { formatDay } from '../format';
 import type { BurndownPoint, ScopeChange } from '../types';
+import { t } from '../i18n';
 
 const HEIGHT = 280;
 const PAD = { top: 16, right: 64, bottom: 32, left: 40 };
@@ -12,7 +13,6 @@ const PAD = { top: 16, right: 64, bottom: 32, left: 40 };
 export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
   points: BurndownPoint[]; total: number; unit?: 'tasks' | 'points'; changes?: ScopeChange[];
 }) {
-  const noun = unit === 'points' ? 'points' : 'tasks';
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -71,20 +71,20 @@ export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
   return (
     <div className="viz-root">
       <div className="viz-head">
-        <ul className="viz-legend" aria-label="Legend">
-          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-remaining" /></svg>Remaining {noun}</li>
-          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-ideal" /></svg>Ideal</li>
-          {changes.length > 0 && <li><span className="scope-marker-key" aria-hidden>◆</span>Scope change</li>}
+        <ul className="viz-legend" aria-label={t('Legend')}>
+          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-remaining" /></svg>{unit === 'points' ? t('Remaining points') : t('Remaining tasks')}</li>
+          <li><svg width="22" height="10" aria-hidden><line x1="1" y1="5" x2="21" y2="5" className="viz-line-ideal" /></svg>{t('Ideal')}</li>
+          {changes.length > 0 && <li><span className="scope-marker-key" aria-hidden>◆</span>{t('Scope change')}</li>}
         </ul>
         <button type="button" className="link small" onClick={() => setAsTable(!asTable)}>
-          {asTable ? 'Show chart' : 'Show as table'}
+          {asTable ? t('Show chart') : t('Show as table')}
         </button>
       </div>
 
       {asTable ? (
         <div className="viz-table-wrap">
           <table className="viz-table">
-            <thead><tr><th>Day</th><th>Remaining</th><th>Ideal</th></tr></thead>
+            <thead><tr><th>{t('Day')}</th><th>{t('Remaining')}</th><th>{t('Ideal')}</th></tr></thead>
             <tbody>
               {series.map((p) => (
                 <tr key={p.date}>
@@ -99,7 +99,7 @@ export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
       ) : (
         <div className="viz-plot" ref={wrapRef}>
           <svg width={width} height={HEIGHT} role="img"
-            aria-label={`Burndown: ${last ? `${last.remaining} of ${total} ${noun} remaining` : 'no data yet'}`}>
+            aria-label={last ? t(unit === 'points' ? 'Burndown: {n} of {total} points remaining' : 'Burndown: {n} of {total} tasks remaining', { n: last.remaining ?? 0, total }) : t('Burndown: no data yet')}>
             {yTicks.map((v) => (
               <g key={v}>
                 <line x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} className="viz-grid" />
@@ -128,7 +128,7 @@ export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
               <>
                 <circle cx={x(last.i)} cy={y(last.remaining!)} r={4} className="viz-dot-remaining" />
                 <text x={x(last.i) + 10} y={y(last.remaining!)} dy="0.32em" className="viz-direct-label">
-                  {last.remaining} left
+                  {t('{n} left', { n: last.remaining ?? 0 })}
                 </text>
               </>
             )}
@@ -151,10 +151,10 @@ export function BurndownChart({ points, total, unit = 'tasks', changes = [] }: {
               top: PAD.top,
             }}>
               <strong>{formatDay(hovered.date, true)}</strong>
-              <span><i className="swatch remaining" />{hovered.remaining ?? '—'} remaining</span>
-              <span><i className="swatch ideal" />{hovered.ideal.toFixed(1)} ideal</span>
+              <span><i className="swatch remaining" />{t('{n} remaining', { n: hovered.remaining ?? '—' })}</span>
+              <span><i className="swatch ideal" />{t('{n} ideal', { n: hovered.ideal.toFixed(1) })}</span>
               {hoveredChanges.map((c, i) => (
-                <span key={i} className="small">{c.added ? '+ added' : '− removed'} {c.key}{c.points !== null ? ` (${c.points} pt)` : ''}</span>
+                <span key={i} className="small">{c.added ? t('+ added') : t('− removed')} {c.key}{c.points !== null ? ` (${c.points} pt)` : ''}</span>
               ))}
             </div>
           )}

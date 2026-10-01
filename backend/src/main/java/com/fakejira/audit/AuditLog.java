@@ -58,12 +58,21 @@ public class AuditLog {
         return value == null || value.length() <= max ? value : value.substring(0, max - 1) + "…";
     }
 
-    @Scheduled(cron = "0 15 4 * * *")
+    /** The configured default; admins can change it in the retention settings. */
+    public int defaultRetentionDays() {
+        return retentionDays;
+    }
+
+    public long countOlderThan(int days) {
+        return events.countOlderThan(Instant.now().minus(Duration.ofDays(days)));
+    }
+
     @Transactional
-    public void prune() {
-        int removed = events.deleteOlderThan(Instant.now().minus(Duration.ofDays(retentionDays)));
+    public int prune(int days) {
+        int removed = events.deleteOlderThan(Instant.now().minus(Duration.ofDays(days)));
         if (removed > 0) {
-            log.info("Removed {} audit entries older than {} days", removed, retentionDays);
+            log.info("Removed {} audit entries older than {} days", removed, days);
         }
+        return removed;
     }
 }

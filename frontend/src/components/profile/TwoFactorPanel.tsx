@@ -6,6 +6,7 @@ import { useToast } from '../../toast';
 import { Modal } from '../Modal';
 import { RecoveryCodes } from './RecoveryCodes';
 import type { Profile } from '../../types';
+import { t } from '../../i18n';
 
 /** Turn authenticator-app codes on or off, and manage recovery codes. */
 export function TwoFactorPanel({ profile, onChange }: { profile: Profile; onChange: () => void }) {
@@ -26,25 +27,24 @@ export function TwoFactorPanel({ profile, onChange }: { profile: Profile; onChan
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><ShieldCheck size={16} /> Two-step verification</h2>
+      <h2 className="panel-title"><ShieldCheck size={16} /> {t('Two-step verification')}</h2>
       {profile.twoFactorEnabled ? (
         <>
           <p className="muted small hint">
-            <span className="status-on">On.</span> Signing in asks for a code from your authenticator app.
-            {' '}{profile.recoveryCodesLeft} recovery code{profile.recoveryCodesLeft === 1 ? '' : 's'} left.
+            <span className="status-on">{t('On.')}</span> {t('Signing in asks for a code from your authenticator app.')}
+            {' '}{profile.recoveryCodesLeft === 1 ? t('1 recovery code left.') : t('{n} recovery codes left.', { n: profile.recoveryCodesLeft })}
           </p>
           <div className="button-row">
-            <button className="btn btn-soft" onClick={() => setDialog('codes')}>New recovery codes</button>
-            <button className="btn btn-ghost danger" onClick={() => setDialog('disable')}>Turn off</button>
+            <button className="btn btn-soft" onClick={() => setDialog('codes')}>{t('New recovery codes')}</button>
+            <button className="btn btn-ghost danger" onClick={() => setDialog('disable')}>{t('Turn off')}</button>
           </div>
         </>
       ) : (
         <>
           <p className="muted small hint">
-            Protect your account with a code from an authenticator app (Google Authenticator, Microsoft Authenticator,
-            1Password, Bitwarden…) in addition to your password.
+            {t('Protect your account with a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden…) in addition to your password.')}
           </p>
-          <button className="btn btn-soft" onClick={start}>Set up</button>
+          <button className="btn btn-soft" onClick={start}>{t('Set up')}</button>
         </>
       )}
       {codes && <RecoveryCodes codes={codes} />}
@@ -53,7 +53,7 @@ export function TwoFactorPanel({ profile, onChange }: { profile: Profile; onChan
         <SetupDialog setup={setup} onClose={() => setSetup(null)} onEnabled={(recovery) => {
           setSetup(null);
           setCodes(recovery);
-          toast('Two-step verification is on');
+          toast(t('Two-step verification is on'));
           onChange();
         }} />
       )}
@@ -62,7 +62,7 @@ export function TwoFactorPanel({ profile, onChange }: { profile: Profile; onChan
           onDone={(recovery) => {
             setDialog(null);
             setCodes(recovery ?? null);
-            toast(recovery ? 'New recovery codes created' : 'Two-step verification is off');
+            toast(recovery ? t('New recovery codes created') : t('Two-step verification is off'));
             onChange();
           }} />
       )}
@@ -93,26 +93,26 @@ function SetupDialog({ setup, onClose, onEnabled }: {
   };
 
   return (
-    <Modal title="Set up two-step verification" onClose={onClose}
+    <Modal title={t('Set up two-step verification')} onClose={onClose}
       footer={<>
-        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-        <button type="submit" form="totp-form" className="btn btn-primary" disabled={busy || code.trim().length < 6}>Turn on</button>
+        <button type="button" className="btn btn-ghost" onClick={onClose}>{t('Cancel')}</button>
+        <button type="submit" form="totp-form" className="btn btn-primary" disabled={busy || code.trim().length < 6}>{t('Turn on')}</button>
       </>}>
       <form id="totp-form" className="form" onSubmit={submit}>
         <ol className="steps small">
-          <li>Scan this QR code with your authenticator app.</li>
-          <li>Enter the 6-digit code it shows.</li>
+          <li>{t('Scan this QR code with your authenticator app.')}</li>
+          <li>{t('Enter the 6-digit code it shows.')}</li>
         </ol>
         <div className="qr-wrap">
-          <img src={setup.qr} width={200} height={200} alt="QR code for your authenticator app" className="qr" />
+          <img src={setup.qr} width={200} height={200} alt={t('QR code for your authenticator app')} className="qr" />
           <div className="small muted">
-            Can't scan? Enter this key:
+            {t("Can't scan? Enter this key:")}
             <code className="secret">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</code>
           </div>
         </div>
         {error && <div className="alert">{error}</div>}
         <label className="field">
-          <span>Code</span>
+          <span>{t('Code')}</span>
           <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code"
             placeholder="123456" maxLength={7} autoFocus className="code-input" />
         </label>
@@ -151,23 +151,23 @@ function ConfirmCodeDialog({ kind, needsPassword, onClose, onDone }: {
   };
 
   return (
-    <Modal title={kind === 'disable' ? 'Turn off two-step verification?' : 'Create new recovery codes?'} onClose={onClose}
+    <Modal title={kind === 'disable' ? t('Turn off two-step verification?') : t('Create new recovery codes?')} onClose={onClose}
       footer={<>
-        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-ghost" onClick={onClose}>{t('Cancel')}</button>
         <button type="submit" form="confirm-code" className={`btn ${kind === 'disable' ? 'btn-danger' : 'btn-primary'}`}
-          disabled={busy || !code.trim()}>{kind === 'disable' ? 'Turn off' : 'Create codes'}</button>
+          disabled={busy || !code.trim()}>{kind === 'disable' ? t('Turn off') : t('Create codes')}</button>
       </>}>
       <form id="confirm-code" className="form" onSubmit={submit}>
-        {kind === 'codes' && <p className="muted small">Your old recovery codes stop working.</p>}
+        {kind === 'codes' && <p className="muted small">{t('Your old recovery codes stop working.')}</p>}
         {error && <div className="alert">{error}</div>}
         {kind === 'disable' && needsPassword && (
           <label className="field">
-            <span>Password</span>
+            <span>{t('Password')}</span>
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
         )}
         <label className="field">
-          <span>Code from your app (or a recovery code)</span>
+          <span>{t('Code from your app (or a recovery code)')}</span>
           <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="one-time-code" className="code-input" autoFocus />
         </label>
       </form>
@@ -178,6 +178,6 @@ function ConfirmCodeDialog({ kind, needsPassword, onClose, onDone }: {
 export function useLinkedToast(linked: string | undefined) {
   const toast = useToast();
   useEffect(() => {
-    if (linked) toast(`${linked === 'github' ? 'GitHub' : 'Google'} account connected`);
+    if (linked) toast(t('{name} account connected', { name: linked === 'github' ? 'GitHub' : linked === 'google' ? 'Google' : linked }));
   }, [linked, toast]);
 }

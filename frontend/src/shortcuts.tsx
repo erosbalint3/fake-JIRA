@@ -16,6 +16,14 @@ export const SHORTCUTS: [string, string][] = [
   ['g then d', 'Go to dashboard'],
   ['g then s', 'Go to search'],
   ['g then c', 'Go to calendar'],
+  ['g then t', 'Go to Today'],
+  ['j / k', 'Move down / up in a task list or the inbox'],
+  ['Enter or o', 'Open the highlighted item'],
+  ['e', 'Edit the highlighted task'],
+  ['a', 'Assign the highlighted task'],
+  ['s', 'Change the status of the highlighted task (snooze in the inbox)'],
+  ['x', 'Select the highlighted item'],
+  ['d', 'Inbox: mark the highlighted notification done'],
   ['?', 'Show keyboard shortcuts'],
 ];
 
@@ -28,7 +36,7 @@ function isTyping(target: EventTarget | null) {
 /** Global single-key shortcuts; ignored while typing or when a dialog is open. */
 export function useShortcuts(handlers: {
   create: () => void;
-  go: (target: 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p' | 'd' | 's' | 'c') => void;
+  go: (target: 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p' | 'd' | 's' | 'c' | 't') => void;
   help: () => void;
 }) {
   const latest = useRef(handlers);
@@ -40,7 +48,7 @@ export function useShortcuts(handlers: {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       if (document.querySelector('.modal')) return;
       const key = event.key;
-      if (pendingG && Date.now() - pendingG < 1200 && 'bkromnpdsc'.includes(key) && key.length === 1) {
+      if (pendingG && Date.now() - pendingG < 1200 && 'bkromnpdsct'.includes(key) && key.length === 1) {
         event.preventDefault();
         pendingG = 0;
         latest.current.go(key as 'b' | 'k' | 'r' | 'o' | 'm' | 'n' | 'p');

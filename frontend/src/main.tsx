@@ -8,6 +8,7 @@ import { AuthProvider } from './auth';
 import { LiveProvider } from './live';
 import { ProjectsProvider } from './projects';
 import { ToastProvider } from './toast';
+import { ContextMenuProvider } from './components/ContextMenu';
 import { applyInitialTheme } from './theme';
 import { registerServiceWorker } from './push';
 
@@ -22,7 +23,9 @@ createRoot(document.getElementById('root')!).render(
         <AuthProvider>
           <LiveProvider>
             <ProjectsProvider>
-              <App />
+              <ContextMenuProvider>
+                <App />
+              </ContextMenuProvider>
             </ProjectsProvider>
           </LiveProvider>
         </AuthProvider>

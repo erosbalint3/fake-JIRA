@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { api } from '../api';
 import { useProjects } from '../projects';
 import type { SearchField, Team } from '../types';
+import { t } from '../i18n';
 
 const OPERATORS = ['=', '!=', '~', 'in (', 'not in (', 'is empty', 'is not empty', '>', '>=', '<', '<='];
 const JOINERS = ['AND', 'OR', 'NOT', 'ORDER BY'];
-const SORT_FIELDS = ['priority', 'due', 'created', 'updated', 'resolved', 'points', 'key', 'status', 'title', 'assignee'];
+const SORT_FIELDS = ['priority', 'due', 'start', 'created', 'updated', 'resolved', 'points', 'estimate', 'key', 'status', 'title',
+  'assignee', 'resolution'];
 
 let fieldsCache: Promise<SearchField[]> | null = null;
 let teamsCache: Promise<Team[]> | null = null;
@@ -91,7 +93,7 @@ export function FqlInput({ value, onChange, onSubmit, errorAt }: Props) {
       const field = previous[valueFieldIndex]?.text.toLowerCase() ?? '';
       const statics = fields.find((f) => f.name === field)?.values ?? [];
       const values: Suggestion[] = statics.map((v) => ({ label: v, insert: v }));
-      if (['assignee', 'reporter', 'watcher'].includes(field)) {
+      if (['assignee', 'reporter', 'watcher', 'helper'].includes(field)) {
         people.forEach(([username, name]) => values.push({ label: username, insert: username, hint: name }));
         teams.forEach((t) => values.push({ label: `membersOf(${t.handle})`, insert: `membersOf(${t.handle})`, hint: t.name }));
       }
@@ -155,7 +157,7 @@ export function FqlInput({ value, onChange, onSubmit, errorAt }: Props) {
         spellCheck={false}
         autoComplete="off"
         role="combobox"
-        aria-label="Query"
+        aria-label={t('Query')}
         aria-autocomplete="list"
         aria-expanded={open && suggestions.length > 0}
         aria-controls="fql-suggestions"

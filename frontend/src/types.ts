@@ -3,7 +3,9 @@ export type Status = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
 export type Scope = 'AVAILABLE' | 'MINE' | 'REPORTED' | 'ALL';
 export type SprintState = 'PLANNED' | 'ACTIVE' | 'COMPLETED';
 
-export type Role = 'OWNER' | 'MEMBER' | 'VIEWER';
+export type Role = 'OWNER' | 'MEMBER' | 'VIEWER' | 'GUEST';
+/** Viewers and guests cannot own work. */
+export const isReadOnlyRole = (role: Role) => role === 'VIEWER' || role === 'GUEST';
 export type TaskType = 'TASK' | 'BUG' | 'STORY' | 'SPIKE';
 export type EmailFrequency = 'OFF' | 'INSTANT' | 'DAILY' | 'WEEKLY';
 export type RegistrationMode = 'OPEN' | 'INVITE' | 'APPROVAL';
@@ -25,6 +27,8 @@ export interface Member extends User {
 }
 
 export interface Project {
+  /** An emoji shown next to the name. */
+  icon?: string | null;
   id: number;
   key: string;
   name: string;
@@ -38,6 +42,10 @@ export interface Project {
   kanban: boolean;
   /** Accent colour (#rrggbb) or null for the default. */
   color: string | null;
+  /** Blocked tasks move later automatically when a blocker slips. */
+  autoSchedule: boolean;
+  /** Only the workflow's transitions are allowed. */
+  restrictTransitions: boolean;
 }
 
 export interface SprintRef {
@@ -56,6 +64,7 @@ export interface Sprint extends SprintRef {
 }
 
 export interface EpicRef {
+  icon?: string | null;
   id: number;
   name: string;
   colorIndex: number;
@@ -87,6 +96,8 @@ export interface BoardColumn {
   status: Status;
   position: number;
   wipLimit: number | null;
+  /** What a task needs before entering this column (see Requirement). */
+  required: string[];
 }
 
 export interface Task {
@@ -119,6 +130,12 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   release: ReleaseRef | null;
+  resolution: Resolution | null;
+  startDate: string | null;
+  estimateMinutes: number | null;
+  archivedAt: string | null;
+  helpers: User[];
+  components: { id: number; name: string }[];
 }
 
 export interface TaskInput {
@@ -138,6 +155,7 @@ export interface CreateTaskInput extends TaskInput {
   sprintId: number | null;
   parentId?: number | null;
   checklist?: string[];
+  componentIds?: number[];
 }
 
 export interface BulkChange {
@@ -173,7 +191,7 @@ export interface TimeEntry {
 
 export interface DevLink {
   id: number;
-  kind: 'COMMIT' | 'PULL_REQUEST';
+  kind: 'COMMIT' | 'PULL_REQUEST' | 'BRANCH';
   url: string;
   title: string;
   state: string | null;
@@ -218,12 +236,14 @@ export interface Invite {
   expiresAt: string;
   usedAt: string | null;
   usedBy: string | null;
+  /** Role in the project for project invites. */
+  role: Role | null;
 }
 
 export interface AdminUser {
   user: User;
   admin: boolean;
-  status: 'ACTIVE' | 'PENDING';
+  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
   createdAt: string;
   twoFactor: boolean;
   mustChangePassword: boolean;
@@ -258,6 +278,10 @@ export interface Comment {
   editedAt: string | null;
   parentId: number | null;
   reactions: Reaction[];
+  /** Inline comments: the passage of the description they refer to. */
+  anchor: string | null;
+  /** Only for the team: hidden from guests, viewers and limited roles. */
+  internal: boolean;
 }
 
 export interface ChecklistItem {
@@ -330,6 +354,62 @@ export interface Notification {
   taskId: number | null;
   read: boolean;
   createdAt: string;
+  snoozedUntil?: string | null;
+  doneAt?: string | null;
+}
+
+export type NotificationLevel = 'ALL' | 'DIRECT' | 'MUTED';
+
+export interface NotificationRule {
+  projectKey: string | null;
+  projectName: string | null;
+  /** Null on a project that has no rule of its own. */
+  level: NotificationLevel | null;
+  email: boolean | null;
+  push: boolean | null;
+}
+
+export interface NotificationSettings {
+  defaults: NotificationRule;
+  projects: NotificationRule[];
+  quietHours: { timeZone: string | null; from: string | null; to: string | null };
+}
+
+export interface Reminder {
+  id: number;
+  task: TaskRef | null;
+  note: string;
+  remindAt: string;
+}
+
+export interface RunningTimer {
+  task: TaskRef;
+  projectKey: string;
+  startedAt: string;
+  elapsedSeconds: number;
+}
+
+export interface TodayList {
+  date: string;
+  picks: Task[];
+  suggestions: Task[];
+  previousDay: string | null;
+  carryOver: Task[];
+}
+
+export interface DaySummary {
+  date: string;
+  completed: Task[];
+  unfinished: Task[];
+  minutesLogged: number;
+  comments: number;
+  text: string;
+}
+
+export interface PersonalNotes {
+  note: string;
+  updatedAt: string | null;
+  items: { id: number; text: string; done: boolean }[];
 }
 
 export interface Profile {
@@ -435,6 +515,8 @@ export interface SprintReview {
   removed: ReviewTask[];
   people: { user: User; tasks: number; points: number }[];
   markdown: string;
+  goals: { id: number; text: string; done: boolean }[];
+  goalsMet: number;
 }
 
 export interface PokerState {
@@ -541,7 +623,7 @@ export interface SearchField {
   values: string[];
 }
 
-export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE';
+export type HitKind = 'TASK' | 'COMMENT' | 'ATTACHMENT' | 'EPIC' | 'RELEASE' | 'WIKI';
 
 export interface TextHit {
   kind: HitKind;
@@ -563,7 +645,9 @@ export interface Team {
   canEdit: boolean;
 }
 
-export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint';
+export type WidgetType = 'filter' | 'chart' | 'counter' | 'activity' | 'recent' | 'calendar' | 'sprint' | 'trend' | 'report';
+
+export type ReportWidgetKind = 'forecast' | 'aging' | 'bugs' | 'sla';
 
 export interface Widget {
   type: WidgetType;
@@ -572,6 +656,12 @@ export interface Widget {
   groupBy?: string;
   project?: string;
   limit?: number;
+  /** Chart widgets: bars (default) or a donut. */
+  chartKind?: 'bars' | 'donut';
+  /** Trend widgets: how many weeks back. */
+  weeks?: number;
+  /** Report widgets: which project report. */
+  report?: ReportWidgetKind;
 }
 
 export interface Dashboard {
@@ -772,3 +862,588 @@ export interface OffsiteStatus {
   lastFile: string | null;
   lastError: string | null;
 }
+
+// ---------------------------------------------------------------- 5.0: work management
+
+export type Resolution = 'DONE' | 'FIXED' | 'WONT_DO' | 'DUPLICATE' | 'CANNOT_REPRODUCE';
+export const RESOLUTIONS: Resolution[] = ['DONE', 'FIXED', 'WONT_DO', 'DUPLICATE', 'CANNOT_REPRODUCE'];
+export const RESOLUTION_LABEL: Record<Resolution, string> = {
+  DONE: 'Done', FIXED: 'Fixed', WONT_DO: "Won't do", DUPLICATE: 'Duplicate', CANNOT_REPRODUCE: 'Cannot reproduce',
+};
+
+export interface WorkflowColumn {
+  id: number;
+  name: string;
+  status: Status;
+  required: string[];
+}
+
+export interface Workflow {
+  restricted: boolean;
+  columns: WorkflowColumn[];
+  transitions: { fromId: number | null; toId: number }[];
+  /** Requirement key → human label. */
+  requirements: Record<string, string>;
+}
+
+export interface ProjectComponent {
+  id: number;
+  name: string;
+  description: string;
+  lead: User | null;
+  taskCount: number;
+}
+
+export type ApprovalState = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Approval {
+  id: number;
+  approver: User;
+  requestedBy: User;
+  state: ApprovalState;
+  request: string;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  canDecide: boolean;
+  task: TaskRef;
+}
+
+export interface SprintGoal {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
+export interface PersonCapacity {
+  user: User;
+  workingDays: number;
+  awayDays: number;
+  daysOff: number;
+  hoursPerDay: number;
+  availableHours: number;
+  remainingHours: number;
+  tasks: number;
+  unestimated: number;
+  points: number;
+  over: boolean;
+}
+
+export interface SprintCapacity {
+  start: string;
+  end: string;
+  datesAssumed: boolean;
+  workingDays: number;
+  people: PersonCapacity[];
+  availableHours: number;
+  remainingHours: number;
+}
+
+export interface TimelineBar {
+  id: number;
+  key: string;
+  title: string;
+  status: Status;
+  type: TaskType;
+  assignee: User | null;
+  epic: EpicRef | null;
+  start: string;
+  due: string;
+  days: number;
+  points: number | null;
+  critical: boolean;
+  slack: number;
+  conflict: boolean;
+}
+
+export interface Timeline {
+  tasks: TimelineBar[];
+  dependencies: { from: number; to: number }[];
+  criticalPath: number[];
+  criticalDays: number;
+  unscheduled: number;
+  autoSchedule: boolean;
+}
+
+export type Risk = 'OK' | 'WATCH' | 'AT_RISK';
+
+export interface PortfolioRow {
+  key: string;
+  name: string;
+  color: string | null;
+  kanban: boolean;
+  open: number;
+  inProgress: number;
+  done: number;
+  percentDone: number;
+  overdue: number;
+  unassigned: number;
+  sprint: { id: number; name: string; end: string | null; done: number; total: number; percentDone: number;
+    percentTime: number; behind: boolean } | null;
+  release: { id: number; name: string; date: string | null; open: number; late: boolean } | null;
+  lateEpics: number;
+  lastActivity: string;
+  risk: Risk;
+  reasons: string[];
+}
+
+export type KeyResultKind = 'MANUAL' | 'EPICS';
+
+export interface KeyResult {
+  id: number;
+  title: string;
+  kind: KeyResultKind;
+  startValue: number | null;
+  target: number | null;
+  current: number | null;
+  unit: string | null;
+  percent: number;
+  epics: { id: number | null; name: string; projectKey: string; done: number; total: number }[];
+}
+
+export type GoalHealth = 'none' | 'done' | 'on_track' | 'at_risk' | 'off_track';
+
+export interface Goal {
+  id: number;
+  title: string;
+  description: string;
+  quarter: string;
+  owner: User;
+  shared: boolean;
+  canEdit: boolean;
+  percent: number;
+  expected: number;
+  health: GoalHealth;
+  keyResults: KeyResult[];
+}
+
+export interface KeyResultInput {
+  title: string;
+  kind: KeyResultKind;
+  startValue?: number | null;
+  target?: number | null;
+  current?: number | null;
+  unit?: string | null;
+  epicIds?: number[];
+}
+
+// ---------------------------------------------------------------- 5.0: collaboration
+
+export interface PollOption {
+  text: string;
+  votes: number;
+  voters: string[];
+  mine: boolean;
+}
+
+export interface Poll {
+  id: number;
+  question: string;
+  multiple: boolean;
+  options: PollOption[];
+  voters: number;
+  createdBy: User;
+  createdAt: string;
+  closedAt: string | null;
+  canClose: boolean;
+}
+
+export interface DecisionEntry {
+  id: number;
+  text: string;
+  context: string;
+  task: TaskRef | null;
+  decidedBy: User;
+  decidedAt: string;
+}
+
+export interface KudosEntry {
+  id: number;
+  from: User;
+  to: User;
+  message: string;
+  emoji: string;
+  task: TaskRef | null;
+  projectKey: string;
+  createdAt: string;
+}
+
+export interface KudosWall {
+  recent: KudosEntry[];
+  thisMonth: { user: User; count: number }[];
+}
+
+export interface WikiPageSummary {
+  id: number;
+  title: string;
+  slug: string;
+  parentId: number | null;
+  updatedBy: User;
+  updatedAt: string;
+}
+
+export interface WikiPage {
+  id: number;
+  projectKey: string;
+  title: string;
+  slug: string;
+  body: string;
+  version: number;
+  parentId: number | null;
+  path: WikiPageSummary[];
+  children: WikiPageSummary[];
+  createdBy: User;
+  createdAt: string;
+  updatedBy: User;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
+export interface WikiRevision {
+  version: number;
+  title: string;
+  author: User;
+  createdAt: string;
+  body: string | null;
+}
+
+export type MeetingKind = 'STANDUP' | 'PLANNING' | 'REVIEW' | 'RETRO' | 'OTHER';
+
+export interface MeetingNote {
+  id: number;
+  kind: MeetingKind;
+  title: string;
+  date: string;
+  body: string;
+  sprintId: number | null;
+  sprintName: string | null;
+  createdBy: User;
+  updatedAt: string;
+  actions: { id: number; text: string; assignee: User | null; task: TaskRef | null }[];
+}
+
+export interface StandupPerson {
+  user: User;
+  away: boolean;
+  finished: TaskRef[];
+  workedOn: TaskRef[];
+  today: TaskRef[];
+  blocked: TaskRef[];
+  minutesLogged: number;
+}
+
+export interface Standup {
+  date: string;
+  since: string;
+  people: StandupPerson[];
+}
+
+// ---- Reporting ----
+
+export interface ForecastResult {
+  scope: string;
+  remaining: number;
+  weeklyThroughput: number[];
+  enoughData: boolean;
+  completion: { confidence: number; weeks: number; date: string }[];
+  histogram: Record<string, number>;
+  targetDate: string | null;
+  targetProbability: number | null;
+  byTarget: { confidence: number; items: number }[];
+}
+
+export interface Burnup {
+  releaseId: number;
+  name: string;
+  releaseDate: string | null;
+  days: { date: string; scope: number; done: number; scopePoints: number; donePoints: number }[];
+  projectedDate: string | null;
+  dailyRate: number;
+}
+
+export interface AgingItem {
+  task: TaskRef;
+  status: Status;
+  column: string | null;
+  assignee: User | null;
+  startedAt: string;
+  ageDays: number;
+  level: 'ok' | 'watch' | 'late';
+}
+
+export interface AgingWip {
+  cycleP50: number | null;
+  cycleP85: number | null;
+  items: AgingItem[];
+}
+
+export interface BugTrends {
+  weeks: { weekStart: string; created: number; resolved: number; open: number }[];
+  openByPriority: Record<Priority, number>;
+  resolutions: Partial<Record<Resolution, number>>;
+  meanDaysToResolve: number | null;
+  oldestOpen: TaskRef[];
+}
+
+export interface SlaTarget {
+  priority: Priority;
+  responseHours: number | null;
+  resolveHours: number | null;
+}
+
+export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | null;
+
+export interface TaskSla {
+  priority: Priority;
+  responseDueAt: string | null;
+  respondedAt: string | null;
+  responseState: SlaState;
+  resolveDueAt: string | null;
+  resolvedAt: string | null;
+  resolveState: SlaState;
+}
+
+export interface SlaReport {
+  days: number;
+  priorities: {
+    priority: Priority; responseHours: number | null; resolveHours: number | null; tasks: number;
+    responseMet: number; responseBreached: number; resolveMet: number; resolveBreached: number;
+    averageResponseHours: number | null; averageResolveHours: number | null;
+  }[];
+  responseMetPercent: number | null;
+  resolveMetPercent: number | null;
+  attention: { task: TaskRef; priority: Priority; kind: 'response' | 'resolution'; state: SlaState; dueAt: string }[];
+}
+
+export interface TrendWeek {
+  weekStart: string;
+  created: number;
+  resolved: number;
+  open: number;
+}
+
+export type ReportKind = 'filter' | 'project' | 'dashboard';
+
+export interface ReportSubscription {
+  id: number;
+  kind: ReportKind;
+  target: string;
+  title: string;
+  frequency: 'DAILY' | 'WEEKLY';
+  weekday: number;
+  hour: number;
+  lastSentAt: string | null;
+  nextSendAt: string;
+}
+
+export interface HealthCheckSummary {
+  id: number;
+  title: string;
+  createdBy: User;
+  createdAt: string;
+  closed: boolean;
+  voters: number;
+  categories: string[];
+  averages: Record<string, number | null>;
+}
+
+export interface HealthCheckDetail {
+  check: HealthCheckSummary;
+  resultsVisible: boolean;
+  results: { category: string; red: number; amber: number; green: number; worse: number; stable: number; better: number; average: number | null }[];
+  mine: { category: string; score: number; trend: number }[];
+  canManage: boolean;
+  members: number;
+}
+
+// ---- Service desk ----
+
+export type FormFieldKind = 'text' | 'textarea' | 'select' | 'number' | 'date' | 'checkbox' | 'url';
+
+export interface FormField {
+  id: string;
+  label: string;
+  kind: FormFieldKind;
+  required: boolean;
+  help?: string;
+  options?: string[];
+}
+
+export interface RequestTypeDef {
+  id: number;
+  name: string;
+  description: string;
+  taskType: TaskType;
+  priority: Priority;
+  fields: FormField[];
+}
+
+export interface ServiceDeskSettings {
+  portalEnabled: boolean;
+  intro: string;
+  roadmapPublic: boolean;
+  changelogPublic: boolean;
+  portalUrl: string;
+  roadmapUrl: string;
+  changelogUrl: string;
+  widgetSnippet: string;
+  requestTypes: RequestTypeDef[];
+}
+
+export interface PortalConversation {
+  requesterName: string;
+  requesterEmail: string;
+  requestType: string | null;
+  channel: 'portal' | 'widget';
+  answers: { label: string; value: string }[];
+  trackingUrl: string;
+  createdAt: string;
+  messages: { id: number; fromRequester: boolean; author: User | null; body: string; createdAt: string }[];
+  mailEnabled: boolean;
+}
+
+export interface SimilarTask {
+  task: TaskRef;
+  score: number;
+  done: boolean;
+}
+
+export interface PublicPortal {
+  projectKey: string;
+  projectName: string;
+  color: string | null;
+  intro: string;
+  requestTypes: { id: number; name: string; description: string; fields: FormField[] }[];
+  roadmap: boolean;
+  changelog: boolean;
+}
+
+export interface PublicTracking {
+  reference: string;
+  title: string;
+  projectName: string;
+  projectKey: string;
+  status: string;
+  resolved: boolean;
+  requestType: string | null;
+  createdAt: string;
+  messages: { fromRequester: boolean; author: string; body: string; createdAt: string }[];
+}
+
+export interface PublicRoadmap {
+  projectName: string;
+  projectKey: string;
+  portal: boolean;
+  items: { name: string; description: string; stage: 'now' | 'next' | 'later' | 'done'; startDate: string | null;
+    dueDate: string | null; percentDone: number; colorIndex: number }[];
+}
+
+export interface PublicChangelog {
+  projectName: string;
+  projectKey: string;
+  portal: boolean;
+  releases: { version: string; date: string | null; description: string; features: string[]; fixes: string[]; other: string[] }[];
+}
+
+// ---- Integrations ----
+
+export type BuildState = 'pending' | 'running' | 'success' | 'failure' | 'cancelled';
+
+export interface BuildInfo {
+  source: string;
+  name: string;
+  state: BuildState;
+  url: string | null;
+  ref: string | null;
+  updatedAt: string;
+}
+
+export interface TaskGithub {
+  repo: string | null;
+  canCreate: boolean;
+  issueUrl: string | null;
+  issueNumber: number | null;
+  builds: BuildInfo[];
+}
+
+export interface GithubRepoSettings {
+  repo: string;
+  hasToken: boolean;
+  defaultBranch: string | null;
+  issueSync: boolean;
+}
+
+export interface ChatCommandSettings {
+  slackSigningSecret: boolean;
+  slackBotToken: boolean;
+  mattermostToken: boolean;
+  discordPublicKey: boolean;
+  slackCommandUrl: string;
+  slackEventsUrl: string;
+  mattermostCommandUrl: string;
+  discordInteractionsUrl: string;
+}
+
+export interface CalendarStatus {
+  available: boolean;
+  connected: boolean;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  events: number;
+}
+
+export interface LinkPreviewData {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  embed: string | null;
+  kind: string;
+}
+
+// ---- Claude assistant ----------------------------------------------------------------------------------------------
+
+export interface AiStatus { enabled: boolean; model: string | null }
+export interface AiTaskDraft {
+  title: string; description: string; type: TaskType; priority: Priority; labels: string[]; storyPoints: number;
+  checklist: string[];
+}
+export interface AiThreadSummary { summary: string; decisions: string[]; openQuestions: string[]; changes: string[] }
+export interface AiProposedTask { title: string; description: string; type: TaskType; priority: Priority; storyPoints: number }
+export interface AiNotes { markdown: string }
+export interface AiFql { fql: string; explanation: string; total: number }
+export interface AiEstimate {
+  storyPoints: number; estimateHours: number | null; confidence: 'low' | 'medium' | 'high'; reasoning: string;
+  similar: { task: TaskRef; storyPoints: number | null; estimateMinutes: number | null; loggedMinutes: number }[];
+}
+export interface AiTriage {
+  type: TaskType; priority: Priority; assignee: User | null; labels: string[]; duplicateOf: TaskRef | null; reasoning: string;
+}
+
+// ---- Admin: access, data and health --------------------------------------------------------------------------------
+
+export interface SecurityPolicy {
+  ssoRequired: boolean; sessionHours: number; idleMinutes: number; ipAllowlist: string[]; loginAlerts: boolean;
+}
+export interface SecurityOverview {
+  policy: SecurityPolicy; signIn: string[]; ssoAvailable: boolean; samlMetadataUrl: string; samlAcsUrl: string;
+  oidcRedirectUrl: string; scimUrl: string; scimTokenSet: boolean; yourIp: string;
+}
+export interface RetentionPolicy {
+  archiveDoneAfterDays: number; deleteArchivedAfterDays: number; deleteNotificationsAfterDays: number; deleteAuditAfterDays: number;
+}
+export interface RetentionCounts { tasksArchived: number; tasksDeleted: number; notificationsDeleted: number; auditEntriesDeleted: number }
+export interface EncryptionStatus { enabled: boolean; encrypted: number; oldKey: number; plain: number }
+export interface RestoreStatus { supported: boolean; reason: string | null; lastResult: string[] }
+export interface HealthCheck { id: string; label: string; ok: boolean; detail: string; since: string | null }
+export interface HealthThresholds { minFreeDiskMb: number; maxBackupAgeHours: number; maxServerErrors: number; maxHeapPercent: number; alerts: boolean }
+
+// ---- Custom project roles ------------------------------------------------------------------------------------------
+
+export type Permission = 'CREATE_TASKS' | 'EDIT_TASKS' | 'DELETE_TASKS' | 'COMMENT' | 'LOG_TIME' | 'MANAGE_SPRINTS'
+  | 'MANAGE_RELEASES' | 'MANAGE_EPICS' | 'VIEW_INTERNAL';
+export interface CustomRole { id: number; name: string; description: string; permissions: Permission[]; memberIds: number[] }
+export interface RolesCatalog { roles: CustomRole[]; permissions: { id: Permission; label: string }[] }
+
+export interface GalleryImage { id: number; filename: string; size: number; createdAt: string; task: TaskRef; uploader: User }

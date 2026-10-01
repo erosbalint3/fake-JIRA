@@ -79,12 +79,14 @@ public class TaskDetailsService {
 
     @Transactional(readOnly = true)
     public List<CommentResponse> comments(User user, Long taskId) {
-        support.memberTask(taskId, user);
+        Task task = support.memberTask(taskId, user);
+        boolean internal = support.canSeeInternal(task, user);
         Map<Long, List<CommentReaction>> byComment = new HashMap<>();
         for (CommentReaction r : reactions.findForTask(taskId)) {
             byComment.computeIfAbsent(r.getComment().getId(), k -> new java.util.ArrayList<>()).add(r);
         }
         return comments.findForTask(taskId).stream()
+                .filter(c -> internal || !c.isInternal())
                 .map(c -> CommentResponse.of(c, summarize(byComment.getOrDefault(c.getId(), List.of()), user)))
                 .toList();
     }
@@ -108,7 +110,7 @@ public class TaskDetailsService {
         if (!REACTIONS.contains(emoji)) {
             throw ApiException.badRequest("That reaction is not available.");
         }
-        Comment comment = commentOf(task, commentId);
+        Comment comment = commentOf(task, commentId, user);
         reactions.findByCommentIdAndUserIdAndEmoji(commentId, user.getId(), emoji)
                 .ifPresentOrElse(reactions::delete, () -> reactions.save(new CommentReaction(comment, user, emoji)));
         reactions.flush();
@@ -121,10 +123,22 @@ public class TaskDetailsService {
     }
 
     public CommentResponse addComment(User user, Long taskId, String body, Long parentId) {
-        Task task = support.editableTask(taskId, user);
+        return addComment(user, taskId, body, parentId, null);
+    }
+
+    public CommentResponse addComment(User user, Long taskId, String body, Long parentId, String anchor) {
+        return addComment(user, taskId, body, parentId, anchor, false);
+    }
+
+    public CommentResponse addComment(User user, Long taskId, String body, Long parentId, String anchor, boolean internal) {
+        Task task = support.commentableTask(taskId, user);
+        boolean team = support.canSeeInternal(task, user);
+        if (internal && !team) {
+            throw ApiException.forbidden("Only the team can write internal comments.");
+        }
         Comment parent = null;
         if (parentId != null) {
-            parent = commentOf(task, parentId);
+            parent = commentOf(task, parentId, user);
             // Replies stay one level deep: answering a reply joins the same thread.
             if (parent.getParent() != null) {
                 parent = parent.getParent();
@@ -132,15 +146,22 @@ public class TaskDetailsService {
         }
         Comment created = new Comment(task, user, body.trim());
         created.setParent(parent);
+        created.setInternal(internal || parent != null && parent.isInternal());
+        if (parent == null && anchor != null && !anchor.isBlank()) {
+            String quote = anchor.trim().replaceAll("\\s+", " ");
+            created.setAnchor(quote.length() > 300 ? quote.substring(0, 300) : quote);
+        }
         Comment comment = comments.save(created);
-        if (parent != null && !parent.getAuthor().getId().equals(user.getId())) {
+        // Internal comments only reach people who may read them.
+        java.util.function.Predicate<User> mayRead = u -> !comment.isInternal() || support.canSeeInternal(task, u);
+        if (parent != null && !parent.getAuthor().getId().equals(user.getId()) && mayRead.test(parent.getAuthor())) {
             notifications.notify(parent.getAuthor(), user, task, "replied to your comment on");
         }
 
         Map<Long, User> mentioned = mentionedMembers(task, comment.getBody(), Set.of());
-        mentioned.values().forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
+        mentioned.values().stream().filter(mayRead).forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
         for (User participant : support.participants(task)) {
-            if (!mentioned.containsKey(participant.getId())) {
+            if (!mentioned.containsKey(participant.getId()) && mayRead.test(participant)) {
                 notifications.notify(participant, user, task, "commented on");
             }
         }
@@ -149,22 +170,25 @@ public class TaskDetailsService {
             task.getWatchers().add(user);
         }
         live.taskChanged(task);
-        chat.commented(task, user, comment.getBody());
+        if (!comment.isInternal()) {
+            chat.commented(task, user, comment.getBody());
+        }
         taskEvents.publish(TaskEvent.Kind.COMMENTED, task, user, "comment", comment.getBody(),
-                "commentId", String.valueOf(comment.getId()));
+                "commentId", String.valueOf(comment.getId()), "internal", String.valueOf(comment.isInternal()));
         return CommentResponse.of(comment);
     }
 
     /** Authors edit their own comments; people @mentioned for the first time get notified. */
     public CommentResponse editComment(User user, Long taskId, Long commentId, String body) {
-        Task task = support.editableTask(taskId, user);
-        Comment comment = commentOf(task, commentId);
+        Task task = support.commentableTask(taskId, user);
+        Comment comment = commentOf(task, commentId, user);
         if (!comment.getAuthor().getId().equals(user.getId())) {
             throw ApiException.forbidden("You can only edit your own comments.");
         }
         Set<String> before = MentionParser.usernames(comment.getBody());
         comment.edit(body.trim());
-        mentionedMembers(task, comment.getBody(), before).values()
+        mentionedMembers(task, comment.getBody(), before).values().stream()
+                .filter(u -> !comment.isInternal() || support.canSeeInternal(task, u))
                 .forEach(member -> notifications.notify(member, user, task, "mentioned you in"));
         live.taskChanged(task);
         return CommentResponse.of(comment);
@@ -173,7 +197,7 @@ public class TaskDetailsService {
     /** Authors delete their own comments; the project owner can delete any. */
     public void deleteComment(User user, Long taskId, Long commentId) {
         Task task = support.memberTask(taskId, user);
-        Comment comment = commentOf(task, commentId);
+        Comment comment = commentOf(task, commentId, user);
         boolean author = comment.getAuthor().getId().equals(user.getId());
         if (!author && !task.getProject().isOwner(user)) {
             throw ApiException.forbidden("You can only delete your own comments.");
@@ -190,9 +214,9 @@ public class TaskDetailsService {
         live.taskChanged(task);
     }
 
-    private Comment commentOf(Task task, Long commentId) {
+    private Comment commentOf(Task task, Long commentId, User user) {
         Comment comment = comments.findById(commentId).orElseThrow(() -> ApiException.notFound("Comment not found."));
-        if (!comment.getTask().getId().equals(task.getId())) {
+        if (!comment.getTask().getId().equals(task.getId()) || comment.isInternal() && !support.canSeeInternal(task, user)) {
             throw ApiException.notFound("Comment not found.");
         }
         return comment;
@@ -260,7 +284,10 @@ public class TaskDetailsService {
 
     @Transactional(readOnly = true)
     public List<ActivityResponse> activity(User user, Long taskId) {
-        support.memberTask(taskId, user);
+        // Guests see the conversation, not the internal history.
+        if (support.memberTask(taskId, user).getProject().isGuest(user)) {
+            return List.of();
+        }
         return activity.findForTask(taskId).stream().map(ActivityResponse::of).toList();
     }
 
@@ -329,12 +356,14 @@ public class TaskDetailsService {
 
     @Transactional(readOnly = true)
     public List<TimeEntryResponse> time(User user, Long taskId) {
-        support.memberTask(taskId, user);
+        if (support.memberTask(taskId, user).getProject().isGuest(user)) {
+            return List.of();
+        }
         return time.findForTask(taskId).stream().map(TimeEntryResponse::of).toList();
     }
 
     public TimeEntryResponse logTime(User user, Long taskId, TimeRequest request) {
-        Task task = support.editableTask(taskId, user);
+        Task task = support.permittedTask(taskId, user, com.fakejira.project.Permission.LOG_TIME);
         LocalDate date = request.date() == null ? LocalDate.now() : request.date();
         if (date.isAfter(LocalDate.now().plusDays(1))) {
             throw ApiException.badRequest("Time cannot be logged in the future.");

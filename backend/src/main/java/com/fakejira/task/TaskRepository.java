@@ -32,6 +32,15 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
 
     java.util.Optional<Task> findByProjectIdAndNumber(Long projectId, Integer number);
 
+    /** Done tasks finished before {@code before} that are not archived yet (retention). */
+    @Query("select t from Task t where t.status = com.fakejira.task.TaskStatus.DONE and t.archivedAt is null "
+            + "and t.completedAt < :before and t.parent is null")
+    List<Task> doneBefore(@Param("before") java.time.Instant before);
+
+    /** Top-level tasks archived before {@code before} (retention deletes them with their subtasks). */
+    @Query("select t from Task t where t.archivedAt < :before and t.parent is null")
+    List<Task> archivedBefore(@Param("before") java.time.Instant before);
+
     @Modifying
     @Query("update Task t set t.parent = null where t.parent.id = :parentId")
     int detachSubtasks(@Param("parentId") Long parentId);

@@ -5,6 +5,7 @@ import { useAuth } from '../../auth';
 import { useToast } from '../../toast';
 import { Modal } from '../Modal';
 import type { Profile } from '../../types';
+import { t } from '../../i18n';
 
 /** Download your data, or delete your account. */
 export function DataPanel({ profile }: { profile: Profile }) {
@@ -14,9 +15,9 @@ export function DataPanel({ profile }: { profile: Profile }) {
 
   return (
     <section className="panel">
-      <h2 className="panel-title">Your data</h2>
+      <h2 className="panel-title">{t('Your data')}</h2>
       <p className="muted small hint">
-        Download everything FakeJIRA stores about you (profile, projects, tasks, comments, time logs, notifications) as JSON.
+        {t('Download everything FakeJIRA stores about you (profile, projects, tasks, comments, time logs, notifications) as JSON.')}
       </p>
       <div className="button-row">
         <button className="btn btn-soft" onClick={async () => {
@@ -25,11 +26,11 @@ export function DataPanel({ profile }: { profile: Profile }) {
           } catch (e) {
             toast((e as ApiError).message, 'error');
           }
-        }}><Download size={16} /> Download my data</button>
-        <button className="btn btn-ghost danger" onClick={() => setDeleting(true)}><Trash2 size={16} /> Delete account</button>
+        }}><Download size={16} /> {t('Download my data')}</button>
+        <button className="btn btn-ghost danger" onClick={() => setDeleting(true)}><Trash2 size={16} /> {t('Delete account')}</button>
       </div>
       {deleting && <DeleteDialog profile={profile} onClose={() => setDeleting(false)} onDeleted={() => {
-        toast('Your account was deleted');
+        toast(t('Your account was deleted'));
         logout();
       }} />}
     </section>
@@ -58,33 +59,31 @@ function DeleteDialog({ profile, onClose, onDeleted }: { profile: Profile; onClo
   };
 
   return (
-    <Modal title="Delete your account?" onClose={onClose}
+    <Modal title={t('Delete your account?')} onClose={onClose}
       footer={<>
-        <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn btn-ghost" onClick={onClose}>{t('Cancel')}</button>
         <button type="submit" form="delete-account" className="btn btn-danger"
-          disabled={busy || confirm !== profile.user.username}>Delete forever</button>
+          disabled={busy || confirm !== profile.user.username}>{t('Delete forever')}</button>
       </>}>
       <form id="delete-account" className="form" onSubmit={submit}>
         <p className="muted small">
-          Projects you own alone are deleted. You leave other projects and your tasks there become unassigned. Your comments
-          and history stay, shown as “Deleted user”. Hand over projects you share first (Project settings → Members). This
-          cannot be undone.
+          {t('Projects you own alone are deleted. You leave other projects and your tasks there become unassigned. Your comments and history stay, shown as “Deleted user”. Hand over projects you share first (Project settings → Members). This cannot be undone.')}
         </p>
         {error && <div className="alert">{error}</div>}
         {profile.passwordSet && (
           <label className="field">
-            <span>Password</span>
+            <span>{t('Password')}</span>
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
         )}
         {profile.twoFactorEnabled && (
           <label className="field">
-            <span>Code from your authenticator app</span>
+            <span>{t('Code from your authenticator app')}</span>
             <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="one-time-code" className="code-input" />
           </label>
         )}
         <label className="field">
-          <span>Type <b>{profile.user.username}</b> to confirm</span>
+          <span>{t('Type {name} to confirm', { name: profile.user.username })}</span>
           <input value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
         </label>
       </form>

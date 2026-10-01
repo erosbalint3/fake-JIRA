@@ -16,5 +16,12 @@ export function useRouteProject() {
 export function useProjectAccess(project: Project | undefined) {
   const { user } = useAuth();
   const role: Role | null = project?.members.find((m) => m.id === user?.id)?.role ?? null;
-  return { role, canEdit: role === 'OWNER' || role === 'MEMBER', isOwner: role === 'OWNER' };
+  return {
+    role,
+    canEdit: role === 'OWNER' || role === 'MEMBER',
+    isOwner: role === 'OWNER',
+    /** Guests are read-only but may comment and vote. */
+    canComment: role === 'OWNER' || role === 'MEMBER' || role === 'GUEST',
+    isGuest: role === 'GUEST',
+  };
 }

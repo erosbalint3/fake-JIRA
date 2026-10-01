@@ -11,6 +11,8 @@ public interface StatusChangeRepository extends JpaRepository<StatusChange, Long
 
     List<StatusChange> findByProjectIdOrderByChangedAtAsc(Long projectId);
 
+    List<StatusChange> findByTaskIdOrderByChangedAtAsc(Long taskId);
+
     @Modifying
     @Query("delete from StatusChange s where s.taskId = :taskId")
     void deleteForTask(@Param("taskId") Long taskId);

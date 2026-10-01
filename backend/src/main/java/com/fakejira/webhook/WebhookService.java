@@ -185,6 +185,11 @@ public class WebhookService {
         });
     }
 
+    /** What a delivery of {@code event} about {@code task} looks like (REST hook samples). */
+    public String sample(String event, Task task, User actor) {
+        return payload(event, task, actor, Map.of("key", task.getKey(), "title", task.getTitle()), false);
+    }
+
     String payload(String event, Task task, User actor, Map<String, String> details, boolean automated) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("event", event);

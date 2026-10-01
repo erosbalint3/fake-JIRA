@@ -30,11 +30,29 @@ public class OAuthController {
     private static final String NONCE_COOKIE = "fj_oauth";
 
     private final OAuthService oauth;
+    private final SamlService saml;
     private final CurrentUser currentUser;
 
-    public OAuthController(OAuthService oauth, CurrentUser currentUser) {
+    public OAuthController(OAuthService oauth, SamlService saml, CurrentUser currentUser) {
         this.oauth = oauth;
+        this.saml = saml;
         this.currentUser = currentUser;
+    }
+
+    /** Public: service provider metadata to register FakeJIRA with a SAML identity provider. */
+    @GetMapping(value = "/api/auth/saml/metadata", produces = "application/samlmetadata+xml")
+    public String samlMetadata() {
+        return saml.metadata();
+    }
+
+    /** The SAML identity provider posts its response here (HTTP-POST binding). */
+    @PostMapping(value = "/api/auth/oauth/saml/acs", consumes = "application/x-www-form-urlencoded")
+    public ResponseEntity<Void> samlAcs(@RequestParam(name = "SAMLResponse", required = false) String samlResponse,
+                                        @RequestParam(name = "RelayState", required = false) String relayState) {
+        if (!saml.enabled()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.status(HttpStatus.SEE_OTHER).location(URI.create(saml.acs(samlResponse, relayState))).build();
     }
 
     public record UrlRequest(String invite) {
@@ -74,8 +92,13 @@ public class OAuthController {
                                          @RequestParam(required = false) String state,
                                          @RequestParam(required = false) String error,
                                          @CookieValue(name = NONCE_COOKIE, required = false) String nonce) {
+        String errorMessage = error == null ? null : switch (error) {
+            case "invalid" -> "The sign-in response could not be verified. Please try again or ask your admin.";
+            case "state" -> "The sign-in link expired. Please try again.";
+            default -> "Sign-in was cancelled.";
+        };
         OAuthService.Outcome outcome = error != null
-                ? new OAuthService.Outcome("error=" + java.net.URLEncoder.encode("Sign-in was cancelled.",
+                ? new OAuthService.Outcome("error=" + java.net.URLEncoder.encode(errorMessage,
                 java.nio.charset.StandardCharsets.UTF_8))
                 : oauth.callback(provider, code, state, nonce);
         ResponseCookie clear = ResponseCookie.from(NONCE_COOKIE, "").path("/api/auth/oauth").maxAge(0).build();

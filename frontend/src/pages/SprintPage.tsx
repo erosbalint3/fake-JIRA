@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCopy, ListPlus, MessageSquareHeart, Pencil, Presentation, ThumbsUp, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, Gauge, NotebookPen, ListPlus, MessageSquareHeart, Pencil, Presentation, Sparkles, ThumbsUp, Trash2 } from 'lucide-react';
+import { AiNotesModal, useAiEnabled } from '../components/Ai';
 import { api, ApiError } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
-import { useRouteProject } from '../useProject';
+import { useProjectAccess, useRouteProject } from '../useProject';
 import { Avatar } from '../components/Avatar';
 import { PointsBadge, StatusBadge, TypeIcon } from '../components/Badges';
 import { EmptyState, ErrorBanner, Spinner } from '../components/States';
@@ -12,6 +13,9 @@ import { NotFoundPage } from './NotFoundPage';
 import { formatDay } from '../format';
 import type { RetroItem, RetroKind, ReviewTask, SprintReview } from '../types';
 import { t } from '../i18n';
+import { SprintGoals } from '../components/sprint/SprintGoals';
+import { CapacityPanel } from '../components/sprint/CapacityPanel';
+import { MeetingNotes } from '../components/MeetingNotes';
 
 const COLUMNS: { kind: RetroKind; title: string; hint: string }[] = [
   { kind: 'WENT_WELL', title: 'Went well', hint: 'What should we keep doing?' },
@@ -24,9 +28,11 @@ export function SprintPage() {
   const { id } = useParams();
   const sprintId = Number(id);
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'retro' ? 'retro' : 'review';
+  const requested = params.get('tab');
+  const tab = requested === 'retro' || requested === 'capacity' || requested === 'notes' ? requested : 'review';
   const [review, setReview] = useState<SprintReview | null>(null);
   const [error, setError] = useState('');
+  const { canEdit: canEditSprint } = useProjectAccess(project);
 
   const load = useCallback(() => {
     api.sprintReview(sprintId).then(setReview).catch((e: ApiError) => setError(e.message));
@@ -50,24 +56,33 @@ export function SprintPage() {
           <p className="muted">
             {sprint.state === 'ACTIVE' ? 'Active' : sprint.state === 'COMPLETED' ? 'Completed' : 'Planned'}
             {sprint.startDate && sprint.endDate && ` · ${formatDay(sprint.startDate)} – ${formatDay(sprint.endDate)}`}
-            {sprint.goal && <> · Goal: {sprint.goal}</>}
+            {sprint.goal && <> · {t('Goal: {goal}', { goal: sprint.goal })}</>}
           </p>
         </div>
       </header>
       <nav className="tabs" role="tablist" aria-label={t("Sprint")}>
         <button role="tab" aria-selected={tab === 'review'} className={`tab ${tab === 'review' ? 'active' : ''}`}
           onClick={() => setParams({}, { replace: true })}><Presentation size={15} /> {t("Review")}</button>
+        <button role="tab" aria-selected={tab === 'capacity'} className={`tab ${tab === 'capacity' ? 'active' : ''}`}
+          onClick={() => setParams({ tab: 'capacity' }, { replace: true })}><Gauge size={15} /> {t("Capacity")}</button>
+        <button role="tab" aria-selected={tab === 'notes'} className={`tab ${tab === 'notes' ? 'active' : ''}`}
+          onClick={() => setParams({ tab: 'notes' }, { replace: true })}><NotebookPen size={15} /> {t("Notes")}</button>
         <button role="tab" aria-selected={tab === 'retro'} className={`tab ${tab === 'retro' ? 'active' : ''}`}
           onClick={() => setParams({ tab: 'retro' }, { replace: true })}><MessageSquareHeart size={15} /> {t("Retrospective")}</button>
       </nav>
-      {tab === 'review' ? <ReviewView review={review} /> : <RetroBoard sprintId={sprintId} projectId={project.id}
-        open={sprint.state !== 'PLANNED'} />}
+      <SprintGoals sprintId={sprintId} canEdit={canEditSprint && sprint.state !== 'COMPLETED'} />
+      {tab === 'review' ? <ReviewView review={review} />
+        : tab === 'capacity' ? <CapacityPanel sprintId={sprintId} projectId={project.id} canEdit={canEditSprint} />
+        : tab === 'notes' ? <MeetingNotes projectKey={key} projectId={project.id} members={project.members} canEdit={canEditSprint} sprintId={sprintId} />
+        : <RetroBoard sprintId={sprintId} projectId={project.id} open={sprint.state !== 'PLANNED'} />}
     </div>
   );
 }
 
 function ReviewView({ review }: { review: SprintReview }) {
   const toast = useToast();
+  const aiEnabled = useAiEnabled();
+  const [drafting, setDrafting] = useState(false);
   const percent = review.committedPoints ? Math.round((review.completedPoints / review.committedPoints) * 100) : null;
   const copy = async () => {
     try {
@@ -83,17 +98,28 @@ function ReviewView({ review }: { review: SprintReview }) {
         <div className="stat panel"><span className="muted">{t("Completed")}</span><strong>{review.completedTasks}</strong>
           <span className="muted small">{t("tasks")}</span></div>
         <div className="stat panel"><span className="muted">{t("Points")}</span><strong>{review.completedPoints}</strong>
-          <span className="muted small">of {review.committedPoints} committed{percent !== null ? ` (${percent}%)` : ''}</span></div>
+          <span className="muted small">{t('of {n} committed', { n: review.committedPoints })}{percent !== null ? ` (${percent}%)` : ''}</span></div>
         <div className="stat panel"><span className="muted">{t("Scope change")}</span>
           <strong>+{review.added.length} / −{review.removed.length}</strong>
           <span className="muted small">{t("tasks added / removed after the start")}</span></div>
+        {review.goals.length > 0 && (
+          <div className="stat panel"><span className="muted">{t("Goals met")}</span>
+            <strong>{review.goalsMet} / {review.goals.length}</strong>
+            <span className="muted small">{Math.round((review.goalsMet / review.goals.length) * 100)}%</span></div>
+        )}
       </div>
       <div className="review-actions">
         <button className="btn btn-ghost btn-sm" onClick={copy}><ClipboardCopy size={15} /> {t("Copy as Markdown")}</button>
+        {aiEnabled && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setDrafting(true)}><Sparkles size={15} aria-hidden /> {t('Write the review with Claude')}</button>
+        )}
       </div>
+      {drafting && (
+        <AiNotesModal title={t('Sprint review by Claude')} load={() => api.aiSprintReview(review.sprint.id)} onClose={() => setDrafting(false)} />
+      )}
       <div className="report-grid">
-        <ReviewList title={t("Completed")} tasks={review.completed} empty="Nothing was finished." />
-        <ReviewList title={t("Not finished")} tasks={review.unfinished} empty="Everything was finished." />
+        <ReviewList title={t("Completed")} tasks={review.completed} empty={t('Nothing was finished.')} />
+        <ReviewList title={t("Not finished")} tasks={review.unfinished} empty={t('Everything was finished.')} />
         {review.added.length > 0 && <ReviewList title={t("Added during the sprint")} tasks={review.added} />}
         {review.removed.length > 0 && <ReviewList title={t("Removed during the sprint")} tasks={review.removed} />}
         {review.people.length > 0 && (
@@ -177,7 +203,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
   if (!open) {
     return (
       <EmptyState icon={<MessageSquareHeart size={28} />} title={t("The retrospective opens when the sprint starts")}>
-        Come back once the sprint is running.
+        {t('Come back once the sprint is running.')}
       </EmptyState>
     );
   }
@@ -187,16 +213,16 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
       {COLUMNS.map((column) => {
         const cards = items.filter((i) => i.kind === column.kind);
         return (
-          <section key={column.kind} className={`retro-column retro-${column.kind.toLowerCase()}`} aria-label={column.title}>
+          <section key={column.kind} className={`retro-column retro-${column.kind.toLowerCase()}`} aria-label={t(column.title)}>
             <header>
-              <h2>{column.title}</h2>
+              <h2>{t(column.title)}</h2>
               <span className="count">{cards.length}</span>
             </header>
-            <p className="muted small">{column.hint}</p>
+            <p className="muted small">{t(column.hint)}</p>
             {canEdit && (
               <form onSubmit={add(column.kind)} className="retro-add">
                 <textarea rows={2} maxLength={500} placeholder={t("Add a card…")} value={drafts[column.kind]}
-                  aria-label={`Add to ${column.title}`}
+                  aria-label={t('Add to {name}', { name: t(column.title) })}
                   onChange={(e) => setDrafts((d) => ({ ...d, [column.kind]: e.target.value }))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -233,7 +259,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                         {item.taskKey && item.taskId && <Link className="small" to={`/tasks/${item.taskId}`}>{item.taskKey}</Link>}
                         {canEdit && item.kind === 'ACTION' && !item.taskId && (
                           <button className="icon-button sm" title={t("Create a backlog task")} aria-label={t("Create a backlog task")}
-                            onClick={() => run(() => api.retroToTask(item.id), 'Task created in the backlog')}>
+                            onClick={() => run(() => api.retroToTask(item.id), t('Task created in the backlog'))}>
                             <ListPlus size={15} />
                           </button>
                         )}
@@ -248,7 +274,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                           </>
                         )}
                         <button className={`vote ${item.voted ? 'voted' : ''}`} disabled={!canEdit} aria-pressed={item.voted}
-                          aria-label={`${item.voted ? 'Remove vote' : 'Vote'} (${item.votes})`}
+                          aria-label={`${item.voted ? t('Remove vote') : t('Vote')} (${item.votes})`}
                           onClick={() => run(() => api.voteRetroItem(item.id))}>
                           <ThumbsUp size={14} /> {item.votes}
                         </button>

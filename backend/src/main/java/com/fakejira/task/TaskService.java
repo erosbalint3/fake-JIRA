@@ -55,11 +55,22 @@ public class TaskService {
     private final ChecklistItemRepository checklistItems;
     private final TaskKeyAliasRepository aliases;
     private final SprintScope scope;
+    private final com.fakejira.workflow.WorkflowService workflow;
+    private final ScheduleService schedule;
+    private final com.fakejira.component.ProjectComponentRepository components;
+    private final com.fakejira.template.TypeChecklistRepository typeChecklists;
 
     public TaskService(TaskRepository tasks, ProjectRepository projects, ProjectAccess access, SprintRepository sprints,
                        EpicRepository epics, BoardColumnRepository columns, TaskCleanup cleanup, TaskSupport support,
                        NotificationService notifications, LiveEvents live, ChatNotifier chat,
-                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope, TaskEvents taskEvents) {
+                       ChecklistItemRepository checklistItems, TaskKeyAliasRepository aliases, SprintScope scope, TaskEvents taskEvents,
+                       com.fakejira.workflow.WorkflowService workflow, ScheduleService schedule,
+                       com.fakejira.component.ProjectComponentRepository components,
+                       com.fakejira.template.TypeChecklistRepository typeChecklists) {
+        this.workflow = workflow;
+        this.schedule = schedule;
+        this.components = components;
+        this.typeChecklists = typeChecklists;
         this.taskEvents = taskEvents;
         this.aliases = aliases;
         this.scope = scope;
@@ -130,6 +141,7 @@ public class TaskService {
 
     public TaskResponse create(User user, CreateTaskRequest request) {
         Project project = access.editorProject(request.projectKey(), user);
+        access.require(project, user, com.fakejira.project.Permission.CREATE_TASKS);
         Task parent = null;
         if (request.parentId() != null) {
             parent = support.memberTask(request.parentId(), user);
@@ -158,15 +170,32 @@ public class TaskService {
         } else if (parent != null) {
             task.setEpic(parent.getEpic());
         }
+        if (request.componentIds() != null) {
+            for (Long componentId : new LinkedHashSet<>(request.componentIds())) {
+                Project owner = project;
+                task.getComponents().add(components.findById(componentId)
+                        .filter(c -> c.getProject().getId().equals(owner.getId()))
+                        .orElseThrow(() -> ApiException.badRequest("That component does not belong to " + owner.getKey() + ".")));
+            }
+        }
         if (request.assigneeId() != null) {
             task.setAssignee(editor(project, request.assigneeId()));
+        } else {
+            // A component's lead picks up new work in it.
+            task.getComponents().stream().map(com.fakejira.component.ProjectComponent::getLead)
+                    .filter(Objects::nonNull).filter(lead -> !owningProject(task).isViewer(lead)).findFirst()
+                    .ifPresent(task::setAssignee);
         }
         tasks.save(task);
         scope.statusChanged(task, null, task.getStatus());
         scope.sprintChanged(task, null, user);
-        if (request.checklist() != null) {
+        List<String> items = request.checklist() == null || request.checklist().isEmpty()
+                ? typeChecklists.findByProjectIdAndType(project.getId(), task.getType())
+                        .map(com.fakejira.template.TypeChecklist::getItems).orElse(List.of())
+                : request.checklist();
+        {
             int position = 0;
-            for (String text : request.checklist()) {
+            for (String text : items) {
                 if (text != null && !text.isBlank()) {
                     checklistItems.save(new ChecklistItem(task, text.trim(), ++position));
                 }
@@ -187,7 +216,21 @@ public class TaskService {
     }
 
     public TaskResponse update(User user, Long id, UpdateTaskRequest request) {
+        return update(user, id, request, null);
+    }
+
+    /**
+     * {@code expected}: the updatedAt the editor saw when opening the form. When the task changed since,
+     * the save is refused so nobody silently overwrites someone else's edit.
+     */
+    public TaskResponse update(User user, Long id, UpdateTaskRequest request, java.time.Instant expected) {
         Task task = support.editableTask(id, user);
+        if (expected != null && task.getUpdatedAt().isAfter(expected.plusMillis(1))) {
+            String who = support.lastActor(task).filter(actor -> !actor.getId().equals(user.getId()))
+                    .map(User::getUsername).orElse("Someone");
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,
+                    who + " changed this task while you were editing it.", java.util.Map.of("updatedBy", who));
+        }
         List<String> changes = new ArrayList<>();
         String title = request.title().trim();
         if (!title.equals(task.getTitle())) {
@@ -208,6 +251,7 @@ public class TaskService {
             changes.add("changed priority from " + task.getPriority().label() + " to " + request.priority().label());
             task.setPriority(request.priority());
         }
+        java.time.LocalDate oldDue = task.getDueDate();
         if (!Objects.equals(request.dueDate(), task.getDueDate())) {
             changes.add(request.dueDate() == null
                     ? "removed the due date"
@@ -242,26 +286,38 @@ public class TaskService {
             live.taskChanged(task);
             taskEvents.publish(TaskEvent.Kind.UPDATED, task, user, "changes",
                     String.join("; ", descriptionChanged ? concat(changes, "updated the description") : changes));
+            if (!Objects.equals(oldDue, task.getDueDate())) {
+                schedule.dueChanged(task, user, oldDue);
+            }
         }
         return support.response(task);
     }
 
+    /** For imports and automation: no workflow checks. */
     public TaskResponse changeStatus(User user, Long id, TaskStatus status) {
         Task task = support.editableTask(id, user);
-        applyStatus(task, user, status);
+        applyStatus(task, user, status, null, false);
+        return support.response(task);
+    }
+
+    /** A person changing the status: the project's workflow applies. */
+    public TaskResponse changeStatus(User user, Long id, TaskStatus status, Resolution resolution) {
+        Task task = support.editableTask(id, user);
+        applyStatus(task, user, status, resolution, true);
         return support.response(task);
     }
 
     /** Moves a card to a board column, which also sets the column's status. */
-    public TaskResponse moveToColumn(User user, Long id, Long columnId) {
+    public TaskResponse moveToColumn(User user, Long id, Long columnId, Resolution resolution) {
         Task task = support.editableTask(id, user);
         BoardColumn column = columns.findById(columnId)
                 .filter(c -> c.getProject().getId().equals(task.getProject().getId()))
                 .orElseThrow(() -> ApiException.badRequest("That column does not belong to " + task.getProject().getKey() + "."));
+        workflow.check(task, column, resolution);
         BoardColumn previous = task.getBoardColumn();
         task.setBoardColumn(column);
         if (task.getStatus() != column.getStatus()) {
-            applyStatus(task, user, column.getStatus());
+            applyStatus(task, user, column.getStatus(), resolution, false);
             task.setBoardColumn(column);
         } else if (previous == null || !previous.getId().equals(column.getId())) {
             support.record(task, user, "moved the task to column " + column.getName());
@@ -271,15 +327,24 @@ public class TaskService {
         return support.response(task);
     }
 
-    private void applyStatus(Task task, User user, TaskStatus status) {
+    private void applyStatus(Task task, User user, TaskStatus status, Resolution resolution, boolean enforceWorkflow) {
         if (task.getStatus() == status) {
             return;
+        }
+        if (enforceWorkflow) {
+            workflow.check(task, workflow.firstColumn(task.getProject(), status), resolution);
         }
         support.record(task, user, "changed status from " + task.getStatus().label() + " to " + status.label());
         chat.statusChanged(task, user, task.getStatus().label(), status.label());
         TaskStatus from = task.getStatus();
         scope.statusChanged(task, task.getStatus(), status);
         task.setStatus(status);
+        if (status == TaskStatus.DONE) {
+            task.setResolution(resolution);
+            if (resolution != null && resolution != Resolution.DONE) {
+                support.record(task, user, "resolved the task as " + resolution.label());
+            }
+        }
         // A column pinned to another status no longer fits; fall back to the first column of the new status.
         if (task.getBoardColumn() != null && task.getBoardColumn().getStatus() != status) {
             task.setBoardColumn(null);
@@ -372,7 +437,7 @@ public class TaskService {
     }
 
     public void delete(User user, Long id) {
-        Task task = support.editableTask(id, user);
+        Task task = support.permittedTask(id, user, com.fakejira.project.Permission.DELETE_TASKS);
         if (!task.isReporter(user) && !task.getProject().isOwner(user)) {
             throw ApiException.forbidden("Only the reporter or the project owner can delete this task.");
         }
@@ -402,7 +467,7 @@ public class TaskService {
         }
         for (Task task : selected) {
             if (request.status() != null) {
-                applyStatus(task, user, request.status());
+                applyStatus(task, user, request.status(), null, true);
             }
             if (request.unassign()) {
                 applyAssignee(task, user, null);
@@ -455,7 +520,83 @@ public class TaskService {
         return support.responses(selected);
     }
 
+    public TaskResponse setResolution(User user, Long id, Resolution resolution) {
+        Task task = support.editableTask(id, user);
+        if (task.getStatus() != TaskStatus.DONE) {
+            throw ApiException.badRequest("Only finished tasks have a resolution.");
+        }
+        if (task.getResolution() != resolution) {
+            task.setResolution(resolution);
+            support.record(task, user, "changed the resolution to " + resolution.label());
+            tasks.saveAndFlush(task);
+            live.taskChanged(task);
+        }
+        return support.response(task);
+    }
+
+    public TaskResponse setArchived(User user, Long id, boolean archived) {
+        Task task = support.editableTask(id, user);
+        if (task.isArchived() != archived) {
+            task.setArchivedAt(archived ? java.time.Instant.now() : null);
+            support.record(task, user, archived ? "archived the task" : "restored the task from the archive");
+            tasks.saveAndFlush(task);
+            live.taskChanged(task);
+        }
+        return support.response(task);
+    }
+
+    /** Archives the project's finished tasks done more than {@code days} days ago; returns how many. */
+    public int archiveDone(User user, String projectKey, int days) {
+        Project project = access.editorProject(projectKey, user);
+        java.time.Instant before = java.time.Instant.now().minus(java.time.Duration.ofDays(Math.max(0, days)));
+        int count = 0;
+        for (Task task : tasks.findByProjectId(project.getId())) {
+            if (task.getStatus() == TaskStatus.DONE && !task.isArchived() && task.getCompletedAt() != null
+                    && task.getCompletedAt().isBefore(before)) {
+                task.setArchivedAt(java.time.Instant.now());
+                support.record(task, user, "archived the task");
+                count++;
+            }
+        }
+        if (count > 0) {
+            live.projectChanged(project);
+        }
+        return count;
+    }
+
+    public TaskResponse setHelpers(User user, Long id, List<Long> userIds) {
+        Task task = support.editableTask(id, user);
+        Set<User> next = new LinkedHashSet<>();
+        for (Long userId : new LinkedHashSet<>(userIds)) {
+            User helper = editor(task.getProject(), userId);
+            if (task.isAssignee(helper)) {
+                throw ApiException.badRequest(helper.getUsername() + " is already the assignee.");
+            }
+            next.add(helper);
+        }
+        Set<Long> before = new java.util.HashSet<>(task.getHelpers().stream().map(User::getId).toList());
+        Set<Long> after = new java.util.HashSet<>(next.stream().map(User::getId).toList());
+        if (!before.equals(after)) {
+            for (User added : next) {
+                if (!before.contains(added.getId())) {
+                    notifications.notify(added, user, task, "asked you to help with");
+                }
+            }
+            task.getHelpers().clear();
+            task.getHelpers().addAll(next);
+            support.record(task, user, next.isEmpty() ? "removed all helpers"
+                    : "set helpers to " + String.join(", ", next.stream().map(User::getUsername).toList()));
+            tasks.saveAndFlush(task);
+            live.taskChanged(task);
+        }
+        return support.response(task);
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private static Project owningProject(Task task) {
+        return task.getProject();
+    }
 
     /** Assignees must be members who can edit (viewers cannot own work). */
     private static User editor(Project project, Long userId) {

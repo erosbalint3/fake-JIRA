@@ -64,7 +64,7 @@ export function TeamsPage() {
               {team.canEdit && (
                 <span>
                   <button className="btn btn-ghost btn-sm" onClick={() => setEditing(team)}>{t("Edit")}</button>
-                  <button className="icon-button" aria-label={`Delete ${team.name}`} onClick={() => setDeleting(team)}><Trash2 size={16} /></button>
+                  <button className="icon-button" aria-label={t('Delete {name}', { name: team.name })} onClick={() => setDeleting(team)}><Trash2 size={16} /></button>
                 </span>
               )}
             </header>
@@ -73,11 +73,11 @@ export function TeamsPage() {
               {team.members.map((m) => (
                 <li key={m.id}>
                   <Avatar user={m} size={24} />
-                  <span>{m.displayName}{m.awayUntil && <span className="away-badge" title={`Away until ${m.awayUntil}`}>{t("away")}</span>}</span>
+                  <span>{m.displayName}{m.awayUntil && <span className="away-badge" title={t('Away until {date}', { date: m.awayUntil })}>{t("away")}</span>}</span>
                   <span className="spacer" />
                   {(team.canEdit || m.id === user?.id) && (
                     <button className="link small" onClick={() => run(() => api.removeTeamMember(team.id, m.id),
-                      m.id === user?.id ? `You left @${team.handle}` : `${m.displayName} removed`)}>
+                      m.id === user?.id ? t('You left @{handle}', { handle: team.handle }) : t('{name} removed', { name: m.displayName }))}>
                       {m.id === user?.id ? 'Leave' : 'Remove'}
                     </button>
                   )}
@@ -90,9 +90,9 @@ export function TeamsPage() {
                 const login = (adding[team.id] ?? '').trim();
                 if (!login) return;
                 setAdding({ ...adding, [team.id]: '' });
-                run(() => api.addTeamMember(team.id, login), `${login} added to @${team.handle}`);
+                run(() => api.addTeamMember(team.id, login), t('{name} added to @{handle}', { name: login, handle: team.handle }));
               }}>
-                <input placeholder={t("Username or email")} value={adding[team.id] ?? ''} aria-label={`Add someone to ${team.name}`}
+                <input placeholder={t("Username or email")} value={adding[team.id] ?? ''} aria-label={t('Add someone to {name}', { name: team.name })}
                   onChange={(e) => setAdding({ ...adding, [team.id]: e.target.value })} />
                 <button className="btn btn-soft btn-sm"><UserPlus size={15} /> {t("Add")}</button>
               </form>
@@ -100,13 +100,13 @@ export function TeamsPage() {
           </section>
         ))}
       </div>
-      {editing && <TeamModal team={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={(t) => {
+      {editing && <TeamModal team={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={(saved) => {
         setEditing(null);
-        toast(editing === 'new' ? `@${t.handle} created` : 'Team saved');
+        toast(editing === 'new' ? t('@{handle} created', { handle: saved.handle }) : t('Team saved'));
         load();
       }} />}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} message={`@${deleting.handle} will stop working in mentions and searches.`}
+        <ConfirmDialog title={t('Delete {name}?', { name: deleting.name })} message={t('@{handle} will stop working in mentions and searches.', { handle: deleting.handle })}
           confirmLabel={t("Delete team")} danger onClose={() => setDeleting(null)}
           onConfirm={() => {
             const t = deleting;
@@ -136,7 +136,7 @@ function TeamModal({ team, onClose, onSaved }: { team: Team | null; onClose: () 
     }
   };
   return (
-    <Modal title={team ? `Edit ${team.name}` : 'New team'} onClose={onClose} footer={
+    <Modal title={team ? t('Edit {name}', { name: team.name }) : t('New team')} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="team-form" disabled={!name.trim() || !handle.trim()}>{team ? 'Save' : 'Create'}</button>
@@ -158,7 +158,7 @@ function TeamModal({ team, onClose, onSaved }: { team: Team | null; onClose: () 
               setTouched(true);
               setHandle(e.target.value);
             }} />
-          {errors.handle ? <span className="field-error">{errors.handle}</span> : <span className="muted small">Mention with @{handle || 'handle'}</span>}
+          {errors.handle ? <span className="field-error">{errors.handle}</span> : <span className="muted small">{t('Mention with @{handle}', { handle: handle || 'handle' })}</span>}
         </label>
         <label className="field">
           <span>{t("Description")} <span className="muted">{t("(optional)")}</span></span>

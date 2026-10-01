@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bookmark, Download, Link2, Search as SearchIcon } from 'lucide-react';
-import { api, ApiError } from '../api';
+import { Bookmark, Download, FileSpreadsheet, FileText, Link2, Mail, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { aiErrorMessage, useAiEnabled } from '../components/Ai';
+import { ScheduleReportModal } from '../components/reports/ScheduleReportModal';
+import { api, ApiError, saveBlob } from '../api';
 import { useToast } from '../toast';
 import { useProjects } from '../projects';
 import { Avatar } from '../components/Avatar';
@@ -35,6 +37,7 @@ export function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   const run = useCallback(async (q: string) => {
     setLoading(true);
@@ -91,7 +94,7 @@ export function SearchPage() {
   const header = (key: SortKey, label: string, className = '') => (
     <th className={className} aria-sort={sort?.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
       <button className="th-sort" onClick={() => setSort(sort?.key === key ? { key, desc: !sort.desc } : { key, desc: false })}>
-        {label}{sort?.key === key ? (sort.desc ? ' ↓' : ' ↑') : ''}
+        {t(label)}{sort?.key === key ? (sort.desc ? ' ↓' : ' ↑') : ''}
       </button>
     </th>
   );
@@ -107,6 +110,14 @@ export function SearchPage() {
     link.download = 'search-results.csv';
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  const download = async (format: 'xlsx' | 'pdf') => {
+    try {
+      saveBlob(await api.exportSearch(params.get('q') ?? text, format), `fakejira-tasks.${format}`);
+    } catch (e) {
+      toast((e as ApiError).message, 'error');
+    }
   };
 
   const copyLink = async () => {
@@ -132,20 +143,25 @@ export function SearchPage() {
         <button className="btn btn-primary" disabled={loading}><SearchIcon size={16} /> {t("Search")}</button>
       </form>
       {error && <div className="alert fql-error" role="alert">{error.message}</div>}
+      <AskClaude onQuery={(q) => {
+        setText(q);
+        setSort(null);
+        setParams({ q }, { replace: false });
+      }} />
       <div className="chip-row fql-examples">
         {EXAMPLES.map((e) => (
-          <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{e.label}</button>
+          <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{t(e.label)}</button>
         ))}
         <details className="fql-help">
           <summary className="link small">{t("Syntax help")}</summary>
           <div className="fql-help-body small">
-            <p><code>field operator value</code> {t("joined with")} <code>AND</code>, <code>OR</code>, <code>NOT</code> and parentheses,
-              then optionally <code>ORDER BY field [ASC|DESC]</code>.</p>
-            <p>Operators: <code>=</code> <code>!=</code> <code>~</code> {t("(contains)")} <code>&gt;</code> <code>&lt;</code>
+            <p><code>field operator value</code> {t("joined with")} <code>AND</code>, <code>OR</code>, <code>NOT</code> {t('and parentheses,')}
+              {t('then optionally')} <code>ORDER BY field [ASC|DESC]</code>.</p>
+            <p>{t('Operators:')} <code>=</code> <code>!=</code> <code>~</code> {t("(contains)")} <code>&gt;</code> <code>&lt;</code>
               <code>in (a, b)</code> <code>not in (…)</code> <code>is empty</code>.</p>
-            <p>Dates: <code>2026-10-01</code>, <code>today</code>, <code>-7d</code>, <code>+2w</code>, <code>startOfWeek</code>,
-              <code>endOfMonth</code>. People: <code>me</code>, a username, <code>membersOf(team)</code>.</p>
-            <p>Example: <code>project = WEB AND (type = bug OR priority &gt;= high) AND text ~ "checkout" ORDER BY due</code></p>
+            <p>{t('Dates:')} <code>2026-10-01</code>, <code>today</code>, <code>-7d</code>, <code>+2w</code>, <code>startOfWeek</code>,
+              <code>endOfMonth</code>. {t('People:')} <code>me</code>, {t('a username')}, <code>membersOf(team)</code>.</p>
+            <p>{t('Example:')} <code>project = WEB AND (type = bug OR priority &gt;= high) AND text ~ "checkout" ORDER BY due</code></p>
           </div>
         </details>
       </div>
@@ -155,12 +171,15 @@ export function SearchPage() {
         <section className="panel search-results">
           <div className="panel-head">
             <h2 className="panel-title">
-              {result.total} task{result.total === 1 ? '' : 's'}
-              {result.truncated && <span className="muted small"> · showing the first {result.tasks.length}</span>}
+              {result.total === 1 ? t('1 task') : t('{n} tasks', { n: result.total })}
+              {result.truncated && <span className="muted small"> · {t('showing the first {n}', { n: result.tasks.length })}</span>}
             </h2>
             <div className="header-actions">
               <button className="btn btn-ghost btn-sm" onClick={copyLink}><Link2 size={15} /> {t("Copy link")}</button>
               <button className="btn btn-ghost btn-sm" onClick={exportCsv} disabled={!rows.length}><Download size={15} /> {t("CSV")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => download('xlsx')} disabled={!rows.length}><FileSpreadsheet size={15} /> {t('Excel')}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => download('pdf')} disabled={!rows.length}><FileText size={15} /> {t('PDF')}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setScheduling(true)}><Mail size={15} /> {t('Email me')}</button>
               <button className="btn btn-soft btn-sm" onClick={() => setSaving(true)}><Bookmark size={15} /> {t("Save filter")}</button>
             </div>
           </div>
@@ -176,8 +195,8 @@ export function SearchPage() {
                     {header('status', 'Status')}
                     {header('priority', 'Priority')}
                     {header('assignee', 'Assignee')}
-                    {header('due', 'Due')}
-                    {header('points', 'Pts', 'num')}
+                    {header('due', 'Due date')}
+                    {header('points', 'Points', 'num')}
                   </tr>
                 </thead>
                 <tbody>
@@ -201,9 +220,11 @@ export function SearchPage() {
       )}
       {saving && <SaveSearchModal query={text} onClose={() => setSaving(false)} onSaved={(name) => {
         setSaving(false);
-        toast(`Filter "${name}" saved`);
+        toast(t('Filter “{name}” saved', { name }));
         window.dispatchEvent(new Event(FILTERS_CHANGED));
       }} />}
+      {scheduling && <ScheduleReportModal kind="filter" target={params.get('q') ?? text} defaultTitle=""
+        onClose={() => setScheduling(false)} />}
     </div>
   );
 }
@@ -244,10 +265,43 @@ function SaveSearchModal({ query, onClose, onSaved }: { query: string; onClose: 
           </select>
         </label>
         <label className="toggle">
-          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} /> Share with the project
+          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} /> {t('Share with the project')}
         </label>
         <p className="muted small">{t("Saved filters appear in the sidebar and the command palette.")}</p>
       </form>
     </Modal>
+  );
+}
+
+/** "Ask Claude": a plain-language question becomes an FQL query, which is shown and run. */
+function AskClaude({ onQuery }: { onQuery: (fql: string) => void }) {
+  const enabled = useAiEnabled();
+  const [question, setQuestion] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+  if (!enabled) return null;
+  const ask = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!question.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const answer = await api.aiFql(question);
+      onQuery(answer.fql);
+      setNote({ text: answer.explanation, error: false });
+    } catch (e) {
+      setNote({ text: aiErrorMessage(e), error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="ai-ask" onSubmit={ask}>
+      <Sparkles size={16} aria-hidden className="ai-ask-icon" />
+      <input value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={1000}
+        placeholder={t('Or ask in plain words, e.g. “bugs assigned to me that are overdue”')} aria-label={t('Ask Claude to write the query')} />
+      <button className="btn btn-ghost btn-sm" disabled={busy || !question.trim()}>{busy ? t('Thinking…') : t('Ask Claude')}</button>
+      {note && <p className={note.error ? 'field-error ai-ask-note' : 'muted small ai-ask-note'} role="status">{note.text}</p>}
+    </form>
   );
 }

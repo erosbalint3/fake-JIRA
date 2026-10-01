@@ -8,6 +8,7 @@ import { PointsBadge, PriorityBadge, StatusBadge, TypeIcon } from '../components
 import { Spinner } from '../components/States';
 import { formatDate, formatDay } from '../format';
 import type { PublicTask } from '../types';
+import { t } from '../i18n';
 
 /** A task someone shared with a public link: read-only, no sign-in. */
 export function SharedTaskPage() {
@@ -26,10 +27,10 @@ export function SharedTaskPage() {
     <div className="shared-page">
       <header className="shared-header">
         <Logo />
-        <span className="muted small">Shared task · read-only</span>
+        <span className="muted small">{t('Shared task · read-only')}</span>
       </header>
       <main className="shared-main">
-        {error && <div className="panel shared-error"><h1>Link unavailable</h1><p className="muted">{error}</p></div>}
+        {error && <div className="panel shared-error"><h1>{t('Link unavailable')}</h1><p className="muted">{error}</p></div>}
         {!task && !error && <Spinner />}
         {task && (
           <article className="panel shared-task">
@@ -39,17 +40,17 @@ export function SharedTaskPage() {
               <StatusBadge status={task.status} />
               <PriorityBadge priority={task.priority} />
               <PointsBadge points={task.storyPoints} />
-              {task.assignee && <span className="muted small">Assigned to {task.assignee}</span>}
-              {task.dueDate && <span className="muted small">Due {formatDay(task.dueDate, true)}</span>}
+              {task.assignee && <span className="muted small">{t('Assigned to {name}', { name: task.assignee })}</span>}
+              {task.dueDate && <span className="muted small">{t('Due {date}', { date: formatDay(task.dueDate, true) })}</span>}
             </div>
             {task.labels.length > 0 && (
               <div className="chip-row">{task.labels.map((l) => <span key={l} className="label-chip">{l}</span>)}</div>
             )}
             {task.description ? <div className="shared-description"><Markdown>{task.description}</Markdown></div>
-              : <p className="muted">No description.</p>}
+              : <p className="muted">{t('No description.')}</p>}
             {task.checklist.length > 0 && (
               <section>
-                <h2>Checklist ({task.checklist.filter((i) => i.done).length}/{task.checklist.length})</h2>
+                <h2>{t('Checklist')} ({task.checklist.filter((i) => i.done).length}/{task.checklist.length})</h2>
                 <ul className="shared-checklist">
                   {task.checklist.map((item, i) => (
                     <li key={i} className={item.done ? 'done' : ''}>
@@ -61,7 +62,7 @@ export function SharedTaskPage() {
             )}
             {task.subtasks.length > 0 && (
               <section>
-                <h2>Sub-tasks</h2>
+                <h2>{t('Subtasks')}</h2>
                 <ul className="review-list">
                   {task.subtasks.map((s) => <li key={s.key}><span className="task-key">{s.key}</span> {s.title} <span className="spacer" /><StatusBadge status={s.status} /></li>)}
                 </ul>
@@ -69,7 +70,7 @@ export function SharedTaskPage() {
             )}
             {task.comments.length > 0 && (
               <section>
-                <h2>Comments</h2>
+                <h2>{t('Comments')}</h2>
                 <ul className="shared-comments">
                   {task.comments.map((c, i) => (
                     <li key={i}>
@@ -81,7 +82,7 @@ export function SharedTaskPage() {
               </section>
             )}
             <p className="muted small shared-foot">
-              Last updated {formatDate(task.updatedAt)}{task.sharedUntil ? ` · this link works until ${formatDate(task.sharedUntil)}` : ''}
+              {t('Last updated {date}', { date: formatDate(task.updatedAt) })}{task.sharedUntil ? ` · ${t('this link works until {date}', { date: formatDate(task.sharedUntil) })}` : ''}
             </p>
           </article>
         )}

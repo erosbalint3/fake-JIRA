@@ -21,7 +21,7 @@ import java.time.Instant;
 @Table(name = "dev_links", uniqueConstraints = @UniqueConstraint(columnNames = {"task_id", "kind", "external_id"}))
 public class DevLink {
 
-    public enum Kind { COMMIT, PULL_REQUEST }
+    public enum Kind { COMMIT, PULL_REQUEST, BRANCH }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

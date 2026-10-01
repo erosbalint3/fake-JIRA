@@ -43,6 +43,8 @@ public class EpicController {
     private final CurrentUser currentUser;
     private final TaskSupport taskSupport;
     private final LiveEvents live;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public EpicController(EpicRepository epics, TaskRepository tasks, ProjectAccess access, CurrentUser currentUser,
                           TaskSupport taskSupport, LiveEvents live) {
@@ -63,7 +65,10 @@ public class EpicController {
 
     public record EpicResponse(Long id, String name, String description, int colorIndex, LocalDate startDate,
                                LocalDate dueDate, int taskCount, int doneCount, int points, int donePoints,
-                               List<Long> dependsOn) {
+                               List<Long> dependsOn, String icon) {
+    }
+
+    public record IconRequest(String icon) {
     }
 
     public record DependenciesRequest(List<Long> dependsOn) {
@@ -96,7 +101,9 @@ public class EpicController {
     @Transactional
     public EpicResponse create(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
                                @Valid @RequestBody EpicRequest request) {
-        Project project = access.editorProject(key, currentUser.from(jwt));
+        User creator = currentUser.from(jwt);
+        Project project = access.editorProject(key, creator);
+        access.require(project, creator, com.fakejira.project.Permission.MANAGE_EPICS);
         validate(request);
         int color = (int) (epics.countByProjectId(project.getId()) % PALETTE_SIZE);
         Epic epic = epics.save(new Epic(project, request.name().trim(), trim(request.description()), color,
@@ -171,13 +178,25 @@ public class EpicController {
             other.getDependsOn().removeIf(e -> e.getId().equals(epic.getId()));
         }
         epic.getDependsOn().clear();
+        jdbc.update("delete from key_result_epics where epic_id = ?", epic.getId());
         live.projectChanged(epic.getProject());
         epics.delete(epic);
     }
 
+    /** Sets or clears (empty) the epic's emoji. */
+    @org.springframework.web.bind.annotation.PutMapping("/api/epics/{id}/icon")
+    @Transactional
+    public EpicResponse setIcon(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @RequestBody IconRequest request) {
+        User user = currentUser.from(jwt);
+        Epic epic = editable(id, user);
+        epic.setIcon(com.fakejira.project.Icons.clean(request.icon()));
+        live.projectChanged(epic.getProject());
+        return response(epic, new int[4]);
+    }
+
     private Epic editable(Long id, User user) {
         Epic epic = epics.findById(id).orElseThrow(() -> ApiException.notFound("Epic not found."));
-        access.requireEditor(epic.getProject(), user);
+        access.require(epic.getProject(), user, com.fakejira.project.Permission.MANAGE_EPICS);
         return epic;
     }
 
@@ -190,7 +209,7 @@ public class EpicController {
     private static EpicResponse response(Epic epic, int[] s) {
         return new EpicResponse(epic.getId(), epic.getName(), epic.getDescription(), epic.getColorIndex(),
                 epic.getStartDate(), epic.getDueDate(), s[0], s[1], s[2], s[3],
-                epic.getDependsOn().stream().map(Epic::getId).sorted().toList());
+                epic.getDependsOn().stream().map(Epic::getId).sorted().toList(), epic.getIcon());
     }
 
     private static String trim(String value) {

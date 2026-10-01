@@ -43,6 +43,13 @@ public class BoardColumn {
     /** Soft limit on how many tasks should be in this column; null means no limit. */
     private Integer wipLimit;
 
+    /**
+     * What a task needs before it may enter this column, comma separated: assignee, points, due, estimate,
+     * resolution, approval, or field:&lt;custom field id&gt;.
+     */
+    @Column(length = 300)
+    private String requiredFields;
+
     protected BoardColumn() {
     }
 
@@ -92,5 +99,17 @@ public class BoardColumn {
 
     public void setWipLimit(Integer wipLimit) {
         this.wipLimit = wipLimit;
+    }
+
+    public java.util.List<String> getRequiredFields() {
+        if (requiredFields == null || requiredFields.isBlank()) {
+            return java.util.List.of();
+        }
+        return java.util.Arrays.stream(requiredFields.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
+    public void setRequiredFields(java.util.Collection<String> fields) {
+        String joined = fields == null ? "" : String.join(",", fields);
+        this.requiredFields = joined.isEmpty() ? null : joined;
     }
 }

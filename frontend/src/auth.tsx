@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { setLanguage } from './i18n';
 import { api, ApiError, clearOfflineCache, setUnauthorizedHandler, tokenStore, type AuthResponse } from './api';
+import { loadPreferences, resetPreferences } from './prefs';
 import type { User } from './types';
 
 /** What a sign-in attempt led to. */
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clear = useCallback(() => {
     tokenStore.set(null);
     clearOfflineCache();
+    resetPreferences();
     setUser(null);
     setAdmin(false);
     setMustChangePassword(false);
@@ -53,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAdmin(me.admin);
     setMustChangePassword(me.mustChangePassword);
     setLanguage(me.language);
+    loadPreferences();
   }, []);
 
   useEffect(() => {

@@ -60,6 +60,8 @@ public class RetroController {
     private final ProjectAccess access;
     private final CurrentUser currentUser;
     private final LiveEvents live;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fakejira.sprint.SprintGoalRepository sprintGoals;
 
     public RetroController(RetroItemRepository items, SprintRepository sprints, SprintChangeRepository sprintChanges,
                            TaskRepository tasks, TaskService taskService, ProjectAccess access,
@@ -91,7 +93,11 @@ public class RetroController {
 
     public record SprintReview(SprintResponse sprint, int committedPoints, int completedPoints, int completedTasks,
                                List<ReviewTask> completed, List<ReviewTask> unfinished, List<ReviewTask> added,
-                               List<ReviewTask> removed, List<PersonTotal> people, String markdown) {
+                               List<ReviewTask> removed, List<PersonTotal> people, String markdown,
+                               List<GoalItem> goals, int goalsMet) {
+    }
+
+    public record GoalItem(Long id, String text, boolean done) {
     }
 
     @GetMapping("/api/sprints/{id}/retro")
@@ -227,6 +233,13 @@ public class RetroController {
         if (sprint.getGoal() != null && !sprint.getGoal().isBlank()) {
             md.append("\n**Goal:** ").append(sprint.getGoal()).append('\n');
         }
+        List<GoalItem> goalItems = sprintGoals.findBySprintIdOrderByPositionAscIdAsc(sprint.getId()).stream()
+                .map(g -> new GoalItem(g.getId(), g.getText(), g.isDone())).toList();
+        int goalsMet = (int) goalItems.stream().filter(GoalItem::done).count();
+        if (!goalItems.isEmpty()) {
+            md.append("\n**Goals met:** ").append(goalsMet).append(" of ").append(goalItems.size()).append('\n');
+            goalItems.forEach(g -> md.append("- [").append(g.done() ? 'x' : ' ').append("] ").append(g.text()).append('\n'));
+        }
         if (sprint.getStartDate() != null) {
             md.append("\n").append(sprint.getStartDate()).append(" → ").append(sprint.getEndDate()).append('\n');
         }
@@ -237,7 +250,8 @@ public class RetroController {
         list(md, "Added during the sprint", added);
         list(md, "Removed during the sprint", removed);
         return new SprintReview(com.fakejira.sprint.SprintDtos.SprintResponse.of(sprint), committedPoints,
-                completedPoints, completed.size(), completed, unfinished, added, removed, totals, md.toString());
+                completedPoints, completed.size(), completed, unfinished, added, removed, totals, md.toString(),
+                goalItems, goalsMet);
     }
 
     @EventListener

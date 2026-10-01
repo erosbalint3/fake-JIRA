@@ -72,6 +72,10 @@ public class SearchController {
                     : new String[]{String.valueOf(t.getSprint().getId()), t.getSprint().getName()};
             case "release" -> t -> t.getRelease() == null ? new String[]{"", "No release"}
                     : new String[]{String.valueOf(t.getRelease().getId()), t.getRelease().getName()};
+            case "resolution" -> t -> t.getResolution() == null ? new String[]{"", "Unresolved"}
+                    : new String[]{t.getResolution().name(), t.getResolution().name().charAt(0)
+                    + t.getResolution().name().substring(1).toLowerCase().replace('_', ' ')};
+            case "reporter" -> t -> new String[]{t.getReporter().getUsername(), t.getReporter().getName()};
             default -> t -> new String[]{t.getStatus().name(), t.getStatus().label()};
         };
         Map<String, int[]> counts = new LinkedHashMap<>();
@@ -97,6 +101,37 @@ public class SearchController {
             groups.sort(Comparator.comparing((Group g) -> com.fakejira.task.TaskPriority.valueOf(g.key())).reversed());
         }
         return groups;
+    }
+
+    public record TrendWeek(java.time.LocalDate weekStart, int created, int resolved, int open) {
+    }
+
+    /** Created, resolved and still-open counts per week for the query's tasks (for trend charts). */
+    @GetMapping("/api/search/trend")
+    @Transactional(readOnly = true)
+    public List<TrendWeek> trend(@AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue = "") String q,
+                                 @RequestParam(defaultValue = "12") int weeks) {
+        List<Task> all = search.run(currentUser.from(jwt), q, SearchService.MAX_RESULTS).tasks();
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        int span = Math.max(4, Math.min(52, weeks));
+        java.time.LocalDate thisWeek = java.time.LocalDate.now(zone).with(java.time.DayOfWeek.MONDAY);
+        List<TrendWeek> out = new ArrayList<>();
+        for (int i = span - 1; i >= 0; i--) {
+            java.time.LocalDate week = thisWeek.minusWeeks(i);
+            java.time.Instant from = week.atStartOfDay(zone).toInstant();
+            java.time.Instant to = week.plusWeeks(1).atStartOfDay(zone).toInstant();
+            int created = 0;
+            int resolved = 0;
+            int open = 0;
+            for (Task task : all) {
+                java.time.Instant done = task.getStatus() == TaskStatus.DONE ? task.getCompletedAt() : null;
+                if (!task.getCreatedAt().isBefore(from) && task.getCreatedAt().isBefore(to)) created++;
+                if (done != null && !done.isBefore(from) && done.isBefore(to)) resolved++;
+                if (task.getCreatedAt().isBefore(to) && (done == null || !done.isBefore(to))) open++;
+            }
+            out.add(new TrendWeek(week, created, resolved, open));
+        }
+        return out;
     }
 
     /** Fields and common values for the query editor's autocomplete. */

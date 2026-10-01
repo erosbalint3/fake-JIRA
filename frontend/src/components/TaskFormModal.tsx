@@ -1,8 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { isReadOnlyRole } from '../types';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { AiDraftBox, useAiEnabled } from './Ai';
+import { useCollaborativeText } from '../collab';
 import { api, ApiError } from '../api';
 import { useProjects } from '../projects';
 import {
   PRIORITIES, PRIORITY_LABEL, TASK_TYPES, TASK_TYPE_LABEL, type CreateTaskInput, type TaskTemplate, type Epic, type Priority, type Sprint, type TaskInput, type User,
+  type ProjectComponent,
+  type SimilarTask,
 } from '../types';
 import { Modal } from './Modal';
 import { PriorityBadge, TypeIcon } from './Badges';
@@ -20,7 +25,9 @@ type Mode =
     parent?: { id: number; key: string };
     onSubmit: (input: CreateTaskInput) => Promise<void>;
   }
-  | { kind: 'edit'; projectKey: string; initial: TaskInput; onSubmit: (input: TaskInput) => Promise<void> };
+  | { kind: 'edit'; projectKey: string; initial: TaskInput; onSubmit: (input: TaskInput) => Promise<void>;
+      /** Turns on live co-editing of the description with others editing the same task. */
+      taskId?: number; coEditors?: string[] };
 
 interface Props {
   title: string;
@@ -32,6 +39,7 @@ interface Props {
 }
 
 export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }: Props) {
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   const { projects, lastKey } = useProjects();
   const initial = mode.kind === 'edit' ? mode.initial : null;
   const [projectKey, setProjectKey] = useState(mode.projectKey ?? lastKey() ?? '');
@@ -46,6 +54,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [checklist, setChecklist] = useState<string[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  const [components, setComponents] = useState<ProjectComponent[]>([]);
+  const [componentId, setComponentId] = useState<number | null>(null);
   const [sprintId, setSprintId] = useState<number | null>(mode.kind === 'create' ? mode.sprintId ?? null : null);
   const [members, setMembers] = useState<User[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -53,15 +63,33 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [duplicates, setDuplicates] = useState<SimilarTask[]>([]);
+  const aiEnabled = useAiEnabled();
+  const collab = useCollaborativeText(mode.kind === 'edit' ? mode.taskId ?? null : null, form.description,
+    (description) => setForm((current) => ({ ...current, description })), descriptionRef);
+
+  // While creating, point out existing tasks that look the same.
+  useEffect(() => {
+    const text = form.title.trim();
+    if (mode.kind !== 'create' || !projectKey || text.length < 8) {
+      setDuplicates([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      api.similarTasks(projectKey, text).then(setDuplicates).catch(() => setDuplicates([]));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [form.title, projectKey, mode.kind]);
 
   useEffect(() => {
     if (!projectKey) return;
     const project = projects?.find((p) => p.key === projectKey);
-    setMembers((project?.members ?? []).filter((m) => m.role !== 'VIEWER'));
+    setMembers((project?.members ?? []).filter((m) => !isReadOnlyRole(m.role)));
     api.epics(projectKey).then(setEpics).catch(() => setEpics([]));
     api.labels(projectKey).then(setLabelSuggestions).catch(() => setLabelSuggestions([]));
     if (mode.kind === 'create') {
       api.templates(projectKey).then(setTemplates).catch(() => setTemplates([]));
+      api.components(projectKey).then(setComponents).catch(() => setComponents([]));
       api.sprints(projectKey)
         .then((list) => setSprints(list.filter((s) => s.state !== 'COMPLETED')))
         .catch(() => setSprints([]));
@@ -91,11 +119,11 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.title.trim()) {
-      setErrors({ title: 'Title is required' });
+      setErrors({ title: t('Title is required') });
       return;
     }
     if (mode.kind === 'create' && !projectKey) {
-      setErrors({ projectKey: 'Choose a project' });
+      setErrors({ projectKey: t('Choose a project') });
       return;
     }
     setBusy(true);
@@ -104,7 +132,8 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
     const input = { ...form, title: form.title.trim(), dueDate: form.dueDate || null };
     try {
       if (mode.kind === 'create') {
-        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist });
+        await mode.onSubmit({ ...input, projectKey, assigneeId, sprintId, parentId: mode.parent?.id ?? null, checklist,
+          componentIds: componentId ? [componentId] : [] });
         if (draftKey) draftStore.clear(draftKey);
       } else {
         await mode.onSubmit(input);
@@ -151,7 +180,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
           </label>
         )}
         {mode.kind === 'create' && mode.parent && (
-          <p className="muted form-note">{t("Subtask of")} <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
+          <p className="muted form-note">{t("Subtask of")} <b>{mode.parent.key}</b>. {t("It joins the parent's sprint and epic.")}</p>
         )}
         {mode.kind === 'create' && !mode.projectKey && (
           <label className="field">
@@ -167,6 +196,16 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             {errors.projectKey && <small className="field-error">{errors.projectKey}</small>}
           </label>
         )}
+        {mode.kind === 'create' && aiEnabled && (
+          <AiDraftBox projectKey={projectKey} onDraft={(draft) => {
+            setForm({
+              ...form, title: draft.title, description: draft.description, type: draft.type, priority: draft.priority,
+              storyPoints: draft.storyPoints || form.storyPoints,
+              labels: [...new Set([...form.labels, ...draft.labels])].slice(0, 10),
+            });
+            if (draft.checklist.length) setChecklist(draft.checklist);
+          }} />
+        )}
         <label className="field">
           <span>{t("Title")}</span>
           <input
@@ -177,12 +216,34 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             aria-invalid={!!errors.title}
           />
           {errors.title && <small className="field-error">{errors.title}</small>}
+          {duplicates.length > 0 && (
+            <div className="duplicate-hint" role="status">
+              <span className="small">{t('Similar tasks already exist:')}</span>
+              <ul>
+                {duplicates.slice(0, 3).map((d) => (
+                  <li key={d.task.id} className="small">
+                    <a href={`/tasks/${d.task.id}`} target="_blank" rel="noreferrer">{d.task.key}</a> {d.task.title}
+                    {d.done && <span className="muted"> · {t('done')}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </label>
         <div className="field">
-          <span>{t("Description")}</span>
+          <span className="field-label-row">{t("Description")}
+            {collab === 'live' && (
+              <span className="live-chip" title={t("Changes by others appear as they type")}>
+                <span className="live-dot on" /> {mode.kind === 'edit' && mode.coEditors?.length
+                  ? t('Editing live with {names}', { names: mode.coEditors.join(', ') }) : t('Live co-editing')}
+              </span>
+            )}
+            {collab === 'offline' && <span className="muted small">{t('Live co-editing unavailable — your text saves as usual')}</span>}
+          </span>
           <MarkdownEditor
+            inputRef={descriptionRef}
             value={form.description}
-            onChange={(description) => setForm({ ...form, description })}
+            onChange={(description) => setForm((current) => ({ ...current, description }))}
             members={members}
             maxLength={5000}
             rows={6}
@@ -200,7 +261,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
               <label key={type} className={form.type === type ? 'active' : ''}>
                 <input type="radio" name="type" value={type} checked={form.type === type}
                   onChange={() => setForm({ ...form, type })} />
-                <TypeIcon type={type} /> {TASK_TYPE_LABEL[type]}
+                <TypeIcon type={type} /> {t(TASK_TYPE_LABEL[type])}
               </label>
             ))}
           </div>
@@ -218,7 +279,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
                   onChange={() => setForm({ ...form, priority })}
                 />
                 <PriorityBadge priority={priority} compact />
-                {PRIORITY_LABEL[priority]}
+                {t(PRIORITY_LABEL[priority])}
               </label>
             ))}
           </div>
@@ -230,6 +291,17 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
               <select value={assigneeId ?? ''} onChange={(e) => setAssigneeId(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">{t("Unassigned")}</option>
                 {members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
+              </select>
+            </label>
+          )}
+          {mode.kind === 'create' && components.length > 0 && (
+            <label className="field">
+              <span>{t("Component")}</span>
+              <select value={componentId ?? ''} onChange={(e) => setComponentId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{t("None")}</option>
+                {components.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{c.lead && !assigneeId ? ` → ${c.lead.displayName}` : ''}</option>
+                ))}
               </select>
             </label>
           )}
@@ -246,7 +318,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
           <label className="field">
             <span>{t("Epic")}</span>
             <select value={form.epicId ?? ''} onChange={(e) => setForm({ ...form, epicId: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">{mode.kind === 'create' && mode.parent ? 'Same as parent' : 'No epic'}</option>
+              <option value="">{mode.kind === 'create' && mode.parent ? t('Same as parent') : t('No epic')}</option>
               {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
             </select>
           </label>
@@ -266,7 +338,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             <ul className="template-checklist">
               {checklist.map((item, i) => (
                 <li key={`${item}-${i}`}>{item}
-                  <button type="button" className="icon-button sm" aria-label={`Remove ${item}`}
+                  <button type="button" className="icon-button sm" aria-label={t('Remove {name}', { name: item })}
                     onClick={() => setChecklist(checklist.filter((_, j) => j !== i))}>×</button>
                 </li>
               ))}

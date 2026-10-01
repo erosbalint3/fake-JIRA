@@ -22,3 +22,9 @@ app:
     cron: "-"
   update-check:
     enabled: false
+  retention:
+    cron: "-"
+  health:
+    initial-delay-ms: 86400000
+  restore:
+    restart: false

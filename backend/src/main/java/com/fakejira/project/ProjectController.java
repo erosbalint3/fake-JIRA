@@ -56,6 +56,15 @@ public class ProjectController {
         return projectService.get(currentUser.from(jwt), key);
     }
 
+    public record IconRequest(String icon) {
+    }
+
+    /** Sets or clears (empty) the project's emoji; owners only. */
+    @PutMapping("/{key}/icon")
+    public ProjectResponse setIcon(@AuthenticationPrincipal Jwt jwt, @PathVariable String key, @RequestBody IconRequest request) {
+        return projectService.setIcon(currentUser.from(jwt), key, request.icon());
+    }
+
     @PutMapping("/{key}")
     public ProjectResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable String key,
                                   @Valid @RequestBody UpdateProjectRequest request) {

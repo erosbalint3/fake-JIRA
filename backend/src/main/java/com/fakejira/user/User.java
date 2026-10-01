@@ -94,13 +94,22 @@ public class User {
     @Column(length = 200)
     private String awayMessage;
 
-    /** Interface language: "en" or "hu". */
+    /** Interface language: "en", "hu", "de" or "es". */
     @Column(length = 5, columnDefinition = "varchar(5) default 'en'")
     private String language = "en";
 
     /** Secret for the personal iCal feed URL; null when the feed is off. */
     @Column(length = 48, unique = true)
     private String calendarToken;
+
+    /** IANA time zone for quiet hours and "today"; null means the server's zone. */
+    @Column(length = 40)
+    private String timeZone;
+
+    /** Quiet hours: no email or push between these local times (may wrap past midnight). */
+    private java.time.LocalTime quietFrom;
+
+    private java.time.LocalTime quietTo;
 
     protected User() {
     }
@@ -178,6 +187,33 @@ public class User {
 
     public void setStatus(AccountStatus status) {
         this.status = status;
+    }
+
+    /** The identity provider's userName and id, for accounts provisioned over SCIM. */
+    @Column(length = 200)
+    private String scimUserName;
+
+    @Column(length = 200)
+    private String externalId;
+
+    public String getScimUserName() {
+        return scimUserName;
+    }
+
+    public void setScimUserName(String scimUserName) {
+        this.scimUserName = scimUserName;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getDisplayName() {
@@ -320,5 +356,46 @@ public class User {
 
     public void setLanguage(String language) {
         this.language = language;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
+    }
+
+    /** The user's zone, falling back to the server's when unset or invalid. */
+    public java.time.ZoneId zone() {
+        try {
+            return timeZone == null ? java.time.ZoneId.systemDefault() : java.time.ZoneId.of(timeZone);
+        } catch (java.time.DateTimeException e) {
+            return java.time.ZoneId.systemDefault();
+        }
+    }
+
+    public java.time.LocalTime getQuietFrom() {
+        return quietFrom;
+    }
+
+    public java.time.LocalTime getQuietTo() {
+        return quietTo;
+    }
+
+    public void setQuietHours(java.time.LocalTime from, java.time.LocalTime to) {
+        this.quietFrom = from;
+        this.quietTo = to;
+    }
+
+    /** True when {@code at} falls in the user's quiet hours. */
+    public boolean isQuietAt(Instant at) {
+        if (quietFrom == null || quietTo == null || quietFrom.equals(quietTo)) {
+            return false;
+        }
+        java.time.LocalTime local = at.atZone(zone()).toLocalTime();
+        return quietFrom.isBefore(quietTo)
+                ? !local.isBefore(quietFrom) && local.isBefore(quietTo)
+                : !local.isBefore(quietFrom) || local.isBefore(quietTo);
     }
 }

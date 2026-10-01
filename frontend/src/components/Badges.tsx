@@ -26,7 +26,7 @@ export function StatusBadge({ status }: { status: Status }) {
 
 export function DueBadge({ date, done }: { date: string; done: boolean }) {
   const state = dueState(date, done);
-  const label = state === 'overdue' ? 'Overdue' : state === 'today' ? 'Due today' : 'Due';
+  const label = state === 'overdue' ? t('Overdue') : state === 'today' ? t('Due today') : t('Due date');
   return (
     <span className={`due due-${state ?? 'done'}`} title={`${label}: ${formatDay(date, true)}`}>
       <CalendarClock size={13} aria-hidden />
@@ -49,7 +49,7 @@ export function Labels({ labels, max }: { labels: string[]; max?: number }) {
 export function ChecklistProgress({ done, total }: { done: number; total: number }) {
   if (!total) return null;
   return (
-    <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={`${done} of ${total} checklist items done`}>
+    <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={t('{done} of {total} checklist items done', { done, total })}>
       <CheckSquare size={13} aria-hidden />
       {done}/{total}
     </span>
@@ -60,8 +60,10 @@ export function ChecklistProgress({ done, total }: { done: number; total: number
 export function EpicChip({ epic }: { epic: EpicRef | null }) {
   if (!epic) return null;
   return (
-    <span className="epic-chip" title={`Epic: ${epic.name}`}>
-      <span className="epic-dot" style={{ background: `var(--cat-${epic.colorIndex % 8})` }} aria-hidden />
+    <span className="epic-chip" title={t('Epic: {name}', { name: epic.name })}>
+      {epic.icon
+        ? <span className="epic-emoji" aria-hidden>{epic.icon}</span>
+        : <span className="epic-dot" style={{ background: `var(--cat-${epic.colorIndex % 8})` }} aria-hidden />}
       {epic.name}
     </span>
   );
@@ -69,18 +71,18 @@ export function EpicChip({ epic }: { epic: EpicRef | null }) {
 
 export function PointsBadge({ points }: { points: number | null }) {
   if (points === null || points === undefined) return null;
-  return <span className="points-badge" title={`${points} story point${points === 1 ? '' : 's'}`}>{points}</span>;
+  return <span className="points-badge" title={points === 1 ? t('1 story point') : t('{n} story points', { n: points })}>{points}</span>;
 }
 
 export function BlockedBadge({ blocked }: { blocked: boolean }) {
   if (!blocked) return null;
-  return <span className="blocked-badge" title="Blocked by an unfinished task"><Ban size={12} aria-hidden /> Blocked</span>;
+  return <span className="blocked-badge" title={t('Blocked by an unfinished task')}><Ban size={12} aria-hidden /> {t('Blocked')}</span>;
 }
 
 export function SubtaskBadge({ done, total }: { done: number; total: number }) {
   if (!total) return null;
   return (
-    <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={`${done} of ${total} subtasks done`}>
+    <span className={`checklist-progress ${done === total ? 'complete' : ''}`} title={t('{done} of {total} subtasks done', { done, total })}>
       <ListTree size={13} aria-hidden />
       {done}/{total}
     </span>

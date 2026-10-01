@@ -52,6 +52,16 @@ public class Project {
             inverseJoinColumns = @JoinColumn(name = "user_id"))
     private Set<User> viewers = new LinkedHashSet<>();
 
+    /**
+     * Outside guests such as a client: read-only like viewers (a subset of {@link #viewers}) but they may comment.
+     * They do not see task history, time logs or other members' email addresses.
+     */
+    @ManyToMany
+    @JoinTable(name = "project_guests",
+            joinColumns = @JoinColumn(name = "project_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<User> guests = new LinkedHashSet<>();
+
     /** Secret for verifying GitHub webhook signatures; null when the integration is off. */
     @Column(length = 64)
     private String githubSecret;
@@ -67,6 +77,26 @@ public class Project {
     /** Optional accent colour (#rrggbb) for the project icon and header. */
     @Column(length = 7)
     private String color;
+
+    /** An emoji shown next to the name (optional). */
+    @Column(length = 16)
+    private String icon;
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
+    /** When set, tasks may only move between columns along the transitions defined in the workflow. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean restrictTransitions;
+
+    /** Move blocked tasks later automatically when a task blocking them slips. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean autoSchedule;
 
     /** Next task number to hand out within this project. */
     @Column(nullable = false)
@@ -100,6 +130,14 @@ public class Project {
 
     public boolean isViewer(User user) {
         return viewers.stream().anyMatch(viewer -> viewer.getId().equals(user.getId()));
+    }
+
+    public boolean isGuest(User user) {
+        return guests.stream().anyMatch(guest -> guest.getId().equals(user.getId()));
+    }
+
+    public Set<User> getGuests() {
+        return guests;
     }
 
     /** Members who are not read-only viewers can change things. */
@@ -189,5 +227,21 @@ public class Project {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isRestrictTransitions() {
+        return restrictTransitions;
+    }
+
+    public void setRestrictTransitions(boolean restrictTransitions) {
+        this.restrictTransitions = restrictTransitions;
+    }
+
+    public boolean isAutoSchedule() {
+        return autoSchedule;
+    }
+
+    public void setAutoSchedule(boolean autoSchedule) {
+        this.autoSchedule = autoSchedule;
     }
 }

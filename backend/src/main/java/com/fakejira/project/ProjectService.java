@@ -27,6 +27,9 @@ import java.util.Set;
 @Transactional
 public class ProjectService {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.fakejira.board.BoardService board;
+
     private final ProjectRepository projects;
     private final ProjectAccess access;
     private final UserRepository users;
@@ -67,12 +70,12 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public List<ProjectResponse> mine(User user) {
-        return projects.findForMember(user.getId()).stream().map(ProjectResponse::of).toList();
+        return projects.findForMember(user.getId()).stream().map(p -> ProjectResponse.of(p, user)).toList();
     }
 
     @Transactional(readOnly = true)
     public ProjectResponse get(User user, String key) {
-        return ProjectResponse.of(access.memberProject(key, user));
+        return ProjectResponse.of(access.memberProject(key, user), user);
     }
 
     public ProjectResponse create(User user, CreateProjectRequest request) {
@@ -82,7 +85,17 @@ public class ProjectService {
         }
         Project project = projects.save(new Project(key, request.name().trim(), trim(request.description()), user));
         projectTemplates.apply(project, user, request.template());
+        // Create the board columns now rather than on first view, when several requests could race to do it.
+        board.ensureDefaults(project);
         audit.record(user, "project.create", key, project.getName() + (request.template() == null ? "" : " (" + request.template() + ")"));
+        return ProjectResponse.of(project);
+    }
+
+    public ProjectResponse setIcon(User user, String key, String icon) {
+        Project project = access.memberProject(key, user);
+        access.requireOwner(project, user);
+        project.setIcon(Icons.clean(icon));
+        live.projectChanged(project);
         return ProjectResponse.of(project);
     }
 
@@ -102,6 +115,9 @@ public class ProjectService {
         if (request.color() != null) {
             project.setColor(request.color());
         }
+        if (request.autoSchedule() != null) {
+            project.setAutoSchedule(request.autoSchedule());
+        }
         live.projectChanged(project);
         return ProjectResponse.of(project);
     }
@@ -116,8 +132,11 @@ public class ProjectService {
             throw ApiException.conflict(member.getUsername() + " is already a member.");
         }
         project.getMembers().add(member);
-        if (role == ProjectDtos.Role.VIEWER) {
+        if (role == ProjectDtos.Role.VIEWER || role == ProjectDtos.Role.GUEST) {
             project.getViewers().add(member);
+        }
+        if (role == ProjectDtos.Role.GUEST) {
+            project.getGuests().add(member);
         }
         notifications.notify(member, user,
                 user.getUsername() + " added you to project " + project.getKey() + " · " + project.getName(), null);
@@ -135,12 +154,18 @@ public class ProjectService {
         if (project.isOwner(member) || role == null || role == ProjectDtos.Role.OWNER) {
             throw ApiException.badRequest("The owner's role cannot be changed.");
         }
-        if (role == ProjectDtos.Role.VIEWER && !project.isViewer(member)) {
+        if ((role == ProjectDtos.Role.VIEWER || role == ProjectDtos.Role.GUEST) && !project.isViewer(member)) {
             project.getViewers().add(member);
-            // Viewers cannot own work.
+            // Viewers and guests cannot own work.
             tasks.unassignInProject(project.getId(), memberId);
+            events.publishEvent(new MemberRemoved(project.getId(), memberId));
         } else if (role == ProjectDtos.Role.MEMBER) {
             project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
+        }
+        if (role == ProjectDtos.Role.GUEST) {
+            project.getGuests().add(member);
+        } else {
+            project.getGuests().removeIf(guest -> guest.getId().equals(memberId));
         }
         audit.record(user, "project.role", project.getKey(), member.getUsername() + " → " + role);
         live.projectChanged(project);
@@ -154,6 +179,7 @@ public class ProjectService {
         User next = project.getMembers().stream().filter(m -> m.getId().equals(newOwnerId)).findFirst()
                 .orElseThrow(() -> ApiException.notFound("That user is not a member of this project."));
         project.getViewers().removeIf(viewer -> viewer.getId().equals(newOwnerId));
+        project.getGuests().removeIf(guest -> guest.getId().equals(newOwnerId));
         project.setOwner(next);
         audit.record(user, "project.transfer", project.getKey(), "to " + next.getUsername());
         live.projectChanged(project);
@@ -172,10 +198,12 @@ public class ProjectService {
         }
         boolean removed = project.getMembers().removeIf(member -> member.getId().equals(memberId));
         project.getViewers().removeIf(viewer -> viewer.getId().equals(memberId));
+        project.getGuests().removeIf(guest -> guest.getId().equals(memberId));
         if (!removed) {
             throw ApiException.notFound("That user is not a member of this project.");
         }
         tasks.unassignInProject(project.getId(), memberId);
+        events.publishEvent(new MemberRemoved(project.getId(), memberId));
         audit.record(user, leaving ? "project.leave" : "project.member_remove", project.getKey(), "user #" + memberId);
         live.projectChangedFor(project, Set.of(memberId));
     }

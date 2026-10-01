@@ -1,7 +1,7 @@
 # FakeJIRA
 
 A lightweight, Jira-style task tracker for small teams, built for a university course.
-Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend; 3.0 added planning, team and integration features; 4.0 adds security, automation, search, flow reports, PostgreSQL and much more (see [What's new in 4.0](#whats-new-in-40)).
+Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** REST API and a **React** web frontend; 3.0 added planning, team and integration features; 4.0 added security, automation, search, flow reports and PostgreSQL; 5.0 adds workflows, a wiki, service desk, forecasts, company sign-in, an optional Claude assistant, a table view, German and Spanish and much more (see [What's new in 5.0](#whats-new-in-50)).
 
 ![Board](docs/board.png)
 
@@ -56,6 +56,43 @@ Version 2.0 replaced the original Android + Firebase app with a **Spring Boot** 
 - **Rate limiting** of sign-in, sign-up and password reset.
 - **Admin page**: sign-up mode, pending accounts, admins, invites and **backups**.
 - Light and dark themes, and a responsive layout for phones.
+
+## What's new in 5.0
+
+**Work management**
+- **Workflows** on top of board columns: required fields per column (assignee, points, due date, estimate, resolution, approvals, custom fields) and optional allowed transitions — the board asks for what is missing.
+- **Resolutions**, **components** with leads, **approvals**, per-type checklists, **helpers**, and an **archive**.
+- Start dates and estimates, a task **timeline** (Gantt) with dependencies, the critical path, drag-to-reschedule, optional automatic rescheduling, and a **per-person view** that flags overlapping work.
+- Sprint goals, **capacity planning**, a cross-project **portfolio** with risk flags, and quarterly **goals / OKRs**.
+
+**Working together**
+- **Live co-editing** of descriptions with presence, **inline comments** on passages, a **project wiki** with history, **meeting notes** whose action items become tasks, a **stand-up** view, **polls** and a decision log, **kudos**.
+- A **guest** role for clients, **internal comments** that guests and viewers never see, and **custom project roles** (named permission sets).
+
+**Personal productivity**
+- A **Today** list, a **timer** that logs time, **reminders**, **private notes**, inbox **triage** (done, snooze), **notification rules** with quiet hours, and keyboard navigation in lists (`j`/`k`, `e`, `a`, `s`, `x`).
+- **Table view**: edit tasks like a spreadsheet — arrow keys, Enter or typing to edit, copy and paste, paste several lines to create several tasks, sort, filter and choose columns.
+- **Right-click menus** on cards and rows, **saved views** on the board and table, **card fields** (choose what cards show), **project and epic icons**, a project **picture gallery**, and **drop files** on a task or a card to attach them.
+- **Appearance**: light, dark or system theme, high contrast, compact density, text size, an easy-to-read font and reduced motion — saved in your account with your other preferences so they follow you to every device.
+- On phones: a **bottom navigation bar**, **pull to refresh** and **swipe** cards between columns.
+- **German and Spanish** next to English and Hungarian (Profile → Language).
+
+**Reporting**
+- **Monte Carlo forecasts** (when will it be done, what fits by a date), **release burn-up**, **aging work in progress**, **bug trends**, **SLA** targets and reports, a team **health check**.
+- More dashboard charts, **scheduled email reports**, and **Excel and PDF** exports.
+
+**Service desk**
+- A public **request portal** per project with a form builder, request tracking pages and a conversation with the requester, **duplicate detection**, a public **roadmap** and **changelog**, and an embeddable **feedback widget**.
+
+**Integrations**
+- **CI/CD status** on tasks and cards (GitHub, GitLab, Gitea or any CI), **branches and draft pull requests** from tasks and two-way **GitHub issue sync**, **slash commands** in Slack, Mattermost and Discord, **Teams and Mattermost** notifications, two-way **Google Calendar** sync, **REST hooks** for Zapier / n8n / Make, **link previews**, a **command-line tool** and an **OpenAPI** explorer at `/api-docs`.
+
+**Claude assistant** (optional, off unless an Anthropic API key is set)
+- Write a task from one sentence, summarize a discussion, "what changed", split an epic into tasks, draft sprint reviews and release notes, ask search questions in plain words, and get estimate and triage suggestions. Everything is a suggestion you review before it is saved.
+
+**Admin, security and operations**
+- Company sign-in with **OpenID Connect**, **SAML 2.0** and **LDAP / Active Directory**, **SCIM** provisioning, **require SSO**, session length and idle timeout, an **IP allowlist**, sign-in alerts, and deactivating accounts.
+- **Data retention** rules, attachments **encrypted at rest**, **one-click restore** from a backup, **health alerts**, and **several instances** behind a load balancer via Redis.
 
 ## What's new in 4.0
 
@@ -199,6 +236,14 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 | `app.mail.inbound.imap.*` | `APP_MAIL_INBOUND_IMAP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FOLDER`, `_POLL_MS` | Empty. Or poll the mailbox over IMAPS. |
 | `app.oauth.google.*` / `app.oauth.github.*` | `APP_OAUTH_GOOGLE_CLIENT_ID`, `_SECRET`; `APP_OAUTH_GITHUB_CLIENT_ID`, `_SECRET` | Empty (off). Sign in with Google / GitHub. |
 | `app.audit.retention-days` | `APP_AUDIT_RETENTION_DAYS` | `365` |
+| `app.ai.*` | `ANTHROPIC_API_KEY`, `APP_AI_MODEL`, `APP_AI_FALLBACKS`, `APP_AI_REQUESTS_PER_HOUR` | Empty (off). The Claude assistant; model `claude-opus-5-5`, server-side fallbacks on, 60 requests per person per hour. See below. |
+| `app.oauth.oidc.*` | `APP_OAUTH_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_LABEL`, `_TRUST_EMAIL` | Empty (off). Company sign-in with OpenID Connect. |
+| `app.saml.*` | `APP_SAML_IDP_SSO_URL`, `APP_SAML_IDP_ENTITY_ID`, `APP_SAML_IDP_CERTIFICATE`, `APP_SAML_LABEL` | Empty (off). Company sign-in with SAML 2.0. |
+| `app.ldap.*` | `APP_LDAP_URL`, `_USER_DN_PATTERN`, `_USER_SEARCH_BASE`, `_USER_SEARCH_FILTER`, `_BIND_DN`, `_BIND_PASSWORD`, `_EMAIL_ATTRIBUTE`, `_NAME_ATTRIBUTE` | Empty (off). Sign in with LDAP / Active Directory passwords. |
+| `app.security.ip-allowlist-disabled` | `APP_SECURITY_IP_ALLOWLIST_DISABLED` | `false`. Recovery switch that ignores the admin's IP allowlist. |
+| `app.storage.encryption-key` | `APP_STORAGE_ENCRYPTION_KEY` (+ `APP_STORAGE_PREVIOUS_ENCRYPTION_KEYS`) | Empty (off). Encrypt attachments at rest; see below. |
+| `app.redis.url` | `APP_REDIS_URL` | Empty. Run several instances; see below. |
+| `app.google-calendar.*` | `APP_GOOGLE_CALENDAR_CLIENT_ID`, `_CLIENT_SECRET` | The Google sign-in client. Two-way Google Calendar sync. |
 | – | `TZ` | `UTC`. Time zone for backups and digests, e.g. `Europe/Budapest`. |
 | `spring.mail.host` | `SPRING_MAIL_HOST` | Empty, so email is off. Also set `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` and `APP_MAIL_FROM`. For an SMTP relay without login, set `SPRING_MAIL_SMTP_AUTH=false`. |
 
@@ -243,7 +288,9 @@ The app refuses to open the port while the database has no password, and remote 
 
 A zip with the database, attachments and profile pictures is written every night to `/data/backups` (inside the data volume); the newest 14 are kept. Admins can make one on demand and download backups from the Admin page — keep a copy off the server.
 
-To restore:
+**One-click restore** (built-in H2 database): **Admin → Data & backups → Restore** on a backup. After you confirm with your password, the app makes a safety backup of the current state, checks the backup, and restarts to apply it; the replaced data is kept on the server. With Docker the container restarts by itself (`restart: unless-stopped`).
+
+To restore by hand instead:
 
 ```bash
 docker compose stop fakejira
@@ -293,7 +340,42 @@ As the project owner open **Project settings → Git hosting → Connect a repos
 
 Each user turns on push in **Profile → Push notifications** (per device). This needs HTTPS (fine behind Caddy/Cloudflare). On iPhone/iPad, first add FakeJIRA to the home screen (Share → Add to Home Screen), then enable push from the installed app. Keys for push (VAPID) are generated on first use and stored in the database.
 
+### Claude assistant
+
+Set `ANTHROPIC_API_KEY` to turn on the Claude features (the model is `claude-opus-5-5` unless `APP_AI_MODEL` says otherwise). They only run when someone clicks them, and only send the task, comment or project text needed for that request to the Anthropic API. Claude never changes anything by itself: every answer is a suggestion that a person reviews and applies, with the usual permissions. If Claude declines a request, it is retried on Anthropic's recommended fallback model; set `APP_AI_FALLBACKS=false` to turn that off. Each person can make `APP_AI_REQUESTS_PER_HOUR` requests per hour (default 60), and every request is in the audit log.
+
+### Company sign-in (OpenID Connect, SAML, LDAP) and SCIM
+
+- **OpenID Connect** (Okta, Entra ID, Keycloak, Auth0, Google Workspace…): set `APP_OAUTH_OIDC_ISSUER`, `APP_OAUTH_OIDC_CLIENT_ID` and `APP_OAUTH_OIDC_CLIENT_SECRET`, and register `<APP_BASE_URL>/api/auth/oauth/oidc/callback` as the redirect URL. Set `APP_OAUTH_OIDC_TRUST_EMAIL=true` if your provider does not send `email_verified` but only has verified addresses (Entra ID).
+- **SAML 2.0**: give your identity provider the metadata at `<APP_BASE_URL>/api/auth/saml/metadata`, then set `APP_SAML_IDP_SSO_URL`, `APP_SAML_IDP_ENTITY_ID` and `APP_SAML_IDP_CERTIFICATE` (the IdP's signing certificate, PEM).
+- **LDAP / Active Directory**: set `APP_LDAP_URL` (e.g. `ldaps://ldap.example.com:636`) and either `APP_LDAP_USER_DN_PATTERN` (`uid={0},ou=people,dc=example,dc=com`) or `APP_LDAP_USER_SEARCH_BASE` with an optional service account (`APP_LDAP_BIND_DN`, `APP_LDAP_BIND_PASSWORD`).
+- **SCIM 2.0**: create a token in **Admin → Sign-in & access** and give your identity provider the SCIM base URL shown there. It creates, updates and deactivates accounts and syncs groups to teams.
+
+In **Admin → Sign-in & access** admins can also require single sign-on (admins keep password access), set session length and idle timeout, turn on sign-in alerts and restrict access to an **IP allowlist**. If the allowlist ever locks everyone out, start once with `APP_SECURITY_IP_ALLOWLIST_DISABLED=true`.
+
+### Encryption at rest
+
+Set `APP_STORAGE_ENCRYPTION_KEY` to 32 random bytes in base64 (`openssl rand -base64 32`) to encrypt attachments with AES-256-GCM, then use **Admin → Data & backups → Encrypt all files now** for existing files. Keep the key safe: files and backups cannot be read without it. To change it, put the old key in `APP_STORAGE_PREVIOUS_ENCRYPTION_KEYS` (comma-separated) and run *Encrypt all files now* again.
+
+### Running several instances
+
+With PostgreSQL and a shared data volume, you can run several app instances behind a load balancer. Set `APP_REDIS_URL` (e.g. `redis://redis:6379`) on all of them: live updates reach people on every instance, scheduled jobs run on one instance only, and SAML sign-in hand-offs and admin settings are shared.
+
+### Integrations in 5.0
+
+- **GitHub repository** (Project settings → GitHub repository): with a fine-grained token, create branches and draft pull requests from tasks and sync issues both ways.
+- **CI/CD status**: GitHub checks and workflow runs, commit statuses and GitLab pipelines arrive through the Git hosting webhook; any other CI can POST results to the endpoint shown in project settings.
+- **Chat commands** (Project settings → Chat commands): `/fakejira` in Slack, Mattermost and Discord to look up, search and create tasks, plus task link previews in Slack.
+- **Google Calendar** (Profile): uses the Google sign-in client unless `APP_GOOGLE_CALENDAR_CLIENT_ID` / `_SECRET` are set; register `<APP_BASE_URL>/api/integrations/google-calendar/callback` as a redirect URL.
+- **REST hooks** for Zapier, n8n and Make, a command-line tool at `/cli/fakejira` (Python 3) and the interactive API reference at `/api-docs`.
+
+### Service desk
+
+Turn on the request portal in **Project settings → Service desk** and build request forms there. The portal is at `/portal/<KEY>`, the public roadmap and changelog at `/public/<KEY>/roadmap` and `/public/<KEY>/changelog`, and the feedback widget is one `<script>` tag shown in the same settings. Requesters need no account; they get a private tracking link.
+
 ### Upgrading
+
+**From 4.x to 5.0:** deploy the new version on your existing database; new tables and columns are added automatically, and existing projects, tasks and settings carry over. All new integrations — Claude, company sign-in, SCIM, Google Calendar, chat commands, Redis, encryption — stay off until configured. Sessions stay valid.
 
 **From 3.x to 4.0:** deploy the new version on your existing database; new tables and columns are added automatically and nothing needs to be migrated by hand. Everyone signs in once after the upgrade (sign-ins are now revocable sessions, which older tokens are not). All 4.0 integrations (OAuth, email in, off-site backups, metrics) stay off until configured.
 
@@ -304,7 +386,7 @@ Each user turns on push in **Profile → Push notifications** (per device). This
 ## Tests
 
 ```bash
-cd backend && mvn test          # API integration tests (projects, sprints, roles, epics, time, GitHub, push crypto, backups, rate limits, upgrade)
+cd backend && mvn test          # API integration tests (projects, sprints, roles, workflows, wiki, portal, forecasts, SSO, SCIM, Claude, restore, upgrade…)
 cd frontend && npm run build    # type-check + production build
 ```
 

@@ -46,14 +46,14 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const validate = (): Record<string, string> => {
     const found: Record<string, string> = {};
     if (mode === 'login') {
-      if (!fields.login.trim()) found.login = 'Enter your username or email';
-      if (!fields.password) found.password = 'Enter your password';
+      if (!fields.login.trim()) found.login = t('Enter your username or email');
+      if (!fields.password) found.password = t('Enter your password');
       return found;
     }
-    if (fields.username.trim().length < 4) found.username = 'Username must be at least 4 characters long';
-    if (!/^\S+@\S+\.\S+$/.test(fields.email.trim())) found.email = 'Enter a valid email address';
-    if (passwordRules.some((rule) => !rule.test(fields.password))) found.password = 'Password does not meet the requirements';
-    if (fields.confirm !== fields.password) found.confirm = 'Passwords do not match';
+    if (fields.username.trim().length < 4) found.username = t('Username must be at least 4 characters long');
+    if (!/^\S+@\S+\.\S+$/.test(fields.email.trim())) found.email = t('Enter a valid email address');
+    if (passwordRules.some((rule) => !rule.test(fields.password))) found.password = t('Password does not meet the requirements');
+    if (fields.confirm !== fields.password) found.confirm = t('Passwords do not match');
     return found;
   };
 
@@ -109,7 +109,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
   const field = (key: keyof typeof fields, label: string, type = 'text', autoComplete?: string) => (
     <label className="field">
-      <span>{label}</span>
+      <span>{t(label)}</span>
       <input
         type={type}
         value={fields[key]}
@@ -135,7 +135,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <li><Bell size={18} /> {t("Live updates, @mentions and email notifications")}</li>
           </ul>
         </div>
-        <span className="auth-foot">{t("FakeJIRA 4.0")}</span>
+        <span className="auth-foot">{t("FakeJIRA 5.0")}</span>
       </section>
 
       <section className="auth-panel">
@@ -144,7 +144,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <Clock size={32} className="auth-icon" />
             <h2>{t("Almost there")}</h2>
             <p className="muted">
-              Your account was created and is waiting for an administrator to approve it. You can sign in as soon as it's approved.
+              {t("Your account was created and is waiting for an administrator to approve it. You can sign in as soon as it's approved.")}
             </p>
             <Link to="/login" className="btn btn-primary btn-block">{t("Back to sign in")}</Link>
           </div>
@@ -175,23 +175,23 @@ export function AuthPage({ mode }: { mode: Mode }) {
             <h2>{t("Sign-up is invite-only")}</h2>
             <p className="muted">
               {inviteCode
-                ? 'This invite link is invalid, already used or expired. Ask for a new one.'
-                : 'Ask an administrator or a project owner to send you an invite link.'}
+                ? t('This invite link is invalid, already used or expired. Ask for a new one.')
+                : t('Ask an administrator or a project owner to send you an invite link.')}
             </p>
             <p className="muted center">{t("Already have an account?")} <Link to="/login">{t("Sign in")}</Link></p>
           </div>
         ) : (
         <form className="auth-card form" onSubmit={submit} noValidate>
           <div>
-            <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+            <h2>{mode === 'login' ? t('Welcome back') : t('Create your account')}</h2>
             <p className="muted">
-              {mode === 'login' ? 'Sign in to continue to your workspace.' : 'It takes less than a minute.'}
+              {mode === 'login' ? t('Sign in to continue to your workspace.') : t('It takes less than a minute.')}
             </p>
           </div>
 
           {mode === 'register' && info?.valid && (
             <div className="notice">
-              You've been invited{info.projectName ? <> to <b>{info.projectName}</b></> : ''}. Create your account to get started.
+              {info.projectName ? t("You've been invited to {project}. Create your account to get started.", { project: info.projectName }) : t("You've been invited. Create your account to get started.")}
             </div>
           )}
           {mode === 'register' && !info?.valid && info?.registrationMode === 'APPROVAL' && (
@@ -222,7 +222,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
           )}
 
           <button className="btn btn-primary btn-block" disabled={busy}>
-            {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
+            {busy ? t('Please wait…') : mode === 'login' ? t('Sign in') : t('Create account')}
           </button>
           <ProviderButtons invite={inviteCode} onError={setFormError}
             verb={mode === 'login' ? 'Continue' : 'Sign up'} />
@@ -230,10 +230,10 @@ export function AuthPage({ mode }: { mode: Mode }) {
           <p className="muted center">
             {mode === 'login' ? (
               info?.registrationMode === 'INVITE'
-                ? <>New here? Ask for an invite link to join.</>
-                : <>New here? <Link to="/register">{t("Create an account")}</Link></>
+                ? <>{t('New here? Ask for an invite link to join.')}</>
+                : <>{t('New here?')} <Link to="/register">{t("Create an account")}</Link></>
             ) : (
-              <>Already have an account? <Link to="/login">{t("Sign in")}</Link></>
+              <>{t('Already have an account?')} <Link to="/login">{t("Sign in")}</Link></>
             )}
           </p>
         </form>

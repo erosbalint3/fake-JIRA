@@ -48,11 +48,21 @@ public class AuthService {
     private final TwoFactorService twoFactor;
     private final PasswordPolicy policy;
     private final AuditLog audit;
+    private final com.fakejira.admin.SecurityPolicy securityPolicy;
+    private final LoginAlerts loginAlerts;
+    private final LdapDirectory ldap;
+    private final com.fakejira.auth.oauth.UserIdentityRepository identities;
     private final Map<String, AtomicInteger> codeAttempts = new ConcurrentHashMap<>();
 
     public AuthService(UserRepository users, PasswordEncoder passwordEncoder, TokenService tokens, AppSettings settings,
                        InviteRepository invites, NotificationService notifications, RateLimitFilter rateLimit,
-                       SessionService sessions, TwoFactorService twoFactor, PasswordPolicy policy, AuditLog audit) {
+                       SessionService sessions, TwoFactorService twoFactor, PasswordPolicy policy, AuditLog audit,
+                       com.fakejira.admin.SecurityPolicy securityPolicy, LoginAlerts loginAlerts, LdapDirectory ldap,
+                       com.fakejira.auth.oauth.UserIdentityRepository identities) {
+        this.ldap = ldap;
+        this.identities = identities;
+        this.securityPolicy = securityPolicy;
+        this.loginAlerts = loginAlerts;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.tokens = tokens;
@@ -68,6 +78,9 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        if (securityPolicy.get().ssoRequired()) {
+            throw ApiException.forbidden("Your organization requires signing up with single sign-on.");
+        }
         policy.check(request.password(), "password");
         NewAccount account = createAccount(request.username().trim(), request.email().trim().toLowerCase(),
                 passwordEncoder.encode(request.password()), true, request.inviteCode());
@@ -116,9 +129,7 @@ public class AuthService {
 
         if (invite != null) {
             invite.markUsed(user);
-            if (invite.getProject() != null) {
-                invite.getProject().getMembers().add(user);
-            }
+            invite.joinProject(user);
         }
         audit.record(user, "account.register", user.getUsername(),
                 (needsApproval ? "pending approval" : "active") + (invite != null ? ", invited" : ""));
@@ -139,11 +150,55 @@ public class AuthService {
                 .filter(candidate -> candidate.getStatus() != AccountStatus.DELETED && candidate.isPasswordSet())
                 .filter(candidate -> passwordEncoder.matches(request.password(), candidate.getPasswordHash()))
                 .orElse(null);
+        String method = "password";
+        if (user == null && ldap.enabled()) {
+            user = ldap.authenticate(login, request.password()).map(this::directoryUser).orElse(null);
+            method = "ldap";
+        }
         if (user == null) {
+            (login.contains("@") ? users.findByEmailIgnoreCase(login) : users.findByUsernameIgnoreCase(login))
+                    .filter(candidate -> candidate.getStatus() == AccountStatus.ACTIVE)
+                    .ifPresent(candidate -> loginAlerts.failed(candidate, rateLimit.currentIp()));
             audit.record(null, login, "login.failure", login, "wrong username/email or password");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Invalid username/email or password.");
         }
-        return afterFirstStep(user, "password");
+        return afterFirstStep(user, method);
+    }
+
+    /**
+     * The FakeJIRA account for someone the LDAP directory vouched for: already linked, the same email, or a new
+     * account (the directory decides who may sign in, so the sign-up mode does not apply).
+     */
+    private User directoryUser(LdapDirectory.Person person) {
+        var linked = identities.findByProviderAndSubject("ldap", person.dn()).flatMap(i -> users.findById(i.getUser().getId()))
+                .filter(u -> u.getStatus() != AccountStatus.DELETED);
+        if (linked.isPresent()) {
+            return linked.get();
+        }
+        if (person.email() == null || person.email().isBlank()) {
+            audit.record(null, person.login(), "login.failure", person.login(), "the directory entry has no email address");
+            return null;
+        }
+        String email = person.email().trim().toLowerCase(java.util.Locale.ROOT);
+        User user = users.findByEmailIgnoreCase(email).filter(u -> u.getStatus() != AccountStatus.DELETED).orElse(null);
+        if (user == null) {
+            String base = person.login().replaceAll("[^A-Za-z0-9._-]", "");
+            if (base.length() < 4) base = base + "user";
+            if (base.length() > 32) base = base.substring(0, 32);
+            String username = base;
+            for (int i = 2; users.existsByUsernameIgnoreCase(username); i++) username = base + i;
+            byte[] secret = new byte[24];
+            new java.security.SecureRandom().nextBytes(secret);
+            user = new User(username, email, passwordEncoder.encode(java.util.Base64.getEncoder().encodeToString(secret)));
+            user.setPasswordSet(false);
+            if (person.name() != null && !person.name().isBlank()) {
+                user.setDisplayName(person.name().length() > 60 ? person.name().substring(0, 60) : person.name());
+            }
+            users.save(user);
+            audit.record(user, "account.register", user.getUsername(), "from the LDAP directory");
+        }
+        identities.save(new com.fakejira.auth.oauth.UserIdentity(user, "ldap", person.dn(), email));
+        return user;
     }
 
     /** After the password (or Google/GitHub) check: either signs in, or asks for the 2FA code. */
@@ -151,8 +206,15 @@ public class AuthService {
         if (user.getStatus() == AccountStatus.PENDING) {
             throw ApiException.forbidden("Your account is waiting for an admin to approve it.");
         }
+        if (user.getStatus() == AccountStatus.SUSPENDED) {
+            throw ApiException.forbidden("This account has been deactivated. Ask an admin if you need access.");
+        }
         if (user.getStatus() != AccountStatus.ACTIVE) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "This account no longer exists.");
+        }
+        if (securityPolicy.get().ssoRequired() && !user.isAdmin() && !method.equals("oidc") && !method.equals("saml")
+                && !method.equals("ldap")) {
+            throw ApiException.forbidden("Your organization requires signing in with single sign-on.");
         }
         if (user.isTotpEnabled()) {
             return AuthResponse.secondStep(tokens.challenge(user, TWO_FACTOR, method));
@@ -187,6 +249,7 @@ public class AuthService {
     public AuthResponse signIn(User user, String method) {
         String sessionId = sessions.start(user, method).getId();
         audit.record(user, "login.success", user.getUsername(), method);
+        loginAlerts.signedIn(user, method);
         return AuthResponse.signedIn(tokens.issue(user, sessionId), user);
     }
 

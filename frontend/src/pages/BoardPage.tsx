@@ -1,7 +1,11 @@
+import { isReadOnlyRole } from '../types';
+import { ProjectNotifyButton } from '../components/ProjectNotifyButton';
+import { BUILD_ICON, BUILD_LABEL } from '../components/task/DevPanel';
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Eye, KanbanSquare, Users, Zap } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { useTransitionGuard } from '../components/TransitionGuard';
 import { useAuth } from '../auth';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -17,8 +21,13 @@ import { formatDay, todayIso } from '../format';
 import {
   PRIORITIES, PRIORITY_LABEL, PRIORITY_ORDER, TASK_TYPES, TASK_TYPE_LABEL, type BoardColumn, type Sprint, type Task,
   type User,
+  type BuildInfo,
 } from '../types';
 import { t } from '../i18n';
+import { CardFieldsButton, useCardFields } from '../components/CardFields';
+import { useTaskMenu } from '../components/ContextMenu';
+import { SavedViews } from '../components/SavedViews';
+import { swipeHandlers } from '../components/Mobile';
 
 /** The column a task shows in: its pinned column, or the first column of its status. */
 function columnOf(task: Task, columns: BoardColumn[]) {
@@ -77,15 +86,15 @@ function lanesFor(tasks: Task[], grouping: Grouping): Lane[] {
       const user = task.assignee;
       add(user ? `u${user.id}` : 'u-none', user
         ? <><Avatar user={user} size={20} /> {user.displayName}</>
-        : <><span className="avatar-empty sm" /> Unassigned</>, user ? user.displayName.toLowerCase() : '\uffff', task, { assigneeId: user?.id ?? null });
+        : <><span className="avatar-empty sm" /> {t('Unassigned')}</>, user ? user.displayName.toLowerCase() : '\uffff', task, { assigneeId: user?.id ?? null });
     } else if (grouping === 'epic') {
-      add(task.epic ? `e${task.epic.id}` : 'e-none', task.epic ? <EpicChip epic={task.epic} /> : 'No epic',
+      add(task.epic ? `e${task.epic.id}` : 'e-none', task.epic ? <EpicChip epic={task.epic} /> : t('No epic'),
         task.epic ? task.epic.name.toLowerCase() : '\uffff', task);
     } else if (grouping === 'priority') {
-      add(task.priority, <><PriorityBadge priority={task.priority} compact /> {PRIORITY_LABEL[task.priority]}</>,
+      add(task.priority, <><PriorityBadge priority={task.priority} compact /> {t(PRIORITY_LABEL[task.priority])}</>,
         String(PRIORITIES.indexOf(task.priority)), task);
     } else {
-      add(task.type, <><TypeIcon type={task.type} /> {TASK_TYPE_LABEL[task.type]}</>,
+      add(task.type, <><TypeIcon type={task.type} /> {t(TASK_TYPE_LABEL[task.type])}</>,
         String(TASK_TYPES.indexOf(task.type)), task);
     }
   }
@@ -94,8 +103,11 @@ function lanesFor(tasks: Task[], grouping: Grouping): Lane[] {
 
 export function BoardPage() {
   const { key, project, loading, canEdit } = useRouteProject();
+  const [fields] = useCardFields(key ?? '');
+  const openTaskMenu = useTaskMenu();
   const { user } = useAuth();
   const toast = useToast();
+  const guard = useTransitionGuard();
   const openCreate = useCreateTask();
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -109,6 +121,7 @@ export function BoardPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const kanban = project?.kanban ?? false;
 
+  const [builds, setBuilds] = useState<Record<string, BuildInfo>>({});
   const load = useCallback(async () => {
     if (!project) return;
     setError('');
@@ -118,6 +131,7 @@ export function BoardPage() {
       setActive(current);
       setColumns(cols);
       setTasks(await api.tasks({ project: key, sprint: current ? String(current.id) : undefined }));
+      api.projectBuilds(key).then(setBuilds).catch(() => {});
     } catch (e) {
       setError((e as ApiError).message);
     }
@@ -152,16 +166,21 @@ export function BoardPage() {
     const previous = tasks;
     setTasks((current) => current?.map((t) => (t.id === task.id ? { ...t, status: column.status, columnId: column.id } : t)) ?? null);
     try {
-      await api.moveToColumn(task.id, column.id);
+      const moved = await guard(task, (resolution) => api.moveToColumn(task.id, column.id, resolution));
+      if (!moved) {
+        setTasks(previous);
+        return;
+      }
+      setTasks((current) => current?.map((t) => (t.id === moved.id ? moved : t)) ?? null);
       const undo = !isUndo && from ? {
-        action: { label: 'Undo', onClick: () => move({ ...task, status: column.status, columnId: column.id }, from, true) },
+        action: { label: t('Undo'), onClick: () => move({ ...task, status: column.status, columnId: column.id }, from, true) },
       } : {};
       if (column.wipLimit && inTarget + 1 > column.wipLimit) {
-        toast(`${column.name} is over its limit of ${column.wipLimit}`, 'error', undo);
+        toast(t('{name} is over its limit of {n}', { name: column.name, n: column.wipLimit ?? 0 }), 'error', undo);
       } else if (column.status === 'DONE') {
-        toast(`${task.key} done — nice work!`, 'success', undo);
+        toast(t('{key} done — nice work!', { key: task.key }), 'success', undo);
       } else if (!isUndo) {
-        toast(`${task.key} moved to ${column.name}`, 'success', undo);
+        toast(t('{key} moved to {name}', { key: task.key, name: column.name }), 'success', undo);
       }
     } catch (e) {
       setTasks(previous);
@@ -173,8 +192,8 @@ export function BoardPage() {
     const target = lane.assigneeId ?? null;
     if ((task.assignee?.id ?? null) === target) return;
     const member = project.members.find((m) => m.id === target) ?? null;
-    if (member?.role === 'VIEWER') {
-      toast(`${member.displayName} is a viewer and cannot be assigned`, 'error');
+    if ((member && isReadOnlyRole(member.role))) {
+      toast(t('{name} is a viewer and cannot be assigned', { name: member.displayName }), 'error');
       return;
     }
     setTasks((current) => current?.map((t) => (t.id === task.id ? { ...t, assignee: member as User | null } : t)) ?? null);
@@ -216,6 +235,23 @@ export function BoardPage() {
     });
   };
 
+  const attachFiles = async (task: Task, files: File[]) => {
+    let attached = 0;
+    for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast(t('{name} is larger than 10 MB', { name: file.name }), 'error');
+        continue;
+      }
+      try {
+        await api.uploadAttachment(task.id, file);
+        attached++;
+      } catch (e) {
+        toast((e as ApiError).message, 'error');
+      }
+    }
+    if (attached) toast(t('{n} files attached to {key}', { n: attached, key: task.key }));
+  };
+
   const renderCard = (task: Task, index: number) => (
     <article
       key={task.id}
@@ -227,42 +263,75 @@ export function BoardPage() {
         setDragging(task.id);
       }}
       onDragEnd={() => setDragging(null)}
+      onContextMenu={(e) => openTaskMenu(e, task, canEdit)}
+      {...(canEdit ? swipeHandlers((direction) => {
+        const next = columns[index + direction];
+        if (next) move(task, next);
+      }) : {})}
+      onDragOver={(e) => {
+        // Files dropped on a card are attached to that task.
+        if (canEdit && e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.currentTarget.classList.add('file-over');
+        }
+      }}
+      onDragLeave={(e) => e.currentTarget.classList.remove('file-over')}
+      onDrop={(e) => {
+        if (!canEdit || !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.classList.remove('file-over');
+        attachFiles(task, Array.from(e.dataTransfer.files));
+      }}
     >
-      {task.parent && <span className="card-parent muted small">↳ {task.parent.key}</span>}
+      {fields.parent && task.parent && <span className="card-parent muted small">↳ {task.parent.key}</span>}
       <Link to={`/tasks/${task.id}`} className="card-title">{task.title}</Link>
       <div className="card-tags">
-        {grouping !== 'epic' && <EpicChip epic={task.epic} />}
-        <Labels labels={task.labels} max={2} />
+        {fields.epic && grouping !== 'epic' && <EpicChip epic={task.epic} />}
+        {fields.labels && <Labels labels={task.labels} max={2} />}
       </div>
       <div className="card-meta">
         <BlockedBadge blocked={task.blocked} />
-        {task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
-        <ChecklistProgress done={task.checklistDone} total={task.checklistTotal} />
-        <SubtaskBadge done={task.subtaskDone} total={task.subtaskTotal} />
+        {fields.due && task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
+        {fields.checklist && <ChecklistProgress done={task.checklistDone} total={task.checklistTotal} />}
+        {fields.subtasks && <SubtaskBadge done={task.subtaskDone} total={task.subtaskTotal} />}
+        {fields.build && builds[task.id] && (() => {
+          const build = builds[task.id];
+          const Icon = BUILD_ICON[build.state];
+          return (
+            <span className={`build-badge build-${build.state}`} title={`${build.name}: ${t(BUILD_LABEL[build.state])}`}>
+              <Icon size={13} aria-hidden /> <span className="sr-only">{t('Build')} </span>{t(BUILD_LABEL[build.state])}
+            </span>
+          );
+        })()}
       </div>
       <footer className="card-footer">
-        <TypeIcon type={task.type} />
-        <PriorityBadge priority={task.priority} compact />
-        <span className="task-key">{task.key}</span>
-        <PointsBadge points={task.storyPoints} />
+        {fields.type && <TypeIcon type={task.type} />}
+        {fields.priority && <PriorityBadge priority={task.priority} compact />}
+        {fields.key && <span className="task-key">{task.key}</span>}
+        {fields.points && <PointsBadge points={task.storyPoints} />}
         <span className="spacer" />
         {canEdit && (
           <>
             <button className="icon-button sm" disabled={index === 0}
               onClick={() => move(task, columns[index - 1])}
-              aria-label={`Move ${task.key} to ${index > 0 ? columns[index - 1].name : ''}`}>
+              aria-label={t('Move {key} to {status}', { key: task.key, status: index > 0 ? columns[index - 1].name : '' })}>
               <ChevronLeft size={16} />
             </button>
             <button className="icon-button sm" disabled={index === columns.length - 1}
               onClick={() => move(task, columns[index + 1])}
-              aria-label={`Move ${task.key} to ${index < columns.length - 1 ? columns[index + 1].name : ''}`}>
+              aria-label={t('Move {key} to {status}', { key: task.key, status: index < columns.length - 1 ? columns[index + 1].name : '' })}>
               <ChevronRight size={16} />
             </button>
           </>
         )}
-        {task.assignee
-          ? <Avatar user={task.assignee} size={24} />
-          : <span className="avatar-empty sm" title={t("Unassigned")} />}
+        {fields.assignee && <span className="avatar-stack">
+          {task.assignee
+            ? <Avatar user={task.assignee} size={24} />
+            : <span className="avatar-empty sm" title={t("Unassigned")} />}
+          {task.helpers.map((h) => <Avatar key={h.id} user={h} size={20} />)}
+        </span>}
       </footer>
     </article>
   );
@@ -277,7 +346,7 @@ export function BoardPage() {
     return (
       <header className="column-header">
         <span className="column-dot" />
-        <h2>{column.name}</h2>
+        <h2>{t(column.name)}</h2>
         <span className={`count ${overLimit ? 'danger' : ''}`} title={column.wipLimit ? `Limit: ${column.wipLimit}` : undefined}>
           {count}{column.wipLimit ? ` / ${column.wipLimit}` : ''}
         </span>
@@ -293,7 +362,7 @@ export function BoardPage() {
       <section
         key={column.id}
         className={`column column-${column.status.toLowerCase()} ${withHeader ? '' : 'lane-cell'} ${over === dropId ? 'drop-target' : ''} ${overLimit ? 'over-limit' : ''}`}
-        aria-label={withHeader ? undefined : `${column.name}`}
+        aria-label={withHeader ? undefined : t(column.name)}
         onDragOver={(e) => {
           if (!canEdit) return;
           e.preventDefault();
@@ -307,7 +376,7 @@ export function BoardPage() {
         {withHeader && header(column)}
         <div className="column-body">
           {cards.map((task) => renderCard(task, index))}
-          {cards.length === 0 && withHeader && <div className="column-empty">{canEdit ? 'Drop tasks here' : 'Empty'}</div>}
+          {cards.length === 0 && withHeader && <div className="column-empty">{canEdit ? t('Drop tasks here') : t('Empty')}</div>}
         </div>
       </section>
     );
@@ -324,7 +393,7 @@ export function BoardPage() {
           {kanban ? (
             <p className="sprint-banner">
               <KanbanSquare size={15} /> <strong>{t("Kanban")}</strong>
-              <span className="muted">Continuous flow · finished tasks leave the board after {KANBAN_DONE_DAYS} days</span>
+              <span className="muted">{t('Continuous flow · finished tasks leave the board after {n} days', { n: KANBAN_DONE_DAYS })}</span>
               <Link to={`/p/${key}/reports`} className="small">{t("Flow reports")}</Link>
             </p>
           ) : active ? (
@@ -347,12 +416,22 @@ export function BoardPage() {
           <select value={grouping} onChange={(e) => changeGrouping(e.target.value as Grouping)} aria-label={t("Swimlanes")}>
               {GROUPINGS.map((g) => <option key={g.value} value={g.value}>{g.value === 'none' ? t(g.label) : t('Lanes: {x}', { x: t(g.label) })}</option>)}
           </select>
+          <SavedViews scope={`board:${project.key}`} current={{ grouping, onlyMine, showWorkload }}
+            onApply={(view) => {
+              setGrouping(view.grouping);
+              store('fakejira.board.lanes', view.grouping);
+              setOnlyMine(view.onlyMine);
+              setShowWorkload(view.showWorkload);
+              store('fakejira.board.workload', view.showWorkload ? '1' : '');
+            }} />
+          <CardFieldsButton projectKey={project.key} />
           <button className={`btn btn-ghost btn-sm ${showWorkload ? 'is-on' : ''}`} onClick={toggleWorkload} aria-pressed={showWorkload}>
             <Users size={15} /> {t('Workload')}
           </button>
           <label className="toggle">
             <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> {t('Only my tasks')}
           </label>
+          <ProjectNotifyButton projectKey={key!} />
         </div>
       </header>
 
@@ -360,9 +439,9 @@ export function BoardPage() {
       {!tasks && !error && <Spinner />}
       {tasks && showWorkload && <Workload tasks={shown} />}
       {tasks && tasks.length === 0 && (
-        <EmptyState icon={<KanbanSquare size={28} />} title={active ? 'This sprint has no tasks' : 'No tasks yet'}>
+        <EmptyState icon={<KanbanSquare size={28} />} title={active ? t('This sprint has no tasks') : t('No tasks yet')}>
           {active
-            ? <>Move tasks into {active.name} from the <Link to={`/p/${key}/backlog`}>{t("backlog")}</Link>.</>
+            ? <>{t('Move tasks into {name} from the', { name: active.name })} <Link to={`/p/${key}/backlog`}>{t("backlog")}</Link>.</>
             : canEdit && <button className="link" onClick={() => openCreate({ projectKey: key })}>{t("Create the first task")}</button>}
         </EmptyState>
       )}
@@ -395,7 +474,7 @@ export function BoardPage() {
                 >
                   <ChevronDown size={15} className={isCollapsed ? 'rot' : ''} />
                   <span className="lane-title">{lane.title}</span>
-                  <span className="muted small">{lane.tasks.length} task{lane.tasks.length === 1 ? '' : 's'}{points ? ` · ${points} pts` : ''}</span>
+                  <span className="muted small">{lane.tasks.length === 1 ? t('1 task') : t('{n} tasks', { n: lane.tasks.length })}{points ? ` · ${t('{n} pts', { n: points })}` : ''}</span>
                 </button>
                 {!isCollapsed && (
                   <div className="board lane-row" style={gridStyle}>
@@ -439,11 +518,11 @@ function Workload({ tasks }: { tasks: Task[] }) {
           return (
             <li key={row.user?.id ?? 'none'} className={heavy ? 'heavy' : ''}>
               <span className="workload-name">
-                {row.user ? <><Avatar user={row.user} size={20} /> {row.user.displayName}</> : <><span className="avatar-empty sm" /> Unassigned</>}
+                {row.user ? <><Avatar user={row.user} size={20} /> {row.user.displayName}</> : <><span className="avatar-empty sm" /> {t('Unassigned')}</>}
               </span>
               <span className="workload-bar"><span style={{ width: `${((row.points || row.tasks) / max) * 100}%` }} /></span>
               <span className="workload-numbers">
-                {row.points} pts · {row.tasks} task{row.tasks === 1 ? '' : 's'}{row.inProgress ? ` · ${row.inProgress} started` : ''}
+                {t('{n} pts', { n: row.points })} · {row.tasks === 1 ? t('1 task') : t('{n} tasks', { n: row.tasks })}{row.inProgress ? ` · ${t('{n} started', { n: row.inProgress })}` : ''}
                 {heavy && <strong className="overdue-text"> {t("· heavy")}</strong>}
               </span>
             </li>

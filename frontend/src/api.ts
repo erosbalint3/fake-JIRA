@@ -7,6 +7,15 @@ import type {
   SearchResult, SearchGroup, SearchField, TextHit, Team, Dashboard, Widget, RecentTask, CalendarEvent, FeedItem,
   AutomationRule, RuleAction, RuleRun, RuleTrigger, OutgoingWebhook, WebhookDelivery, ApiTokenInfo, ShareLinkInfo,
   PublicTask, CustomFieldDef, CustomFieldType, CustomFieldValue, ProjectTemplate, StorageUsage, SystemInfo, OffsiteStatus,
+  Poll, DecisionEntry, KudosEntry, KudosWall, WikiPage, WikiPageSummary, WikiRevision, MeetingNote, MeetingKind, Standup,
+  Resolution, Workflow, ProjectComponent, Approval, SprintGoal, SprintCapacity, Timeline, PortfolioRow, Goal, KeyResultInput,
+  NotificationLevel, NotificationRule, NotificationSettings, Reminder, RunningTimer, TodayList, DaySummary, PersonalNotes,
+  ForecastResult, Burnup, AgingWip, BugTrends, SlaTarget, TaskSla, SlaReport, TrendWeek, ReportSubscription, ReportKind,
+  HealthCheckSummary, HealthCheckDetail, ServiceDeskSettings, TaskGithub, BuildInfo, GithubRepoSettings, ChatCommandSettings,
+  CalendarStatus, LinkPreviewData, RequestTypeDef, PortalConversation, SimilarTask,
+  AiStatus, AiTaskDraft, AiThreadSummary, AiProposedTask, AiNotes, AiFql, AiEstimate, AiTriage,
+  SecurityOverview, SecurityPolicy, RetentionPolicy, RetentionCounts, EncryptionStatus, RestoreStatus, HealthCheck,
+  HealthThresholds, CustomRole, RolesCatalog, Permission, GalleryImage,
 } from './types';
 
 const TOKEN_KEY = 'fakejira.token';
@@ -112,7 +121,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: { 'Content-Type': 'application/json' },
   });
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export interface AuthResponse {
@@ -179,7 +189,7 @@ export const api = {
   project: (key: string) => request<Project>('GET', `/projects/${key}`),
   createProject: (key: string, name: string, description: string, template?: string) =>
     request<Project>('POST', '/projects', { key, name, description, template: template || undefined }),
-  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string } = {}) =>
+  updateProject: (key: string, name: string, description: string, extra: { kanban?: boolean; color?: string; autoSchedule?: boolean } = {}) =>
     request<Project>('PUT', `/projects/${key}`, { name, description, ...extra }),
   deleteProject: (key: string) => request<void>('DELETE', `/projects/${key}`),
   addMember: (key: string, login: string, role: Role = 'MEMBER') =>
@@ -299,6 +309,8 @@ export const api = {
   setGithubAutoDone: (key: string, autoDone: boolean) => request<GithubSettings>('PUT', `/projects/${key}/github`, { autoDone }),
   disableGithub: (key: string) => request<void>('DELETE', `/projects/${key}/github`),
 
+  exportSearch: async (q: string, format: 'xlsx' | 'pdf') => (await send('GET', `/search/export${query({ q, format })}`)).blob(),
+  exportReports: async (key: string, format: 'xlsx' | 'pdf') => (await send('GET', `/projects/${key}/reports/export?format=${format}`)).blob(),
   exportCsv: async (key: string) => (await send('GET', `/projects/${key}/export.csv`)).blob(),
   customFields: (key: string) => request<CustomFieldDef[]>('GET', `/projects/${key}/fields`),
   createCustomField: (key: string, name: string, type: CustomFieldType, options: string[]) =>
@@ -371,10 +383,118 @@ export const api = {
   taskByKey: (key: string) => request<Task>('GET', `/tasks/key/${encodeURIComponent(key)}`),
   subtasks: (id: number) => request<Task[]>('GET', `/tasks/${id}/subtasks`),
   bulk: (taskIds: number[], change: BulkChange) => request<Task[]>('POST', '/tasks/bulk', { taskIds, ...change }),
-  moveToColumn: (id: number, columnId: number) => request<Task>('PATCH', `/tasks/${id}/column`, { columnId }),
+  moveToColumn: (id: number, columnId: number, resolution?: Resolution | null) =>
+    request<Task>('PATCH', `/tasks/${id}/column`, { columnId, resolution: resolution ?? null }),
   createTask: (input: CreateTaskInput) => request<Task>('POST', '/tasks', input),
-  updateTask: (id: number, input: TaskInput) => request<Task>('PUT', `/tasks/${id}`, input),
-  setStatus: (id: number, status: Status) => request<Task>('PATCH', `/tasks/${id}/status`, { status }),
+  /** {@code expected}: the task's updatedAt when the form opened; the server refuses to overwrite newer changes. */
+  updateTask: (id: number, input: TaskInput, expected?: string) =>
+    request<Task>('PUT', `/tasks/${id}${expected ? `?expected=${encodeURIComponent(expected)}` : ''}`, input),
+  setStatus: (id: number, status: Status, resolution?: Resolution | null) =>
+    request<Task>('PATCH', `/tasks/${id}/status`, { status, resolution: resolution ?? null }),
+  setResolution: (id: number, resolution: Resolution) => request<Task>('PUT', `/tasks/${id}/resolution`, { resolution }),
+  schedule: (id: number, input: { startDate: string | null; dueDate: string | null; estimateMinutes: number | null }) =>
+    request<Task>('PUT', `/tasks/${id}/schedule`, input),
+  setHelpers: (id: number, userIds: number[]) => request<Task>('PUT', `/tasks/${id}/helpers`, { userIds }),
+  archiveTask: (id: number) => request<Task>('POST', `/tasks/${id}/archive`),
+  unarchiveTask: (id: number) => request<Task>('DELETE', `/tasks/${id}/archive`),
+  archiveDone: (projectKey: string, days: number) =>
+    request<{ archived: number }>('POST', `/tasks/archive-done?project=${encodeURIComponent(projectKey)}&days=${days}`),
+  archivedTasks: (projectKey: string) =>
+    request<Task[]>('GET', `/tasks?project=${encodeURIComponent(projectKey)}&archived=only`),
+  setTaskComponents: (id: number, ids: number[]) => request<Task>('PUT', `/tasks/${id}/components`, { ids }),
+
+  workflow: (key: string) => request<Workflow>('GET', `/projects/${key}/workflow`),
+  saveWorkflow: (key: string, workflow: { restricted: boolean; columns: { id: number; required: string[] }[];
+    transitions: { fromId: number | null; toId: number }[] }) => request<Workflow>('PUT', `/projects/${key}/workflow`, workflow),
+  components: (key: string) => request<ProjectComponent[]>('GET', `/projects/${key}/components`),
+  createComponent: (key: string, input: { name: string; description: string; leadId: number | null }) =>
+    request<ProjectComponent>('POST', `/projects/${key}/components`, input),
+  updateComponent: (id: number, input: { name: string; description: string; leadId: number | null }) =>
+    request<ProjectComponent>('PUT', `/components/${id}`, input),
+  deleteComponent: (id: number) => request<void>('DELETE', `/components/${id}`),
+  typeChecklists: (key: string) => request<Record<TaskType, string[]>>('GET', `/projects/${key}/type-checklists`),
+  saveTypeChecklist: (key: string, type: TaskType, items: string[]) =>
+    request<string[]>('PUT', `/projects/${key}/type-checklists/${type}`, { items }),
+
+  approvals: (id: number) => request<Approval[]>('GET', `/tasks/${id}/approvals`),
+  requestApproval: (id: number, approverId: number, note: string) =>
+    request<Approval>('POST', `/tasks/${id}/approvals`, { approverId, note }),
+  decideApproval: (id: number, approve: boolean, note: string) =>
+    request<Approval>('POST', `/approvals/${id}/decision`, { approve, note }),
+  withdrawApproval: (id: number) => request<void>('DELETE', `/approvals/${id}`),
+  myApprovals: () => request<Approval[]>('GET', '/approvals/mine'),
+
+  sprintGoals: (sprintId: number) => request<SprintGoal[]>('GET', `/sprints/${sprintId}/goals`),
+  addSprintGoal: (sprintId: number, text: string) => request<SprintGoal>('POST', `/sprints/${sprintId}/goals`, { text }),
+  updateSprintGoal: (id: number, change: { text?: string; done?: boolean }) =>
+    request<SprintGoal>('PATCH', `/sprint-goals/${id}`, change),
+  deleteSprintGoal: (id: number) => request<void>('DELETE', `/sprint-goals/${id}`),
+  sprintCapacity: (sprintId: number) => request<SprintCapacity>('GET', `/sprints/${sprintId}/capacity`),
+  setCapacity: (sprintId: number, userId: number, hoursPerDay: number, daysOff: number) =>
+    request<SprintCapacity>('PUT', `/sprints/${sprintId}/capacity/${userId}`, { hoursPerDay, daysOff }),
+
+  timeline: (key: string) => request<Timeline>('GET', `/projects/${key}/timeline`),
+
+  polls: (taskId: number) => request<Poll[]>('GET', `/tasks/${taskId}/polls`),
+  createPoll: (taskId: number, question: string, options: string[], multiple: boolean) =>
+    request<Poll>('POST', `/tasks/${taskId}/polls`, { question, options, multiple }),
+  vote: (pollId: number, options: number[]) => request<Poll>('POST', `/polls/${pollId}/vote`, { options }),
+  closePoll: (pollId: number, recordDecision: boolean) => request<Poll>('POST', `/polls/${pollId}/close`, { recordDecision }),
+  deletePoll: (pollId: number) => request<void>('DELETE', `/polls/${pollId}`),
+  decisions: (key: string) => request<DecisionEntry[]>('GET', `/projects/${key}/decisions`),
+  taskDecisions: (taskId: number) => request<DecisionEntry[]>('GET', `/tasks/${taskId}/decisions`),
+  recordDecision: (key: string, text: string, context: string, taskId?: number | null) =>
+    request<DecisionEntry>('POST', `/projects/${key}/decisions`, { text, context, taskId: taskId ?? null }),
+  deleteDecision: (id: number) => request<void>('DELETE', `/decisions/${id}`),
+  giveKudos: (taskId: number, toUserId: number, message: string, emoji: string) =>
+    request<KudosEntry>('POST', `/tasks/${taskId}/kudos`, { toUserId, message, emoji }),
+  taskKudos: (taskId: number) => request<KudosEntry[]>('GET', `/tasks/${taskId}/kudos`),
+  kudosWall: (project?: string) => request<KudosWall>('GET', `/kudos${project ? `?project=${project}` : ''}`),
+  wikiPages: (key: string) => request<WikiPageSummary[]>('GET', `/projects/${key}/wiki`),
+  wikiPage: (key: string, slug: string) => request<WikiPage>('GET', `/projects/${key}/wiki/${encodeURIComponent(slug)}`),
+  createWikiPage: (key: string, input: { title: string; body: string; parentId: number | null }) =>
+    request<WikiPage>('POST', `/projects/${key}/wiki`, input),
+  updateWikiPage: (id: number, input: { title: string; body: string; parentId: number | null; baseVersion: number }) =>
+    request<WikiPage>('PUT', `/wiki/${id}`, input),
+  deleteWikiPage: (id: number) => request<void>('DELETE', `/wiki/${id}`),
+  wikiHistory: (id: number) => request<WikiRevision[]>('GET', `/wiki/${id}/history`),
+  wikiRevision: (id: number, version: number) => request<WikiRevision>('GET', `/wiki/${id}/history/${version}`),
+  restoreWikiRevision: (id: number, version: number) => request<WikiPage>('POST', `/wiki/${id}/history/${version}/restore`),
+  taskWikiMentions: (taskId: number) => request<WikiPageSummary[]>('GET', `/tasks/${taskId}/wiki`),
+  meetings: (key: string, sprintId?: number) =>
+    request<MeetingNote[]>('GET', `/projects/${key}/meetings${sprintId ? `?sprint=${sprintId}` : ''}`),
+  createMeeting: (key: string, input: { kind: MeetingKind; title: string; date: string; body: string; sprintId: number | null }) =>
+    request<MeetingNote>('POST', `/projects/${key}/meetings`, input),
+  updateMeeting: (id: number, input: { kind: MeetingKind; title: string; date: string; body: string; sprintId: number | null }) =>
+    request<MeetingNote>('PUT', `/meetings/${id}`, input),
+  deleteMeeting: (id: number) => request<void>('DELETE', `/meetings/${id}`),
+  addAction: (noteId: number, text: string, assigneeId: number | null) =>
+    request<MeetingNote>('POST', `/meetings/${noteId}/actions`, { text, assigneeId }),
+  actionsFromNotes: (noteId: number) => request<MeetingNote>('POST', `/meetings/${noteId}/actions/from-notes`),
+  deleteAction: (id: number) => request<MeetingNote>('DELETE', `/meeting-actions/${id}`),
+  actionTasks: (noteId: number, only?: number) =>
+    request<MeetingNote>('POST', `/meetings/${noteId}/tasks${only ? `?only=${only}` : ''}`),
+  standup: (key: string, date?: string) => request<Standup>('GET', `/projects/${key}/standup${date ? `?date=${date}` : ''}`),
+  presenceHeartbeat: (taskId: number, clientId: string, editing: boolean) =>
+    request<{ user: User; editing: boolean }[]>('POST', `/tasks/${taskId}/presence`, { clientId, editing }),
+  presence: (taskId: number) => request<{ user: User; editing: boolean }[]>('GET', `/tasks/${taskId}/presence`),
+  presenceLeave: (taskId: number, clientId: string) => request<void>('POST', `/tasks/${taskId}/presence/leave`, { clientId }),
+  collabJoin: (taskId: number, clientId: string) =>
+    request<{ seed: boolean; updates: string[] }>('POST', `/tasks/${taskId}/collab/join`, { clientId }),
+  collabUpdate: (taskId: number, clientId: string, update: string) =>
+    request<void>('POST', `/tasks/${taskId}/collab/update`, { clientId, update }),
+  collabLeave: (taskId: number, clientId: string) => request<void>('POST', `/tasks/${taskId}/collab/leave`, { clientId }),
+  portfolio: () => request<PortfolioRow[]>('GET', '/portfolio'),
+  goals: (quarter?: string) => request<Goal[]>('GET', `/goals${quarter ? `?quarter=${encodeURIComponent(quarter)}` : ''}`),
+  createGoal: (input: { title: string; description: string; quarter: string; shared: boolean }) =>
+    request<Goal>('POST', '/goals', input),
+  updateGoal: (id: number, input: { title: string; description: string; quarter: string; shared: boolean }) =>
+    request<Goal>('PUT', `/goals/${id}`, input),
+  deleteGoal: (id: number) => request<void>('DELETE', `/goals/${id}`),
+  addKeyResult: (goalId: number, input: KeyResultInput) => request<Goal>('POST', `/goals/${goalId}/key-results`, input),
+  updateKeyResult: (id: number, input: KeyResultInput) => request<Goal>('PUT', `/key-results/${id}`, input),
+  deleteKeyResult: (id: number) => request<Goal>('DELETE', `/key-results/${id}`),
+  epicGoals: (epicId: number) => request<Goal[]>('GET', `/epics/${epicId}/goals`),
   assign: (id: number, assigneeId: number | null) => request<Task>('PUT', `/tasks/${id}/assignee`, { assigneeId }),
   moveToSprint: (id: number, sprintId: number | null) => request<Task>('PUT', `/tasks/${id}/sprint`, { sprintId }),
   acceptTask: (id: number) => request<Task>('POST', `/tasks/${id}/accept`),
@@ -382,7 +502,8 @@ export const api = {
   deleteTask: (id: number) => request<void>('DELETE', `/tasks/${id}`),
 
   comments: (id: number) => request<Comment[]>('GET', `/tasks/${id}/comments`),
-  addComment: (id: number, body: string) => request<Comment>('POST', `/tasks/${id}/comments`, { body }),
+  addComment: (id: number, body: string, anchor?: string | null, internal = false) =>
+    request<Comment>('POST', `/tasks/${id}/comments`, { body, anchor: anchor ?? null, internal }),
   replyToComment: (id: number, parentId: number, body: string) =>
     request<Comment>('POST', `/tasks/${id}/comments`, { body, parentId }),
   react: (id: number, commentId: number, emoji: string) =>
@@ -432,7 +553,116 @@ export const api = {
   attachmentBlob: async (attachmentId: number) => (await send('GET', `/attachments/${attachmentId}/content`)).blob(),
   deleteAttachment: (attachmentId: number) => request<void>('DELETE', `/attachments/${attachmentId}`),
 
-  notifications: () => request<{ unread: number; items: Notification[] }>('GET', '/notifications'),
+  notifications: (view?: 'inbox' | 'snoozed' | 'done') =>
+    request<{ unread: number; items: Notification[] }>('GET', `/notifications${view && view !== 'inbox' ? `?view=${view}` : ''}`),
+  triage: (ids: number[], action: 'done' | 'undone' | 'snooze' | 'read', until?: string) =>
+    request<void>('POST', '/notifications/triage', { ids, action, until }),
+  doneRead: () => request<{ done: number }>('POST', '/notifications/done-read'),
+  notificationSettings: () => request<NotificationSettings>('GET', '/notifications/settings'),
+  saveNotificationDefaults: (rule: { level: NotificationLevel; email: boolean | null; push: boolean | null }) =>
+    request<NotificationSettings>('PUT', '/notifications/settings/defaults', rule),
+  projectNotificationRule: (key: string) => request<NotificationRule>('GET', `/notifications/settings/projects/${key}`),
+  saveProjectNotificationRule: (key: string, rule: { level: NotificationLevel; email: boolean | null; push: boolean | null }) =>
+    request<NotificationSettings>('PUT', `/notifications/settings/projects/${key}`, rule),
+  deleteProjectNotificationRule: (key: string) =>
+    request<NotificationSettings>('DELETE', `/notifications/settings/projects/${key}`),
+  saveQuietHours: (quiet: { timeZone: string | null; from: string | null; to: string | null }) =>
+    request<NotificationSettings>('PUT', '/notifications/settings/quiet-hours', quiet),
+  reminders: () => request<Reminder[]>('GET', '/reminders'),
+  taskReminders: (taskId: number) => request<Reminder[]>('GET', `/tasks/${taskId}/reminders`),
+  createReminder: (input: { taskId: number | null; remindAt: string; note: string }) =>
+    request<Reminder>('POST', '/reminders', input),
+  deleteReminder: (id: number) => request<void>('DELETE', `/reminders/${id}`),
+  forecast: (key: string, scope: { release?: number; epic?: number; sprint?: number; items?: number; by?: string } = {}) =>
+    request<ForecastResult>('GET', `/projects/${key}/forecast${query(scope)}`),
+  burnup: (releaseId: number) => request<Burnup>('GET', `/releases/${releaseId}/burnup`),
+  agingWip: (key: string) => request<AgingWip>('GET', `/projects/${key}/aging-wip`),
+  bugTrends: (key: string, weeks = 12) => request<BugTrends>('GET', `/projects/${key}/bug-trends?weeks=${weeks}`),
+  slaTargets: (key: string) => request<SlaTarget[]>('GET', `/projects/${key}/sla`),
+  saveSlaTargets: (key: string, targets: SlaTarget[]) => request<SlaTarget[]>('PUT', `/projects/${key}/sla`, { targets }),
+  taskSla: (taskId: number) => request<TaskSla | undefined>('GET', `/tasks/${taskId}/sla`),
+  slaReport: (key: string, days = 30) => request<SlaReport>('GET', `/projects/${key}/sla-report?days=${days}`),
+  searchTrend: (q: string, weeks = 12) => request<TrendWeek[]>('GET', `/search/trend${query({ q, weeks })}`),
+  reportSubscriptions: () => request<ReportSubscription[]>('GET', '/report-subscriptions'),
+  createReportSubscription: (input: { kind: ReportKind; target: string; title?: string; frequency: 'DAILY' | 'WEEKLY'; weekday: number; hour: number }) =>
+    request<ReportSubscription>('POST', '/report-subscriptions', input),
+  updateReportSubscription: (id: number, input: { kind: ReportKind; target: string; title?: string; frequency: 'DAILY' | 'WEEKLY'; weekday: number; hour: number }) =>
+    request<ReportSubscription>('PUT', `/report-subscriptions/${id}`, input),
+  deleteReportSubscription: (id: number) => request<void>('DELETE', `/report-subscriptions/${id}`),
+  previewReport: (id: number) => request<{ subject: string; body: string; sent: boolean; mailEnabled: boolean }>('GET', `/report-subscriptions/${id}/preview`),
+  sendReport: (id: number) => request<{ subject: string; body: string; sent: boolean; mailEnabled: boolean }>('POST', `/report-subscriptions/${id}/send`),
+  healthChecks: (key: string) => request<HealthCheckSummary[]>('GET', `/projects/${key}/health-checks`),
+  createHealthCheck: (key: string, title: string, categories?: string[]) =>
+    request<HealthCheckDetail>('POST', `/projects/${key}/health-checks`, { title, categories }),
+  healthCheck: (id: number) => request<HealthCheckDetail>('GET', `/health-checks/${id}`),
+  voteHealthCheck: (id: number, votes: { category: string; score: number; trend: number }[]) =>
+    request<HealthCheckDetail>('PUT', `/health-checks/${id}/votes`, { votes }),
+  toggleHealthCheck: (id: number) => request<HealthCheckDetail>('POST', `/health-checks/${id}/close`),
+  deleteHealthCheck: (id: number) => request<void>('DELETE', `/health-checks/${id}`),
+  serviceDesk: (key: string) => request<ServiceDeskSettings>('GET', `/projects/${key}/service-desk`),
+  saveServiceDesk: (key: string, input: { portalEnabled: boolean; intro: string; roadmapPublic: boolean; changelogPublic: boolean }) =>
+    request<ServiceDeskSettings>('PUT', `/projects/${key}/service-desk`, input),
+  createRequestType: (key: string, input: Omit<RequestTypeDef, 'id'>) => request<RequestTypeDef>('POST', `/projects/${key}/request-types`, input),
+  updateRequestType: (id: number, input: Omit<RequestTypeDef, 'id'>) => request<RequestTypeDef>('PUT', `/request-types/${id}`, input),
+  deleteRequestType: (id: number) => request<void>('DELETE', `/request-types/${id}`),
+  reorderRequestTypes: (key: string, ids: number[]) => request<RequestTypeDef[]>('PUT', `/projects/${key}/request-types/order`, ids),
+  portalConversation: (taskId: number) => request<PortalConversation | undefined>('GET', `/tasks/${taskId}/portal`),
+  replyToRequester: (taskId: number, body: string) => request<PortalConversation>('POST', `/tasks/${taskId}/portal/messages`, { body }),
+  preferences: () => request<Record<string, unknown>>('GET', '/preferences'),
+  setPreference: (key: string, value: unknown) => request<unknown>('PUT', `/preferences/${encodeURIComponent(key)}`, value),
+  deletePreference: (key: string) => request<void>('DELETE', `/preferences/${encodeURIComponent(key)}`),
+  setProjectIcon: (key: string, icon: string) => request<Project>('PUT', `/projects/${key}/icon`, { icon }),
+  setEpicIcon: (id: number, icon: string) => request<Epic>('PUT', `/epics/${id}/icon`, { icon }),
+  gallery: (key: string) => request<GalleryImage[]>('GET', `/projects/${key}/gallery`),
+  aiStatus: () => request<AiStatus>('GET', '/ai/status'),
+  aiDraftTask: (key: string, prompt: string) => request<AiTaskDraft>('POST', `/projects/${key}/ai/draft-task`, { prompt }),
+  aiSummary: (taskId: number, since?: string) => request<AiThreadSummary>('POST', `/tasks/${taskId}/ai/summary`, { since: since ?? null }),
+  aiSplitEpic: (epicId: number, guidance: string) =>
+    request<{ tasks: AiProposedTask[] }>('POST', `/epics/${epicId}/ai/split`, { guidance }),
+  aiSprintReview: (sprintId: number) => request<AiNotes>('POST', `/sprints/${sprintId}/ai/review`),
+  aiReleaseNotes: (releaseId: number) => request<AiNotes>('POST', `/releases/${releaseId}/ai/notes`),
+  aiFql: (question: string, projectKey?: string) => request<AiFql>('POST', '/ai/fql', { question, projectKey: projectKey ?? null }),
+  aiEstimate: (taskId: number) => request<AiEstimate>('POST', `/tasks/${taskId}/ai/estimate`),
+  aiTriage: (taskId: number) => request<AiTriage>('POST', `/tasks/${taskId}/ai/triage`),
+  similarTasks: (key: string, q: string, exclude?: number) =>
+    request<SimilarTask[]>('GET', `/projects/${key}/similar${query({ q, exclude })}`),
+  taskGithub: (taskId: number) => request<TaskGithub>('GET', `/tasks/${taskId}/github`),
+  projectBuilds: (key: string) => request<Record<string, BuildInfo>>('GET', `/projects/${key}/builds`),
+  createBranch: (taskId: number, base?: string) => request<{ branch: string; url: string }>('POST', `/tasks/${taskId}/github/branch`, { base }),
+  createPullRequest: (taskId: number, draft: boolean) =>
+    request<{ number: number; url: string }>('POST', `/tasks/${taskId}/github/pull-request`, { draft }),
+  githubRepo: (key: string) => request<GithubRepoSettings | undefined>('GET', `/projects/${key}/github/repo`),
+  saveGithubRepo: (key: string, input: { repo: string; token?: string; issueSync: boolean }) =>
+    request<GithubRepoSettings>('PUT', `/projects/${key}/github/repo`, input),
+  removeGithubRepo: (key: string) => request<void>('DELETE', `/projects/${key}/github/repo`),
+  importGithubIssues: (key: string, state: 'open' | 'all') =>
+    request<{ imported: number; alreadyLinked: number; pullRequestsSkipped: number }>('POST', `/projects/${key}/github/import`, { state }),
+  chatCommands: (key: string) => request<ChatCommandSettings>('GET', `/projects/${key}/chat-commands`),
+  saveChatCommands: (key: string, input: Partial<Record<'slackSigningSecret' | 'slackBotToken' | 'mattermostToken' | 'discordPublicKey', string>>) =>
+    request<ChatCommandSettings>('PUT', `/projects/${key}/chat-commands`, input),
+  calendarStatus: () => request<CalendarStatus>('GET', '/integrations/google-calendar'),
+  connectCalendar: () => request<{ url: string }>('POST', '/integrations/google-calendar/connect'),
+  syncCalendar: () => request<{ pulled: number; created: number; updated: number; removed: number }>('POST', '/integrations/google-calendar/sync'),
+  disconnectCalendar: () => request<void>('DELETE', '/integrations/google-calendar'),
+  linkPreview: (url: string) => request<LinkPreviewData>('GET', `/link-preview?url=${encodeURIComponent(url)}`),
+  timer: () => request<RunningTimer | undefined>('GET', '/timer'),
+  startTimer: (taskId: number) =>
+    request<{ logged: TimeEntry | null; running: RunningTimer | null }>('POST', '/timer/start', { taskId }),
+  stopTimer: (minutes?: number, note?: string) =>
+    request<{ logged: TimeEntry | null; running: null }>('POST', '/timer/stop', { minutes, note }),
+  discardTimer: () => request<void>('DELETE', '/timer'),
+  today: (date?: string) => request<TodayList>('GET', `/today${date ? `?date=${date}` : ''}`),
+  pickToday: (taskId: number, date?: string) => request<TodayList>('POST', '/today', { taskId, date }),
+  unpickToday: (taskId: number, date?: string) => request<TodayList>('DELETE', `/today/${taskId}${date ? `?date=${date}` : ''}`),
+  reorderToday: (taskIds: number[], date?: string) => request<TodayList>('PUT', '/today/order', { taskIds, date }),
+  carryOver: (date?: string) => request<TodayList>('POST', `/today/carry-over${date ? `?date=${date}` : ''}`),
+  daySummary: (date?: string) => request<DaySummary>('GET', `/today/summary${date ? `?date=${date}` : ''}`),
+  personalNotes: (taskId: number) => request<PersonalNotes>('GET', `/tasks/${taskId}/personal`),
+  savePersonalNote: (taskId: number, body: string) => request<PersonalNotes>('PUT', `/tasks/${taskId}/personal/note`, { body }),
+  addPrivateItem: (taskId: number, text: string) => request<PersonalNotes>('POST', `/tasks/${taskId}/personal/items`, { text }),
+  updatePrivateItem: (id: number, change: { text?: string; done?: boolean }) =>
+    request<PersonalNotes>('PATCH', `/personal-items/${id}`, change),
+  deletePrivateItem: (id: number) => request<PersonalNotes>('DELETE', `/personal-items/${id}`),
   unreadCount: () => request<number>('GET', '/notifications/unread-count'),
   markRead: (id: number) => request<void>('POST', `/notifications/${id}/read`),
   markAllRead: () => request<void>('POST', '/notifications/read-all'),
@@ -453,8 +683,8 @@ export const api = {
   pushTest: () => request<{ delivered: number }>('POST', '/push/test'),
 
   invites: () => request<Invite[]>('GET', '/invites'),
-  createInvite: (email: string | null, projectKey: string | null) =>
-    request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null }),
+  createInvite: (email: string | null, projectKey: string | null, role?: Role) =>
+    request<Invite>('POST', '/invites', { email: email || null, projectKey: projectKey || null, role: role ?? null }),
   revokeInvite: (id: number) => request<void>('DELETE', `/invites/${id}`),
 
   admin: () => request<AdminOverview>('GET', '/admin'),
@@ -473,6 +703,34 @@ export const api = {
   setPasswordPolicy: (rules: PasswordRules) => request<PasswordRules>('PUT', '/admin/password-policy', rules),
   backups: () => request<Backup[]>('GET', '/admin/backups'),
   backupNow: () => request<Backup>('POST', '/admin/backups'),
+  restoreBackup: (name: string, password: string) =>
+    request<{ safetyBackup: string; message: string }>('POST', `/admin/backups/${encodeURIComponent(name)}/restore`, { password }),
+  restoreStatus: () => request<RestoreStatus>('GET', '/admin/restore'),
+  securityOverview: () => request<SecurityOverview>('GET', '/admin/security'),
+  saveSecurityPolicy: (policy: SecurityPolicy) => request<SecurityPolicy>('PUT', '/admin/security', policy),
+  newScimToken: () => request<{ token: string }>('POST', '/admin/security/scim-token'),
+  revokeScimToken: () => request<void>('DELETE', '/admin/security/scim-token'),
+  suspendUser: (id: number) => request<void>('POST', `/admin/users/${id}/suspend`),
+  reactivateUser: (id: number) => request<void>('POST', `/admin/users/${id}/reactivate`),
+  retention: () => request<{ policy: RetentionPolicy; preview: RetentionCounts }>('GET', '/admin/retention'),
+  saveRetention: (policy: RetentionPolicy) =>
+    request<{ policy: RetentionPolicy; preview: RetentionCounts }>('PUT', '/admin/retention', policy),
+  runRetention: () => request<RetentionCounts>('POST', '/admin/retention/run'),
+  encryptionStatus: () => request<EncryptionStatus>('GET', '/admin/encryption'),
+  encryptAll: () => request<{ changed: number; status: EncryptionStatus }>('POST', '/admin/encryption/encrypt-all'),
+  health: () => request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('GET', '/admin/health'),
+  checkHealth: () => request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('POST', '/admin/health/check'),
+  saveHealth: (thresholds: HealthThresholds) =>
+    request<{ checks: HealthCheck[]; thresholds: HealthThresholds }>('PUT', '/admin/health', thresholds),
+  projectRoles: (key: string) => request<RolesCatalog>('GET', `/projects/${key}/roles`),
+  myPermissions: (key: string) => request<Permission[]>('GET', `/projects/${key}/my-permissions`),
+  createRole: (key: string, role: { name: string; description: string; permissions: Permission[] }) =>
+    request<CustomRole>('POST', `/projects/${key}/roles`, role),
+  updateRole: (key: string, id: number, role: { name: string; description: string; permissions: Permission[] }) =>
+    request<CustomRole>('PUT', `/projects/${key}/roles/${id}`, role),
+  deleteRole: (key: string, id: number) => request<void>('DELETE', `/projects/${key}/roles/${id}`),
+  assignRole: (key: string, userId: number, roleId: number | null) =>
+    request<void>('PUT', `/projects/${key}/members/${userId}/custom-role`, { roleId }),
   backupBlob: async (name: string) => (await send('GET', `/admin/backups/${encodeURIComponent(name)}`)).blob(),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('PUT', '/profile/password', { currentPassword, newPassword }),
@@ -524,7 +782,7 @@ export type ChatEvent = 'TASK_CREATED' | 'TASK_DONE' | 'STATUS_CHANGED' | 'COMME
 
 export interface ChatHook {
   id: number;
-  kind: 'SLACK' | 'DISCORD';
+  kind: 'SLACK' | 'DISCORD' | 'TEAMS' | 'MATTERMOST';
   url: string;
   events: ChatEvent[];
   lastDeliveryAt: string | null;
@@ -588,8 +846,8 @@ export function saveBlob(blob: Blob, filename: string) {
 }
 
 export interface LiveMessage {
-  type: 'task' | 'project' | 'notification' | 'ready';
-  data: { projectId?: number; taskId?: number; deleted?: boolean };
+  type: 'task' | 'project' | 'notification' | 'ready' | 'presence' | 'collab' | 'timer' | 'today' | 'reminders';
+  data: { projectId?: number; taskId?: number; deleted?: boolean; clientId?: string; update?: string };
 }
 
 /**

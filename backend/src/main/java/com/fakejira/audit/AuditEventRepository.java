@@ -25,4 +25,7 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
     @Modifying
     @Query("delete from AuditEvent e where e.createdAt < :before")
     int deleteOlderThan(Instant before);
+
+    @org.springframework.data.jpa.repository.Query("select count(e) from AuditEvent e where e.createdAt < :before")
+    long countOlderThan(@org.springframework.data.repository.query.Param("before") Instant before);
 }

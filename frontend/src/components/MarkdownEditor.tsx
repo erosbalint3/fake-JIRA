@@ -4,6 +4,7 @@ import { api } from '../api';
 import { Avatar } from './Avatar';
 import { Markdown } from './Markdown';
 import type { Team, User } from '../types';
+import { t } from '../i18n';
 
 let teamsCache: Promise<Team[]> | null = null;
 
@@ -20,11 +21,13 @@ interface Props {
   invalid?: boolean;
   /** Enables pasting/dropping images: uploads one and resolves to the Markdown that shows it. */
   onUploadImage?: (file: File) => Promise<string>;
+  /** Receives the textarea (e.g. for live co-editing, which keeps the caret in place). */
+  inputRef?: { current: HTMLTextAreaElement | null };
 }
 
 /** Textarea with a Write / Preview toggle, @mention autocomplete and (optionally) image paste. */
 export function MarkdownEditor({
-  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage,
+  value, onChange, placeholder, rows = 5, maxLength, members = [], onSubmitShortcut, label, invalid, onUploadImage, inputRef,
 }: Props) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [caret, setCaret] = useState(0);
@@ -118,17 +121,20 @@ export function MarkdownEditor({
     <div className="md-editor">
       <div className="md-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'write'} className={tab === 'write' ? 'active' : ''}
-          onClick={() => setTab('write')}>Write</button>
+          onClick={() => setTab('write')}>{t('Write')}</button>
         <button type="button" role="tab" aria-selected={tab === 'preview'} className={tab === 'preview' ? 'active' : ''}
-          onClick={() => setTab('preview')}>Preview</button>
+          onClick={() => setTab('preview')}>{t('Preview')}</button>
         <span className="md-hint">
-          {uploading > 0 ? 'Uploading image…' : onUploadImage ? 'Markdown · paste or drop images' : 'Markdown supported'}
+          {uploading > 0 ? t('Uploading image…') : onUploadImage ? t('Markdown · paste or drop images') : t('Markdown supported')}
         </span>
       </div>
       {tab === 'write' ? (
         <div className="md-write">
           <textarea
-            ref={ref}
+            ref={(el) => {
+              ref.current = el;
+              if (inputRef) inputRef.current = el;
+            }}
             rows={rows}
             value={value}
             maxLength={maxLength}
@@ -175,7 +181,7 @@ export function MarkdownEditor({
         </div>
       ) : (
         <div className="md-preview">
-          {value.trim() ? <Markdown>{value}</Markdown> : <p className="muted">Nothing to preview.</p>}
+          {value.trim() ? <Markdown>{value}</Markdown> : <p className="muted">{t('Nothing to preview.')}</p>}
         </div>
       )}
     </div>

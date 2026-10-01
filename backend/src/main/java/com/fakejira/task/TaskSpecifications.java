@@ -34,10 +34,23 @@ final class TaskSpecifications {
                     where.add(cb.isNull(root.get("assignee")));
                     where.add(cb.notEqual(root.get("status"), TaskStatus.DONE));
                 }
-                case MINE -> where.add(cb.equal(root.get("assignee").get("id"), user.getId()));
+                case MINE -> {
+                    // Tasks you help with count as yours too.
+                    var sub = query.subquery(Long.class);
+                    var t = sub.from(Task.class);
+                    var helper = t.join("helpers");
+                    sub.select(t.get("id")).where(cb.equal(t.get("id"), root.get("id")), cb.equal(helper.get("id"), user.getId()));
+                    where.add(cb.or(cb.equal(root.join("assignee", JoinType.LEFT).get("id"), user.getId()), cb.exists(sub)));
+                }
                 case REPORTED -> where.add(cb.equal(root.get("reporter").get("id"), user.getId()));
                 case ALL -> {
                 }
+            }
+            String archived = filter.archived() == null ? "" : filter.archived().toLowerCase(Locale.ROOT);
+            if (archived.equals("only")) {
+                where.add(cb.isNotNull(root.get("archivedAt")));
+            } else if (!archived.equals("include")) {
+                where.add(cb.isNull(root.get("archivedAt")));
             }
             if (filter.priority() != null) {
                 where.add(cb.equal(root.get("priority"), filter.priority()));

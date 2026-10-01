@@ -49,7 +49,33 @@ public class Invite {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** Role in {@link #project} for whoever uses the invite: MEMBER (default), VIEWER or GUEST. */
+    @Column(length = 10)
+    private String role;
+
     protected Invite() {
+    }
+
+    public String getRole() {
+        return role == null ? "MEMBER" : role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    /** Adds {@code user} to the invite's project with the invite's role. */
+    public void joinProject(User user) {
+        if (project == null || project.hasMember(user)) {
+            return;
+        }
+        project.getMembers().add(user);
+        if ("VIEWER".equals(role) || "GUEST".equals(role)) {
+            project.getViewers().add(user);
+        }
+        if ("GUEST".equals(role)) {
+            project.getGuests().add(user);
+        }
     }
 
     public Invite(String code, String email, Project project, User createdBy, Instant expiresAt) {

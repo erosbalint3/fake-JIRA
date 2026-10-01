@@ -12,9 +12,51 @@ import org.springframework.stereotype.Component;
 public class ProjectAccess {
 
     private final ProjectRepository projects;
+    private final RoleAssignmentRepository assignments;
 
-    public ProjectAccess(ProjectRepository projects) {
+    public ProjectAccess(ProjectRepository projects, RoleAssignmentRepository assignments) {
         this.projects = projects;
+        this.assignments = assignments;
+    }
+
+    /**
+     * What the user may do in the project: everything for the owner and for members without a custom role,
+     * the role's permissions for members with one, nothing for viewers (guests may comment).
+     */
+    public java.util.Set<Permission> permissions(Project project, User user) {
+        if (!project.hasMember(user)) {
+            return java.util.EnumSet.noneOf(Permission.class);
+        }
+        if (project.isOwner(user)) {
+            return java.util.EnumSet.allOf(Permission.class);
+        }
+        if (project.isGuest(user)) {
+            return java.util.EnumSet.of(Permission.COMMENT);
+        }
+        if (project.isViewer(user)) {
+            return java.util.EnumSet.noneOf(Permission.class);
+        }
+        return assignments.findByProjectIdAndUserId(project.getId(), user.getId())
+                .map(a -> a.getRole().getPermissions())
+                .orElseGet(() -> java.util.EnumSet.allOf(Permission.class));
+    }
+
+    public boolean allows(Project project, User user, Permission permission) {
+        return permissions(project, user).contains(permission);
+    }
+
+    /** Like {@link #requireEditor}, and the member's custom role (if any) must include {@code permission}. */
+    public void require(Project project, User user, Permission permission) {
+        requireEditor(project, user);
+        if (!allows(project, user, permission)) {
+            throw ApiException.forbidden("Your role in " + project.getKey() + " does not allow this ("
+                    + permission.label().toLowerCase(java.util.Locale.ROOT) + ").");
+        }
+    }
+
+    /** Internal comments are for the team: not guests or viewers, and not roles without the permission. */
+    public boolean canSeeInternal(Project project, User user) {
+        return project.hasMember(user) && !project.isViewer(user) && allows(project, user, Permission.VIEW_INTERNAL);
     }
 
     public Project memberProject(String key, User user) {

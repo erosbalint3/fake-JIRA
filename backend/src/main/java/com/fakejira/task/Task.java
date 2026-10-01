@@ -119,6 +119,33 @@ public class Task {
     @Column(name = "task_type", nullable = false, length = 10, columnDefinition = "varchar(10) default 'TASK'")
     private TaskType type = TaskType.TASK;
 
+    /** Why the task was closed; only set while it is Done. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Resolution resolution;
+
+    /** Planned start, for the timeline and scheduling. */
+    private LocalDate startDate;
+
+    /** Original estimate in minutes (time tracking compares logged time with it). */
+    private Integer estimateMinutes;
+
+    /** Archived tasks are hidden from boards, lists and search unless asked for. */
+    private Instant archivedAt;
+
+    /** People helping the assignee (pairing); they get the same notifications. */
+    @ManyToMany
+    @JoinTable(name = "task_helpers",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<User> helpers = new LinkedHashSet<>();
+
+    @ManyToMany
+    @JoinTable(name = "task_components",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "component_id"))
+    private Set<com.fakejira.component.ProjectComponent> components = new LinkedHashSet<>();
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -166,6 +193,10 @@ public class Task {
             completedAt = Instant.now();
         } else if (status != TaskStatus.DONE) {
             completedAt = null;
+            resolution = null;
+        }
+        if (status == TaskStatus.DONE && resolution == null) {
+            resolution = Resolution.DONE;
         }
         this.status = status;
     }
@@ -308,5 +339,54 @@ public class Task {
 
     public void setType(TaskType type) {
         this.type = type == null ? TaskType.TASK : type;
+    }
+
+    public Resolution getResolution() {
+        return resolution;
+    }
+
+    /** Only meaningful while Done; ignored otherwise. */
+    public void setResolution(Resolution resolution) {
+        this.resolution = status == TaskStatus.DONE ? (resolution == null ? Resolution.DONE : resolution) : null;
+    }
+
+    public LocalDate getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
+
+    public Integer getEstimateMinutes() {
+        return estimateMinutes;
+    }
+
+    public void setEstimateMinutes(Integer estimateMinutes) {
+        this.estimateMinutes = estimateMinutes;
+    }
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    public void setArchivedAt(Instant archivedAt) {
+        this.archivedAt = archivedAt;
+    }
+
+    public Set<User> getHelpers() {
+        return helpers;
+    }
+
+    public boolean isHelper(User user) {
+        return helpers.stream().anyMatch(h -> h.getId().equals(user.getId()));
+    }
+
+    public Set<com.fakejira.component.ProjectComponent> getComponents() {
+        return components;
     }
 }

@@ -42,6 +42,22 @@ public class Comment {
     @JoinColumn(name = "parent_id")
     private Comment parent;
 
+    /** For inline comments: the passage of the description the comment is about. */
+    @Column(length = 300)
+    private String anchor;
+
+    /** Only for the team: hidden from guests, viewers and roles without "See internal comments". */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean internal;
+
+    public boolean isInternal() {
+        return internal;
+    }
+
+    public void setInternal(boolean internal) {
+        this.internal = internal;
+    }
+
     protected Comment() {
     }
 
@@ -53,6 +69,14 @@ public class Comment {
 
     public Long getId() {
         return id;
+    }
+
+    public String getAnchor() {
+        return anchor;
+    }
+
+    public void setAnchor(String anchor) {
+        this.anchor = anchor;
     }
 
     public Task getTask() {

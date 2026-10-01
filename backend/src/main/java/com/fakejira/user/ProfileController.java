@@ -79,7 +79,7 @@ public class ProfileController {
     public record SettingsRequest(EmailFrequency emailFrequency,
                                   @jakarta.validation.constraints.Size(max = 60, message = "Display name must be at most 60 characters")
                                   String displayName,
-                                  @jakarta.validation.constraints.Pattern(regexp = "^(en|hu)$", message = "Unsupported language")
+                                  @jakarta.validation.constraints.Pattern(regexp = "^(en|hu|de|es)$", message = "Unsupported language")
                                   String language) {
     }
 

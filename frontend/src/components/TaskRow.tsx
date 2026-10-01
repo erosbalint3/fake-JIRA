@@ -1,3 +1,5 @@
+import { useTaskMenu } from './ContextMenu';
+import { isReadOnlyRole } from '../types';
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
@@ -27,10 +29,13 @@ interface Props {
   selected?: boolean;
   onToggleSelect?: (shiftKey: boolean) => void;
   inline?: InlineEdit;
+  /** Whether the right-click menu offers changes (defaults to whether the row is editable inline). */
+  menuCanEdit?: boolean;
 }
 
 /** One line in a task list: priority, key, title, metadata and optional trailing actions. */
-export function TaskRow({ task, actions, showProject = false, rowProps, className = '', selected, onToggleSelect, inline }: Props) {
+export function TaskRow({ task, actions, showProject = false, rowProps, className = '', selected, onToggleSelect, inline, menuCanEdit }: Props) {
+  const openTaskMenu = useTaskMenu();
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(task.title);
 
@@ -41,9 +46,10 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
   };
 
   return (
-    <li className={`task-row ${selected ? 'selected' : ''} ${className}`} {...rowProps}>
+    <li className={`task-row ${selected ? 'selected' : ''} ${className}`} data-task-id={task.id}
+      onContextMenu={(e) => openTaskMenu(e, task, menuCanEdit ?? !!inline)} {...rowProps}>
       {onToggleSelect && (
-        <input type="checkbox" className="row-check" checked={!!selected} aria-label={`Select ${task.key}`}
+        <input type="checkbox" className="row-check" checked={!!selected} aria-label={t('Select {key}', { key: task.key })}
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelect(e.shiftKey);
@@ -54,7 +60,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
         <div className="task-row-main editing">
           <TypeIcon type={task.type} />
           <span className="task-key">{task.key}</span>
-          <input className="inline-title" value={title} maxLength={120} autoFocus aria-label={`Title of ${task.key}`}
+          <input className="inline-title" value={title} maxLength={120} autoFocus aria-label={t('Title of {key}', { key: task.key })}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => finishRename(true)}
             onKeyDown={(e) => {
@@ -77,7 +83,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
       )}
       <div className="task-row-meta">
         {inline && !renaming && (
-          <button className="icon-button sm row-edit" aria-label={`Rename ${task.key}`} title={t("Rename")}
+          <button className="icon-button sm row-edit" aria-label={t('Rename {key}', { key: task.key })} title={t("Rename")}
             onClick={() => {
               setTitle(task.title);
               setRenaming(true);
@@ -90,7 +96,7 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
         {task.dueDate && <DueBadge date={task.dueDate} done={task.status === 'DONE'} />}
         {inline ? (
           <input className="inline-points" type="number" min={0} max={100} placeholder="–" defaultValue={task.storyPoints ?? ''}
-            key={`${task.id}-${task.storyPoints}`} aria-label={`Story points of ${task.key}`} title={t("Story points")}
+            key={`${task.id}-${task.storyPoints}`} aria-label={t('Story points of {key}', { key: task.key })} title={t("Story points")}
             onBlur={(e) => {
               const value = e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value)));
               if (value !== task.storyPoints) inline.onPoints(task, value);
@@ -102,12 +108,12 @@ export function TaskRow({ task, actions, showProject = false, rowProps, classNam
         <StatusBadge status={task.status} />
         {actions}
         {inline ? (
-          <label className="inline-assignee" title={task.assignee ? task.assignee.displayName : 'Unassigned'}>
+          <label className="inline-assignee" title={task.assignee ? task.assignee.displayName : t('Unassigned')}>
             {task.assignee ? <Avatar user={task.assignee} /> : <span className="avatar-empty" />}
-            <select value={task.assignee?.id ?? ''} aria-label={`Assignee of ${task.key}`}
+            <select value={task.assignee?.id ?? ''} aria-label={t('Assignee of {key}', { key: task.key })}
               onChange={(e) => inline.onAssign(task, e.target.value ? Number(e.target.value) : null)}>
               <option value="">{t("Unassigned")}</option>
-              {inline.members.filter((m) => m.role !== 'VIEWER').map((m) => (
+              {inline.members.filter((m) => !isReadOnlyRole(m.role)).map((m) => (
                 <option key={m.id} value={m.id}>{m.displayName}</option>
               ))}
             </select>

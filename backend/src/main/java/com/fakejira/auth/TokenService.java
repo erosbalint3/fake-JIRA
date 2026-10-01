@@ -30,7 +30,11 @@ public class TokenService {
     private final JwtProperties properties;
     private final NimbusJwtDecoder decoder;
 
-    public TokenService(JwtEncoder encoder, JwtProperties properties, SecretKey jwtSecretKey) {
+    private final com.fakejira.admin.SecurityPolicy policy;
+
+    public TokenService(JwtEncoder encoder, JwtProperties properties, SecretKey jwtSecretKey,
+                        com.fakejira.admin.SecurityPolicy policy) {
+        this.policy = policy;
         this.encoder = encoder;
         this.properties = properties;
         this.decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
@@ -42,7 +46,7 @@ public class TokenService {
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer("fake-jira")
                 .issuedAt(now)
-                .expiresAt(now.plus(properties.validity()))
+                .expiresAt(now.plus(policy.sessionLength()))
                 .subject(String.valueOf(user.getId()))
                 .claim("username", user.getUsername())
                 .claim(SESSION, sessionId)

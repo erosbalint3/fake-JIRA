@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { t } from './i18n';
 
 type ToastKind = 'success' | 'error';
 
@@ -50,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 toast.action!.onClick();
               }}>{toast.action.label}</button>
             )}
-            <button className="icon-button" onClick={() => dismiss(toast.id)} aria-label="Dismiss">
+            <button className="icon-button" onClick={() => dismiss(toast.id)} aria-label={t('Dismiss')}>
               <X size={16} />
             </button>
           </div>

@@ -5,6 +5,7 @@ import { useToast } from '../../toast';
 import { formatDate, timeAgo } from '../../format';
 import { Modal } from '../Modal';
 import type { ApiTokenInfo } from '../../types';
+import { t } from '../../i18n';
 
 /** Personal access tokens for scripts: "Authorization: Bearer fjt_…". */
 export function ApiTokensPanel() {
@@ -36,26 +37,25 @@ export function ApiTokensPanel() {
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><KeyRound size={17} /> API tokens</h2>
+      <h2 className="panel-title"><KeyRound size={17} /> {t('API tokens')}</h2>
       <p className="muted small hint">
-        For scripts and integrations: send <code>Authorization: Bearer &lt;token&gt;</code> to the same <code>/api</code> endpoints the app uses.
-        Tokens act as you in your projects, but cannot change account, security or admin settings.
+        {t('For scripts and integrations: send {header} to the same /api endpoints the app uses. Tokens act as you in your projects, but cannot change account, security or admin settings.', { header: 'Authorization: Bearer <token>' })}
       </p>
       {tokens.length > 0 && (
         <ul className="token-list">
-          {tokens.map((t) => (
-            <li key={t.id} className={t.expired ? 'expired' : ''}>
+          {tokens.map((tok) => (
+            <li key={tok.id} className={tok.expired ? 'expired' : ''}>
               <div>
-                <strong>{t.name}</strong> <code className="muted">{t.prefix}…</code>
-                <span className={`chip ${t.scope === 'WRITE' ? 'warn' : ''}`}>{t.scope === 'WRITE' ? 'read & write' : 'read only'}</span>
+                <strong>{tok.name}</strong> <code className="muted">{tok.prefix}…</code>
+                <span className={`chip ${tok.scope === 'WRITE' ? 'warn' : ''}`}>{tok.scope === 'WRITE' ? t('read & write') : t('read only')}</span>
                 <div className="muted small">
-                  Created {formatDate(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : 'never used'}
-                  {t.expiresAt && <> · {t.expired ? 'expired' : 'expires'} {formatDate(t.expiresAt)}</>}
+                  {t('Created {date}', { date: formatDate(tok.createdAt) })} · {tok.lastUsedAt ? t('last used {when}', { when: timeAgo(tok.lastUsedAt) }) : t('never used')}
+                  {tok.expiresAt && <> · {t(tok.expired ? 'expired {date}' : 'expires {date}', { date: formatDate(tok.expiresAt) })}</>}
                 </div>
               </div>
-              <button className="icon-button" aria-label={`Revoke ${t.name}`} onClick={async () => {
-                await api.revokeApiToken(t.id);
-                toast(`${t.name} revoked`);
+              <button className="icon-button" aria-label={t('Revoke {name}', { name: tok.name })} onClick={async () => {
+                await api.revokeApiToken(tok.id);
+                toast(t('{name} revoked', { name: tok.name }));
                 load();
               }}><Trash2 size={16} /></button>
             </li>
@@ -66,35 +66,35 @@ export function ApiTokensPanel() {
         {error && <div className="alert">{error}</div>}
         <div className="form-grid three">
           <label className="field">
-            <span>Name</span>
-            <input value={name} maxLength={60} placeholder="Release script" onChange={(e) => setName(e.target.value)} />
+            <span>{t('Name')}</span>
+            <input value={name} maxLength={60} placeholder={t('Release script')} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="field">
-            <span>Access</span>
+            <span>{t('Access')}</span>
             <select value={scope} onChange={(e) => setScope(e.target.value as 'READ' | 'WRITE')}>
-              <option value="READ">Read only</option>
-              <option value="WRITE">Read &amp; write</option>
+              <option value="READ">{t('Read only')}</option>
+              <option value="WRITE">{t('Read & write')}</option>
             </select>
           </label>
           <label className="field">
-            <span>Expires</span>
+            <span>{t('Expires')}</span>
             <select value={days} onChange={(e) => setDays(e.target.value)}>
-              <option value="30">in 30 days</option>
-              <option value="90">in 90 days</option>
-              <option value="365">in a year</option>
-              <option value="">never</option>
+              <option value="30">{t('in {n} days', { n: 30 })}</option>
+              <option value="90">{t('in {n} days', { n: 90 })}</option>
+              <option value="365">{t('in a year')}</option>
+              <option value="">{t('never')}</option>
             </select>
           </label>
         </div>
-        <div><button className="btn btn-soft" disabled={!name.trim()}>Create token</button></div>
+        <div><button className="btn btn-soft" disabled={!name.trim()}>{t('Create token')}</button></div>
       </form>
       {created && (
-        <Modal title="Your new token" onClose={() => setCreated(null)} footer={<button className="btn btn-primary" onClick={() => setCreated(null)}>Done</button>}>
-          <p>Copy it now — it will not be shown again.</p>
+        <Modal title={t('Your new token')} onClose={() => setCreated(null)} footer={<button className="btn btn-primary" onClick={() => setCreated(null)}>{t('Done')}</button>}>
+          <p>{t('Copy it now — it will not be shown again.')}</p>
           <div className="copy-field">
-            <input readOnly className="mono" value={created} aria-label="New API token" onFocus={(e) => e.target.select()} />
-            <button className="icon-button" aria-label="Copy token" onClick={() => navigator.clipboard.writeText(created)
-              .then(() => toast('Token copied')).catch(() => toast('Could not copy', 'error'))}><Copy size={16} /></button>
+            <input readOnly className="mono" value={created} aria-label={t('New API token')} onFocus={(e) => e.target.select()} />
+            <button className="icon-button" aria-label={t('Copy token')} onClick={() => navigator.clipboard.writeText(created)
+              .then(() => toast(t('Token copied'))).catch(() => toast(t('Could not copy'), 'error'))}><Copy size={16} /></button>
           </div>
           <pre className="payload small">curl -H "Authorization: Bearer {created.slice(0, 12)}…" {window.location.origin}/api/tasks?scope=MINE</pre>
         </Modal>

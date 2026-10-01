@@ -38,20 +38,31 @@ public class SecurityConfig {
                         // Async dispatches carry on an already-authorized request (SSE streams).
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/login/2fa", "/api/auth/register",
-                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/oauth/*/url").permitAll()
+                                "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/oauth/*/url",
+                                "/api/auth/oauth/saml/acs").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/invite", "/api/auth/password-policy",
-                                "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/avatars/**",
+                                "/api/auth/providers", "/api/auth/oauth/*/callback", "/api/auth/saml/metadata", "/api/avatars/**",
                                 "/api/push/key").permitAll()
                         // Authenticated by HMAC signature instead of a JWT.
                         .requestMatchers(HttpMethod.POST, "/api/integrations/github/**", "/api/integrations/gitlab/**",
-                                "/api/integrations/gitea/**").permitAll()
+                                "/api/integrations/gitea/**", "/api/integrations/ci/**", "/api/integrations/slack/**",
+                                "/api/integrations/mattermost/**", "/api/integrations/discord/**").permitAll()
+                        // The Google Calendar OAuth callback carries its own signed state.
+                        .requestMatchers(HttpMethod.GET, "/api/integrations/google-calendar/callback").permitAll()
                         // Secret-token URLs: the personal calendar feed and the inbound email webhook.
                         .requestMatchers(HttpMethod.GET, "/api/calendar/feed/*", "/api/public/**", "/api/metrics", "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/inbound/email").permitAll()
+                        // The public service desk portal (and its embeddable widget).
+                        .requestMatchers(HttpMethod.POST, "/api/public/portal/*/requests", "/api/public/requests/*/messages").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                // Pages may only be framed by this site, except the feedback widget, which other sites embed.
+                .headers(headers -> headers.frameOptions(frame -> frame.disable())
+                        .addHeaderWriter(new org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter(
+                                request -> !request.getRequestURI().startsWith("/embed/"),
+                                new org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter(
+                                        org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN))))
                 .build();
     }
 
@@ -59,7 +70,9 @@ public class SecurityConfig {
     @Bean
     org.springframework.security.oauth2.server.resource.web.BearerTokenResolver bearerTokenResolver() {
         var standard = new org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver();
-        return request -> "/api/metrics".equals(request.getRequestURI()) ? null : standard.resolve(request);
+        // The metrics endpoint and SCIM check their own bearer tokens.
+        return request -> "/api/metrics".equals(request.getRequestURI()) || request.getRequestURI().startsWith("/scim/")
+                ? null : standard.resolve(request);
     }
 
     @Bean

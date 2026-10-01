@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
+import { t } from '../i18n';
 
 /** Chip input for labels; Enter or comma adds, Backspace on empty removes the last one. */
 export function LabelInput({ value, onChange, suggestions = [] }: {
@@ -32,7 +33,7 @@ export function LabelInput({ value, onChange, suggestions = [] }: {
         {value.map((label) => (
           <span key={label} className="label-chip">
             {label}
-            <button type="button" onClick={() => onChange(value.filter((l) => l !== label))} aria-label={`Remove ${label}`}>
+            <button type="button" onClick={() => onChange(value.filter((l) => l !== label))} aria-label={t('Remove {name}', { name: label })}>
               <X size={12} />
             </button>
           </span>
@@ -42,8 +43,8 @@ export function LabelInput({ value, onChange, suggestions = [] }: {
           onChange={(e) => setDraft(e.target.value.replace(',', ''))}
           onKeyDown={onKeyDown}
           onBlur={() => draft && add(draft)}
-          placeholder={value.length ? '' : 'Add labels…'}
-          aria-label="Add label"
+          placeholder={value.length ? '' : t('Add labels…')}
+          aria-label={t('Add label')}
         />
       </div>
       {open.length > 0 && (

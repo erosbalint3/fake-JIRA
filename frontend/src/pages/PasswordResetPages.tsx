@@ -44,7 +44,7 @@ export function ForgotPasswordPage() {
         <div className="form center">
           <div className="empty-icon"><MailCheck size={26} /></div>
           <h2>{t("Check your inbox")}</h2>
-          <p className="muted">{t("If an account uses")} <b>{email}</b>, we sent a link to reset its password. It is valid for one hour.</p>
+          <p className="muted">{t("If an account uses")} <b>{email}</b>, {t('we sent a link to reset its password. It is valid for one hour.')}</p>
           <Link to="/login">{t("Back to sign in")}</Link>
         </div>
       ) : (
@@ -80,7 +80,7 @@ export function ResetPasswordPage() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (password !== confirm) {
-      setError('Passwords do not match');
+      setError(t('Passwords do not match'));
       return;
     }
     setBusy(true);

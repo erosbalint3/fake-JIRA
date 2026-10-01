@@ -108,6 +108,9 @@ public class PushService {
     @Async
     @TransactionalEventListener(fallbackExecution = true)
     public void onNotification(NotificationCreated event) {
+        if (!event.pushEnabled()) {
+            return;
+        }
         String url = event.taskId() == null ? "/notifications" : "/tasks/" + event.taskId();
         sendToUser(event.recipientId(), Map.of("title", "FakeJIRA", "body", event.message(), "url", url));
     }

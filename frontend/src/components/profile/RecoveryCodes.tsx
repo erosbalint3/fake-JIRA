@@ -1,6 +1,7 @@
 import { Copy, Download } from 'lucide-react';
 import { saveBlob } from '../../api';
 import { useToast } from '../../toast';
+import { t } from '../../i18n';
 
 /** Shows freshly generated recovery codes once, with copy and download. */
 export function RecoveryCodes({ codes }: { codes: string[] }) {
@@ -8,7 +9,7 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
   const text = `FakeJIRA recovery codes (${window.location.host})\nEach code works once.\n\n${codes.join('\n')}\n`;
   return (
     <div className="recovery">
-      <p className="small"><b>Save these recovery codes.</b> Each one signs you in once if you lose your phone. They won't be shown again.</p>
+      <p className="small"><b>{t('Save these recovery codes.')}</b> {t("Each one signs you in once if you lose your phone. They won't be shown again.")}</p>
       <ol className="recovery-codes mono">
         {codes.map((code) => <li key={code}>{code}</li>)}
       </ol>
@@ -16,14 +17,14 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
         <button type="button" className="btn btn-ghost btn-sm" onClick={async () => {
           try {
             await navigator.clipboard.writeText(text);
-            toast('Recovery codes copied');
+            toast(t('Recovery codes copied'));
           } catch {
-            window.prompt('Copy your recovery codes:', codes.join(' '));
+            window.prompt(t('Copy your recovery codes:'), codes.join(' '));
           }
-        }}><Copy size={14} /> Copy</button>
+        }}><Copy size={14} /> {t('Copy')}</button>
         <button type="button" className="btn btn-ghost btn-sm"
           onClick={() => saveBlob(new Blob([text], { type: 'text/plain' }), 'fakejira-recovery-codes.txt')}>
-          <Download size={14} /> Download
+          <Download size={14} /> {t('Download')}
         </button>
       </div>
     </div>

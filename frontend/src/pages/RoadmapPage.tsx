@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Map as MapIcon, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { AiSplitEpicModal, useAiEnabled } from '../components/Ai';
+import { EmojiPicker } from '../components/EmojiPicker';
 import { api, ApiError, type EpicInput } from '../api';
 import { useLiveRefresh } from '../live';
 import { useToast } from '../toast';
@@ -35,6 +37,8 @@ export function RoadmapPage() {
   const [epics, setEpics] = useState<Epic[] | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Epic | 'new' | null>(null);
+  const aiEnabled = useAiEnabled();
+  const [splitting, setSplitting] = useState<Epic | null>(null);
   const [deleting, setDeleting] = useState<Epic | null>(null);
 
   const load = useCallback(() => {
@@ -126,8 +130,8 @@ export function RoadmapPage() {
       {epics && epics.length === 0 && (
         <EmptyState icon={<MapIcon size={28} />} title={t("No epics yet")}>
           {canEdit
-            ? <>Create an epic, give it start and due dates, then add tasks to it from the task form.</>
-            : 'The project has no epics yet.'}
+            ? t('Create an epic, give it start and due dates, then add tasks to it from the task form.')
+            : t('The project has no epics yet.')}
         </EmptyState>
       )}
       {epics && epics.length > 0 && (
@@ -166,35 +170,42 @@ export function RoadmapPage() {
               <div key={epic.id} className="roadmap-row">
                 <div className="roadmap-name">
                   <div className="roadmap-title">
-                    <span className="epic-dot" style={{ background: color }} aria-hidden />
+                    {epic.icon ? <span className="epic-emoji" aria-hidden>{epic.icon}</span>
+                      : <span className="epic-dot" style={{ background: color }} aria-hidden />}
                     <Link to={`/p/${key}/backlog?epic=${epic.id}`} title={t("Show this epic's tasks")}>{epic.name}</Link>
                     {canEdit && (
                       <span className="roadmap-actions">
-                        <button className="icon-button sm" aria-label={`Edit ${epic.name}`} onClick={() => setEditing(epic)}>
+                        {aiEnabled && (
+                          <button className="icon-button sm" aria-label={t('Split {name} into tasks with Claude', { name: epic.name })}
+                            title={t('Split into tasks with Claude')} onClick={() => setSplitting(epic)}>
+                            <Sparkles size={14} />
+                          </button>
+                        )}
+                        <button className="icon-button sm" aria-label={t('Edit {name}', { name: epic.name })} onClick={() => setEditing(epic)}>
                           <Pencil size={14} />
                         </button>
-                        <button className="icon-button sm" aria-label={`Delete ${epic.name}`} onClick={() => setDeleting(epic)}>
+                        <button className="icon-button sm" aria-label={t('Delete {name}', { name: epic.name })} onClick={() => setDeleting(epic)}>
                           <Trash2 size={14} />
                         </button>
                       </span>
                     )}
                   </div>
                   <div className="progress" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}
-                    aria-label={`${epic.name} progress`}>
+                    aria-label={t('{name} progress', { name: epic.name })}>
                     <span style={{ width: `${percent}%` }} />
                   </div>
                   <span className="muted small">
-                    {epic.doneCount}/{epic.taskCount} tasks{epic.points ? ` · ${epic.donePoints}/${epic.points} pts` : ''}
+                    {t('{done}/{total} tasks', { done: epic.doneCount, total: epic.taskCount })}{epic.points ? ` · ${t('{done}/{total} pts', { done: epic.donePoints, total: epic.points })}` : ''}
                   </span>
                   {epic.dependsOn.length > 0 && (
                     <span className="small depends-on">
-                      After {epic.dependsOn.map((id) => byId.get(id)?.name).filter(Boolean).join(', ')}
+                      {t('After')} {epic.dependsOn.map((id) => byId.get(id)?.name).filter(Boolean).join(', ')}
                       {epic.dependsOn.some((id) => {
                         const dep = byId.get(id);
                         return dep?.dueDate && epic.startDate && dep.dueDate >= epic.startDate;
                       }) && (
                         <span className="overdue-text" title={t("Starts before a dependency is due")}>
-                          {' '}<AlertTriangle size={12} /> overlaps
+                          {' '}<AlertTriangle size={12} /> {t('overlaps')}
                         </span>
                       )}
                     </span>
@@ -213,7 +224,7 @@ export function RoadmapPage() {
                       <span className="roadmap-bar-label">{percent}%</span>
                     </div>
                   ) : (
-                    <span className="roadmap-nodates muted small">No dates{canEdit ? ' — edit the epic to plan it' : ''}</span>
+                    <span className="roadmap-nodates muted small">{t('No dates')}{canEdit ? ` — ${t('edit the epic to plan it')}` : ''}</span>
                   )}
                 </div>
               </div>
@@ -231,13 +242,21 @@ export function RoadmapPage() {
             if (dependsOn.length !== before.length || dependsOn.some((id) => !before.includes(id))) {
               await api.setEpicDependencies(saved.id, dependsOn);
             }
-            toast(editing === 'new' ? `Epic “${input.name}” created` : 'Epic saved');
+            toast(editing === 'new' ? t('Epic “{name}” created', { name: input.name }) : t('Epic saved'));
             setEditing(null);
             load();
           }} />
       )}
+      {splitting && project && (
+        <AiSplitEpicModal epicId={splitting.id} epicName={splitting.name} projectKey={project.key}
+          onClose={() => setSplitting(null)}
+          onCreated={(count) => {
+            toast(t('{count} tasks added to {name}', { count, name: splitting.name }), 'success');
+            load();
+          }} />
+      )}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} confirmLabel={t("Delete epic")} danger
+        <ConfirmDialog title={t('Delete {name}?', { name: deleting.name })} confirmLabel={t("Delete epic")} danger
           message={t("Its tasks stay in the project and simply lose the epic.")}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
@@ -264,15 +283,16 @@ function EpicModal({ epic, others, onClose, onSave }: {
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [icon, setIcon] = useState(epic?.icon ?? '');
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) {
-      setError('Name is required');
+      setError(t('Name is required'));
       return;
     }
     if (form.startDate && form.dueDate && form.dueDate < form.startDate) {
-      setError('The due date must be after the start date');
+      setError(t('The due date must be after the start date'));
       return;
     }
     setBusy(true);
@@ -285,13 +305,26 @@ function EpicModal({ epic, others, onClose, onSave }: {
   };
 
   return (
-    <Modal title={epic ? 'Edit epic' : 'New epic'} onClose={onClose}
+    <Modal title={epic ? t('Edit epic') : t('New epic')} onClose={onClose}
       footer={<>
         <button type="button" className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
-        <button type="submit" form="epic-form" className="btn btn-primary" disabled={busy}>{epic ? 'Save' : 'Create epic'}</button>
+        <button type="submit" form="epic-form" className="btn btn-primary" disabled={busy}>{epic ? t('Save') : t('Create epic')}</button>
       </>}>
       <form id="epic-form" className="form" onSubmit={submit} noValidate>
         {error && <div className="alert">{error}</div>}
+        {epic && (
+          <div className="field">
+            <span>{t("Icon")}</span>
+            <EmojiPicker value={icon} label={t("Epic icon")} onPick={async (next) => {
+              try {
+                await api.setEpicIcon(epic.id, next);
+                setIcon(next);
+              } catch (e) {
+                setError((e as ApiError).message);
+              }
+            }} />
+          </div>
+        )}
         <label className="field">
           <span>{t("Name")}</span>
           <input value={form.name} maxLength={80} autoFocus placeholder={t("e.g. Mobile checkout")}

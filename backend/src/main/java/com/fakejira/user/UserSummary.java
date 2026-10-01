@@ -8,7 +8,7 @@ public record UserSummary(Long id, String username, String email, String display
         if (user == null) {
             return null;
         }
-        return new UserSummary(user.getId(), user.getUsername(), user.getEmail(), user.getName(),
+        return new UserSummary(user.getId(), user.getUsername(), GuestPrivacy.hideEmailOf(user.getId()) ? null : user.getEmail(), user.getName(),
                 user.getAvatarName() == null ? null : "/api/avatars/" + user.getAvatarName(),
                 user.isAwayOn(java.time.LocalDate.now()) ? user.getAwayUntil() : null);
     }

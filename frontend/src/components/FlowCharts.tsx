@@ -2,11 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { formatDay } from '../format';
 import type { CycleTask, FlowDay, Throughput } from '../types';
+import { t } from '../i18n';
 
-const HEIGHT = 260;
-const PAD = { top: 14, right: 16, bottom: 30, left: 40 };
+export const HEIGHT = 260;
+export const PAD = { top: 14, right: 16, bottom: 30, left: 40 };
 
-function useWidth() {
+export function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   useEffect(() => {
@@ -26,7 +27,7 @@ function ticks(max: number) {
   return list;
 }
 
-function Frame({ width, max, children, label, xLabels }: {
+export function Frame({ width, max, children, label, xLabels }: {
   width: number; max: number; children: ReactNode; label: string; xLabels: { x: number; text: string }[];
 }) {
   const plotW = width - PAD.left - PAD.right;
@@ -75,11 +76,11 @@ export function CumulativeFlowChart({ days }: { days: FlowDay[] }) {
 
   return (
     <div className="viz-root">
-      <ul className="viz-legend" aria-label="Legend">
-        {[...BANDS].reverse().map((b) => <li key={b.key}><i className={`swatch ${b.className}`} />{b.label}</li>)}
+      <ul className="viz-legend" aria-label={t('Legend')}>
+        {[...BANDS].reverse().map((b) => <li key={b.key}><i className={`swatch ${b.className}`} />{t(b.label)}</li>)}
       </ul>
       <div className="viz-plot" ref={ref}>
-        <Frame width={width} max={max} label="Cumulative flow diagram"
+        <Frame width={width} max={max} label={t('Cumulative flow diagram')}
           xLabels={days.map((d, i) => ({ x: x(i), text: formatDay(d.date), i })).filter((l) => l.i % every === 0)}>
           {paths.map(({ band, d }) => <path key={band.key} d={d} className={`cfd-band ${band.className}`} />)}
           {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + plotH} className="viz-crosshair" />}
@@ -94,7 +95,7 @@ export function CumulativeFlowChart({ days }: { days: FlowDay[] }) {
         {hovered && hover !== null && (
           <div className="viz-tooltip" style={{ left: Math.min(x(hover) + 12, width - 170), top: PAD.top }}>
             <strong>{formatDay(hovered.date, true)}</strong>
-            {[...BANDS].reverse().map((b) => <span key={b.key}><i className={`swatch ${b.className}`} />{hovered[b.key]} {b.label.toLowerCase()}</span>)}
+            {[...BANDS].reverse().map((b) => <span key={b.key}><i className={`swatch ${b.className}`} />{hovered[b.key]} {t(b.label).toLowerCase()}</span>)}
           </div>
         )}
       </div>
@@ -122,17 +123,17 @@ export function CycleScatter({ tasks, p85, measure }: { tasks: CycleTask[]; p85:
   ] : [];
   return (
     <div className="viz-plot" ref={ref}>
-      <Frame width={width} max={max} label={`${measure === 'cycle' ? 'Cycle' : 'Lead'} time per task in days`} xLabels={labels}>
+      <Frame width={width} max={max} label={measure === 'cycle' ? t('Cycle time per task in days') : t('Lead time per task in days')} xLabels={labels}>
         {p85 !== null && (
           <g>
             <line x1={PAD.left} x2={PAD.left + plotW} y1={y(p85)} y2={y(p85)} className="viz-p85" />
-            <text x={PAD.left + plotW} y={y(p85) - 5} textAnchor="end" className="viz-axis">85% within {p85} d</text>
+            <text x={PAD.left + plotW} y={y(p85) - 5} textAnchor="end" className="viz-axis">{t('85% within {n} d', { n: p85 })}</text>
           </g>
         )}
-        {shown.map((t) => (
-          <Link key={t.id} to={`/tasks/${t.id}`} aria-label={`${t.key}: ${value(t)} days`}>
-            <circle cx={x(t)} cy={y(value(t)!)} r={hover?.id === t.id ? 6 : 4.5} className="viz-dot-cycle"
-              onPointerEnter={() => setHover(t)} onPointerLeave={() => setHover(null)} />
+        {shown.map((task) => (
+          <Link key={task.id} to={`/tasks/${task.id}`} aria-label={t('{key}: {n} days', { key: task.key, n: value(task) ?? 0 })}>
+            <circle cx={x(task)} cy={y(value(task)!)} r={hover?.id === task.id ? 6 : 4.5} className="viz-dot-cycle"
+              onPointerEnter={() => setHover(task)} onPointerLeave={() => setHover(null)} />
           </Link>
         ))}
       </Frame>
@@ -140,7 +141,7 @@ export function CycleScatter({ tasks, p85, measure }: { tasks: CycleTask[]; p85:
         <div className="viz-tooltip" style={{ left: Math.min(x(hover) + 12, width - 190), top: PAD.top }}>
           <strong>{hover.key}</strong>
           <span>{hover.title}</span>
-          <span>{value(hover)} days · finished {formatDay(hover.completedAt.slice(0, 10))}</span>
+          <span>{t('{n} days · finished {date}', { n: value(hover) ?? 0, date: formatDay(hover.completedAt.slice(0, 10)) })}</span>
         </div>
       )}
     </div>
@@ -160,12 +161,12 @@ export function ThroughputChart({ weeks, unit }: { weeks: Throughput[]; unit: 't
   const every = Math.max(1, Math.ceil(weeks.length / Math.max(2, Math.floor(plotW / 70))));
   return (
     <div className="viz-plot" ref={ref}>
-      <Frame width={width} max={max} label={`${unit === 'points' ? 'Points' : 'Tasks'} finished per week`}
+      <Frame width={width} max={max} label={unit === 'points' ? t('Points finished per week') : t('Tasks finished per week')}
         xLabels={weeks.map((w, i) => ({ x: PAD.left + slot * (i + 0.5), text: formatDay(w.weekStart), i })).filter((l) => l.i % every === 0)}>
         {weeks.map((w, i) => (
           <g key={w.weekStart}>
             <rect x={PAD.left + slot * (i + 0.5) - barW / 2} y={y(value(w))} width={barW} height={PAD.top + plotH - y(value(w))}
-              rx={3} className="viz-bar-completed"><title>{`Week of ${w.weekStart}: ${value(w)} ${unit}`}</title></rect>
+              rx={3} className="viz-bar-completed"><title>{t(unit === 'points' ? 'Week of {date}: {n} points' : 'Week of {date}: {n} tasks', { date: w.weekStart, n: value(w) })}</title></rect>
             {value(w) > 0 && <text x={PAD.left + slot * (i + 0.5)} y={y(value(w)) - 5} textAnchor="middle" className="viz-axis">{value(w)}</text>}
           </g>
         ))}

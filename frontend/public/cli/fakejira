@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+"""FakeJIRA command line: work with tasks from your terminal.
+
+Setup:  fakejira login --url https://jira.example.com --token fj_...   (Profile → API tokens)
+        or set FAKEJIRA_URL and FAKEJIRA_TOKEN.
+
+Only needs Python 3.8+; no packages to install.
+"""
+import argparse
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
+import webbrowser
+
+VERSION = "5.0.0"
+CONFIG = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "fakejira", "config.json")
+STATUSES = {"todo": "TODO", "to-do": "TODO", "progress": "IN_PROGRESS", "in_progress": "IN_PROGRESS", "doing": "IN_PROGRESS",
+            "review": "IN_REVIEW", "in_review": "IN_REVIEW", "done": "DONE"}
+STATUS_LABEL = {"TODO": "To do", "IN_PROGRESS": "In progress", "IN_REVIEW": "In review", "DONE": "Done"}
+COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def paint(text, code):
+    return f"\033[{code}m{text}\033[0m" if COLOR else text
+
+
+class Fail(Exception):
+    pass
+
+
+def load_config():
+    config = {}
+    if os.path.exists(CONFIG):
+        with open(CONFIG, encoding="utf-8") as f:
+            config = json.load(f)
+    url = os.environ.get("FAKEJIRA_URL", config.get("url"))
+    token = os.environ.get("FAKEJIRA_TOKEN", config.get("token"))
+    if not url or not token:
+        raise Fail("Not logged in. Run: fakejira login --url https://your-fakejira --token fj_...")
+    return url.rstrip("/"), token
+
+
+def call(method, path, body=None, config=None):
+    url, token = config or load_config()
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(url + "/api" + path, data=data, method=method, headers={
+        "Authorization": "Bearer " + token, "Accept": "application/json", "User-Agent": "fakejira-cli/" + VERSION,
+        **({"Content-Type": "application/json"} if data is not None else {})})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            text = response.read().decode("utf-8")
+            return json.loads(text) if text else None
+    except urllib.error.HTTPError as e:
+        try:
+            message = json.loads(e.read().decode("utf-8")).get("message")
+        except Exception:
+            message = None
+        raise Fail(message or f"HTTP {e.code}")
+    except urllib.error.URLError as e:
+        raise Fail(f"Cannot reach {url}: {e.reason}")
+
+
+def task_by_key(key):
+    return call("GET", "/tasks/key/" + urllib.parse.quote(key.upper()))
+
+
+def task_line(t):
+    status = STATUS_LABEL.get(t["status"], t["status"])
+    who = t["assignee"]["username"] if t.get("assignee") else "-"
+    due = f" due {t['dueDate']}" if t.get("dueDate") else ""
+    return f"{paint(t['key'], '1'):<10} {t['title'][:60]:<60} {paint(status, '36'):<12} {who}{due}"
+
+
+def minutes(text):
+    match = re.fullmatch(r"\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m?)?\s*", text)
+    if not match or not (match.group(1) or match.group(2)):
+        raise Fail("Use a duration like 1h30m, 45m or 2h.")
+    return int(match.group(1) or 0) * 60 + int(match.group(2) or 0)
+
+
+def branch_name(task):
+    slug = unicodedata.normalize("NFKD", task["title"].lower())
+    slug = "".join(c for c in slug if not unicodedata.combining(c))
+    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")[:48].rstrip("-")
+    return f"{task['key']}-{slug}" if slug else task["key"]
+
+
+def cmd_login(args):
+    config = (args.url.rstrip("/"), args.token)
+    me = call("GET", "/auth/me", config=config)
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    with open(CONFIG, "w", encoding="utf-8") as f:
+        json.dump({"url": config[0], "token": config[1]}, f)
+    os.chmod(CONFIG, stat.S_IRUSR | stat.S_IWUSR)
+    print(f"Logged in to {config[0]} as {me['user']['username']}.")
+
+
+def cmd_whoami(args):
+    me = call("GET", "/auth/me")
+    print(me["user"]["username"], "(admin)" if me.get("admin") else "")
+
+
+def cmd_projects(args):
+    for p in call("GET", "/projects"):
+        print(f"{paint(p['key'], '1'):<10} {p['name']}")
+
+
+def cmd_list(args):
+    query = " ".join(args.query) or "assignee = me AND status != done ORDER BY priority DESC"
+    result = call("GET", "/search?limit=" + str(args.limit) + "&q=" + urllib.parse.quote(query))
+    if args.json:
+        return print(json.dumps(result["tasks"], indent=2))
+    for t in result["tasks"]:
+        print(task_line(t))
+    if result.get("truncated"):
+        print(paint(f"… {result['total'] - len(result['tasks'])} more", "2"))
+    if not result["tasks"]:
+        print("No tasks match.")
+
+
+def cmd_show(args):
+    t = task_by_key(args.key)
+    if args.json:
+        return print(json.dumps(t, indent=2))
+    print(paint(f"{t['key']}  {t['title']}", "1"))
+    print(f"{STATUS_LABEL.get(t['status'], t['status'])} · {t['priority'].title()} · {t['type'].title()}"
+          + (f" · assigned to {t['assignee']['username']}" if t.get("assignee") else " · unassigned")
+          + (f" · due {t['dueDate']}" if t.get("dueDate") else ""))
+    if t.get("description"):
+        print()
+        print(t["description"])
+    comments = call("GET", f"/tasks/{t['id']}/comments")
+    if comments:
+        print()
+        for c in comments[-5:]:
+            print(paint(f"{c['author']['username']}:", "33"), c["body"].replace("\n", "\n  "))
+
+
+def cmd_create(args):
+    body = {"projectKey": args.project.upper(), "title": args.title, "description": args.description or "",
+            "priority": args.priority.upper(), "type": args.type.upper(), "labels": args.label or []}
+    if args.assign:
+        body["assigneeId"] = user_id(args.project, args.assign)
+    t = call("POST", "/tasks", body)
+    print(f"Created {paint(t['key'], '1')}: {t['title']}")
+
+
+def user_id(project_key, who):
+    if who == "none":
+        return None
+    if who == "me":
+        return call("GET", "/auth/me")["user"]["id"]
+    for m in call("GET", "/projects/" + project_key.upper())["members"]:
+        if m["username"].lower() == who.lower():
+            return m["id"]
+    raise Fail(f"{who} is not a member of {project_key.upper()}.")
+
+
+def cmd_move(args):
+    status = STATUSES.get(args.status.lower().replace(" ", "_"))
+    if not status:
+        raise Fail("Status must be todo, progress, review or done.")
+    t = task_by_key(args.key)
+    t = call("PATCH", f"/tasks/{t['id']}/status", {"status": status, "resolution": None})
+    print(f"{t['key']} → {STATUS_LABEL[t['status']]}")
+
+
+def cmd_assign(args):
+    t = task_by_key(args.key)
+    t = call("PUT", f"/tasks/{t['id']}/assignee", {"assigneeId": user_id(t["projectKey"], args.who)})
+    print(f"{t['key']} → {t['assignee']['username'] if t.get('assignee') else 'unassigned'}")
+
+
+def cmd_comment(args):
+    t = task_by_key(args.key)
+    call("POST", f"/tasks/{t['id']}/comments", {"body": " ".join(args.text)})
+    print(f"Commented on {t['key']}.")
+
+
+def cmd_log(args):
+    t = task_by_key(args.key)
+    m = minutes(args.duration)
+    call("POST", f"/tasks/{t['id']}/time", {"minutes": m, "note": args.note or ""})
+    print(f"Logged {m // 60}h {m % 60}m on {t['key']}.")
+
+
+def cmd_timer(args):
+    if args.action == "start":
+        if not args.key:
+            raise Fail("Which task? fakejira timer start KEY-12")
+        t = task_by_key(args.key)
+        result = call("POST", "/timer/start", {"taskId": t["id"]})
+        if result.get("logged"):
+            print(f"Logged {result['logged']['minutes']}m on the previous task.")
+        print(f"Timer running on {t['key']}.")
+    elif args.action == "stop":
+        body = {} if args.minutes is None else {"minutes": args.minutes}
+        result = call("POST", "/timer/stop", body)
+        logged = result.get("logged")
+        print(f"Logged {logged['minutes']}m." if logged else "Stopped; nothing logged.")
+    else:
+        timer = call("GET", "/timer")
+        if not timer:
+            return print("No timer running.")
+        s = timer["elapsedSeconds"]
+        print(f"{timer['task']['key']} {timer['task']['title']} — {s // 3600}:{s % 3600 // 60:02}:{s % 60:02}")
+
+
+def cmd_today(args):
+    day = call("GET", "/today")
+    if not day["picks"]:
+        print("Nothing planned for today. Suggestions:")
+        for t in day["suggestions"][:5]:
+            print(" ", task_line(t))
+        return
+    for t in day["picks"]:
+        mark = paint("✓", "32") if t["status"] == "DONE" else "·"
+        print(mark, task_line(t))
+
+
+def cmd_open(args):
+    url, _ = load_config()
+    t = task_by_key(args.key)
+    link = f"{url}/tasks/{t['id']}"
+    print(link)
+    if not args.print:
+        webbrowser.open(link)
+
+
+def cmd_branch(args):
+    name = branch_name(task_by_key(args.key))
+    if args.checkout:
+        subprocess.run(["git", "checkout", "-b", name], check=True)
+    else:
+        print(name)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="fakejira", description="FakeJIRA from the command line.")
+    parser.add_argument("--version", action="version", version=VERSION)
+    sub = parser.add_subparsers(dest="command", metavar="command")
+
+    p = sub.add_parser("login", help="save the server URL and an API token")
+    p.add_argument("--url", required=True)
+    p.add_argument("--token", required=True, help="a personal API token (Profile → API tokens)")
+    p.set_defaults(run=cmd_login)
+    sub.add_parser("whoami", help="who you are logged in as").set_defaults(run=cmd_whoami)
+    sub.add_parser("projects", help="your projects").set_defaults(run=cmd_projects)
+
+    p = sub.add_parser("list", aliases=["ls"], help="tasks matching a query (default: your open tasks)")
+    p.add_argument("query", nargs="*", help='e.g. project = WEB AND status = "in progress"')
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(run=cmd_list)
+
+    p = sub.add_parser("show", help="a task with its latest comments")
+    p.add_argument("key")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(run=cmd_show)
+
+    p = sub.add_parser("create", help="create a task")
+    p.add_argument("project")
+    p.add_argument("title")
+    p.add_argument("-d", "--description")
+    p.add_argument("-p", "--priority", default="medium", choices=["low", "medium", "high", "critical"])
+    p.add_argument("-t", "--type", default="task", choices=["task", "bug", "story", "spike"])
+    p.add_argument("-a", "--assign", help="me, a username or none")
+    p.add_argument("-l", "--label", action="append")
+    p.set_defaults(run=cmd_create)
+
+    p = sub.add_parser("move", help="change the status: todo, progress, review, done")
+    p.add_argument("key")
+    p.add_argument("status")
+    p.set_defaults(run=cmd_move)
+
+    p = sub.add_parser("assign", help="assign to me, a username or none")
+    p.add_argument("key")
+    p.add_argument("who")
+    p.set_defaults(run=cmd_assign)
+
+    p = sub.add_parser("comment", help="add a comment")
+    p.add_argument("key")
+    p.add_argument("text", nargs="+")
+    p.set_defaults(run=cmd_comment)
+
+    p = sub.add_parser("log", help="log time, e.g. log WEB-12 1h30m")
+    p.add_argument("key")
+    p.add_argument("duration")
+    p.add_argument("-n", "--note")
+    p.set_defaults(run=cmd_log)
+
+    p = sub.add_parser("timer", help="start, stop or show the timer")
+    p.add_argument("action", choices=["start", "stop", "status"])
+    p.add_argument("key", nargs="?")
+    p.add_argument("-m", "--minutes", type=int, help="when stopping: minutes to log instead of the measured time")
+    p.set_defaults(run=cmd_timer)
+
+    sub.add_parser("today", help="your plan for today").set_defaults(run=cmd_today)
+
+    p = sub.add_parser("open", help="open a task in the browser")
+    p.add_argument("key")
+    p.add_argument("--print", action="store_true", help="only print the link")
+    p.set_defaults(run=cmd_open)
+
+    p = sub.add_parser("branch", help="the git branch name for a task")
+    p.add_argument("key")
+    p.add_argument("--checkout", action="store_true", help="create and switch to the branch")
+    p.set_defaults(run=cmd_branch)
+
+    args = parser.parse_args(argv)
+    if not getattr(args, "run", None):
+        parser.print_help()
+        return 1
+    try:
+        args.run(args)
+        return 0
+    except Fail as e:
+        print(paint("error: ", "31") + str(e), file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

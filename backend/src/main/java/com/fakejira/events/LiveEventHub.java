@@ -27,9 +27,26 @@ public class LiveEventHub {
 
     private final Map<Long, List<SseEmitter>> streams = new ConcurrentHashMap<>();
     private final ObjectMapper json;
+    private final com.fakejira.cluster.Cluster cluster;
 
-    public LiveEventHub(ObjectMapper json) {
+    /** How a live event travels between instances. */
+    record Wire(java.util.Set<Long> recipients, String type, String payload) {
+    }
+
+    public LiveEventHub(ObjectMapper json, com.fakejira.cluster.Cluster cluster) {
         this.json = json;
+        this.cluster = cluster;
+        if (cluster.enabled()) {
+            // Every instance delivers to the browsers connected to it.
+            cluster.subscribe("live", message -> {
+                try {
+                    Wire wire = json.readValue(message, Wire.class);
+                    deliver(wire.recipients(), wire.type(), wire.payload());
+                } catch (IOException e) {
+                    log.warn("Ignoring a malformed live event from another instance");
+                }
+            });
+        }
     }
 
     public SseEmitter connect(Long userId) {
@@ -57,9 +74,21 @@ public class LiveEventHub {
             log.warn("Could not serialize live event {}", event.type(), e);
             return;
         }
-        for (Long userId : event.recipients()) {
+        if (cluster.enabled()) {
+            try {
+                cluster.publish("live", json.writeValueAsString(new Wire(event.recipients(), event.type(), payload)));
+                return;
+            } catch (IOException e) {
+                log.warn("Could not share live event {}", event.type(), e);
+            }
+        }
+        deliver(event.recipients(), event.type(), payload);
+    }
+
+    private void deliver(java.util.Set<Long> recipients, String type, String payload) {
+        for (Long userId : recipients) {
             for (SseEmitter emitter : streams.getOrDefault(userId, List.of())) {
-                send(userId, emitter, SseEmitter.event().name(event.type()).data(payload));
+                send(userId, emitter, SseEmitter.event().name(type).data(payload));
             }
         }
     }
@@ -75,6 +104,7 @@ public class LiveEventHub {
     }
 
     /** Keeps idle connections open through proxies such as Cloudflare (which cut idle streams at ~100s). */
+    @com.fakejira.cluster.PerInstance
     @Scheduled(fixedRate = 25_000)
     public void heartbeat() {
         streams.forEach((userId, emitters) ->
