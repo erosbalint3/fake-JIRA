@@ -1,11 +1,7 @@
+import { BottomNav, PullToRefresh } from './Mobile';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
-import {
-  BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu,
-  Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X,
-  Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users, GanttChart, Briefcase, Flag, BookOpen, NotebookPen,
-  Coffee, Heart,
-} from 'lucide-react';
+import { BarChart3, Bell, Check, ChevronsUpDown, Filter, FolderKanban, Keyboard, KanbanSquare, ListTodo, LogOut, Map, Menu, Moon, Plus, Search, Settings, Shield, Sun, UserRound, UserSquare2, X, Package, Bot, LayoutDashboard, SearchCode, CalendarDays, Activity, Users, GanttChart, Briefcase, Flag, BookOpen, NotebookPen, Coffee, Heart, Table2, Images } from 'lucide-react';
 import { filterPath } from '../filters';
 import { api, isOffline, OFFLINE_CHANGED } from '../api';
 import { useAuth } from '../auth';
@@ -216,7 +212,7 @@ export function Layout() {
               aria-haspopup="listbox" aria-expanded={switcherOpen}>
               {currentProject ? (
                 <>
-                  <span className="project-icon">{currentProject.key.slice(0, 2)}</span>
+                  <span className={`project-icon ${currentProject.icon ? "has-emoji" : ""}`} aria-hidden>{currentProject.icon || currentProject.key.slice(0, 2)}</span>
                   <span className="switcher-text">
                     <strong>{currentProject.name}</strong>
                     <span className="muted">{currentProject.key}</span>
@@ -232,7 +228,7 @@ export function Layout() {
                 {projects?.map((project) => (
                   <Link key={project.key} to={`/p/${project.key}/board`} className="switcher-item" role="option"
                     aria-selected={project.key === currentProject?.key}>
-                    <span className="project-icon sm">{project.key.slice(0, 2)}</span>
+                    <span className={`project-icon sm ${project.icon ? "has-emoji" : ""}`} aria-hidden>{project.icon || project.key.slice(0, 2)}</span>
                     <span className="switcher-item-name">{project.name}</span>
                     {project.key === currentProject?.key && <Check size={15} />}
                   </Link>
@@ -257,9 +253,11 @@ export function Layout() {
                 <span className="nav-heading">{currentProject.key}</span>
                 <NavLink to={`/p/${currentProject.key}/board`} className="nav-link"><KanbanSquare size={18} /> {t("Board")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/backlog`} className="nav-link"><ListTodo size={18} /> {t("Backlog")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/table`} className="nav-link"><Table2 size={18} /> {t("Table")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/roadmap`} className="nav-link"><Map size={18} /> {t("Roadmap")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/timeline`} className="nav-link"><GanttChart size={18} /> {t("Timeline")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/releases`} className="nav-link"><Package size={18} /> {t("Releases")}</NavLink>
+                <NavLink to={`/p/${currentProject.key}/gallery`} className="nav-link"><Images size={18} /> {t("Gallery")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/wiki`} className="nav-link"><BookOpen size={18} /> {t("Wiki")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/standup`} className="nav-link"><Coffee size={18} /> {t("Stand-up")}</NavLink>
                 <NavLink to={`/p/${currentProject.key}/meetings`} className="nav-link"><NotebookPen size={18} /> {t("Meetings")}</NavLink>
@@ -271,7 +269,7 @@ export function Layout() {
                     <span className="nav-heading">{t("Saved filters")}</span>
                     {filters.map((f) => (
                       <Link key={f.id} to={filterPath(currentProject.key, f.query)} className="nav-link nav-filter"
-                        title={f.shared ? `Shared by ${f.owner}` : 'Only visible to you'}>
+                        title={f.shared ? t('Shared by {name}', { name: f.owner }) : t('Only visible to you')}>
                         <Filter size={15} /> <span className="nav-filter-name">{f.name}</span>
                       </Link>
                     ))}
@@ -317,7 +315,7 @@ export function Layout() {
               <button className="icon-button" onClick={logout} aria-label={t("Log out")} title={t("Log out")}>
                 <LogOut size={18} />
               </button>
-              <span className={`live-dot ${connected ? 'on' : ''}`} title={connected ? 'Live updates on' : 'Live updates reconnecting…'} />
+              <span className={`live-dot ${connected ? 'on' : ''}`} title={connected ? t('Live updates on') : t('Live updates reconnecting…')} />
             </div>
           </div>
         </aside>
@@ -331,7 +329,7 @@ export function Layout() {
           )}
           {update && (
             <div className="update-strip" role="status">
-              FakeJIRA {update.latest} is available.{' '}
+              {t('FakeJIRA {v} is available.', { v: update.latest })}{' '}
               {update.url && <a href={update.url} target="_blank" rel="noreferrer noopener">{t("Release notes")}</a>}{' '}
               <Link to="/admin">{t("Admin → System")}</Link>
               <button className="icon-button sm" aria-label={t("Dismiss update notice")} onClick={() => {
@@ -348,12 +346,14 @@ export function Layout() {
             <Outlet />
           </Suspense>
           <TimerWidget />
+          <PullToRefresh />
         </main>
+        <BottomNav projectKey={currentProject?.key} unread={unread} onMenu={() => setMenuOpen(!menuOpen)} />
 
         {creating && (
           <TaskFormModal
-            title={creating.parent ? `Add subtask to ${creating.parent.key}` : 'Create task'}
-            submitLabel="Create task"
+            title={creating.parent ? t('Add subtask to {key}', { key: creating.parent.key }) : t('Create task')}
+            submitLabel={t('Create task')}
             mode={{
               kind: 'create',
               projectKey: creating.projectKey,
@@ -389,7 +389,7 @@ export function Layout() {
                   <dt>{keys.split(' then ').map((k, i) => (
                     <span key={k}>{i > 0 && <span className="muted"> {t("then")} </span>}<kbd>{k}</kbd></span>
                   ))}</dt>
-                  <dd>{action}</dd>
+                  <dd>{t(action)}</dd>
                 </div>
               ))}
             </dl>

@@ -135,7 +135,7 @@ function BurndownReport({ projectKey: key, projectId }: ReportProps) {
   const total = burndown ? (points ? burndown.totalPoints : burndown.total) : 0;
   const done = burndown ? (points ? burndown.donePoints : burndown.done) : 0;
   const percent = total ? Math.round((done / total) * 100) : 0;
-  const noun = points ? 'points' : 'tasks';
+  const noun = points ? t('points') : t('tasks');
 
   return (
     <>
@@ -143,7 +143,7 @@ function BurndownReport({ projectKey: key, projectId }: ReportProps) {
       {!sprints && !error && <Spinner />}
       {sprints && sprints.length === 0 && (
         <EmptyState icon={<BarChart3 size={28} />} title={t("No sprint data yet")}>
-          Start a sprint from the <Link to={`/p/${key}/backlog`}>{t("backlog")}</Link> to see its burndown here.
+          {t('Start a sprint from the')} <Link to={`/p/${key}/backlog`}>{t("backlog")}</Link> {t('to see its burndown here.')}
         </EmptyState>
       )}
       {burndown && sprint && sprints && (
@@ -157,7 +157,7 @@ function BurndownReport({ projectKey: key, projectId }: ReportProps) {
                 <label key={u} className={unit === u ? 'active' : ''}>
                   <input type="radio" name="unit" checked={unit === u} disabled={u === 'points' && burndown.totalPoints === 0}
                     onChange={() => setUnit(u)} />
-                  {u === 'tasks' ? 'Tasks' : 'Story points'}
+                  {u === 'tasks' ? t('Tasks') : t('Story points')}
                 </label>
               ))}
             </div>
@@ -166,14 +166,14 @@ function BurndownReport({ projectKey: key, projectId }: ReportProps) {
             <div className="stat panel"><span className="muted">{t("Sprint")}</span><strong className="stat-text">{sprint.name}</strong>
               <span className="muted small">{sprint.startDate && sprint.endDate ? `${formatDay(sprint.startDate)} – ${formatDay(sprint.endDate)}` : ''}</span></div>
             <div className="stat panel"><span className="muted">{t("Committed")}</span><strong>{total}</strong><span className="muted small">{noun}</span></div>
-            <div className="stat panel"><span className="muted">{t("Completed")}</span><strong>{done}</strong><span className="muted small">{percent}% of committed</span></div>
-            <div className="stat panel"><span className="muted">{sprint.state === 'COMPLETED' ? 'Carried over' : 'Remaining'}</span>
+            <div className="stat panel"><span className="muted">{t("Completed")}</span><strong>{done}</strong><span className="muted small">{t('{n}% of committed', { n: percent })}</span></div>
+            <div className="stat panel"><span className="muted">{sprint.state === 'COMPLETED' ? t('Carried over') : t('Remaining')}</span>
               <strong>{sprint.state === 'COMPLETED' ? (points ? sprint.carriedOverPoints : sprint.carriedOver) : total - done}</strong>
-              <span className="muted small">{sprint.state === 'COMPLETED' ? 'back to backlog' : `open ${noun}`}</span></div>
+              <span className="muted small">{sprint.state === 'COMPLETED' ? t('back to backlog') : t('open {what}', { what: noun })}</span></div>
           </div>
           <section className="panel">
             <h2 className="panel-title">{t("Burndown")}</h2>
-            {sprint.goal && <p className="muted sprint-goal">Goal: {sprint.goal}</p>}
+            {sprint.goal && <p className="muted sprint-goal">{t('Goal: {goal}', { goal: sprint.goal })}</p>}
             <BurndownChart points={burndown.points} total={total} unit={unit} changes={burndown.changes} />
           </section>
           {burndown.changes.length > 0 && (
@@ -186,8 +186,8 @@ function BurndownReport({ projectKey: key, projectId }: ReportProps) {
                     <span className={`scope-sign ${c.added ? 'added' : 'removed'}`}>{c.added ? '+' : '−'}</span>
                     <span className="muted small">{formatDay(c.date)}</span>
                     <span className="task-key">{c.key}</span> {c.title}
-                    {c.points !== null && <span className="muted small"> · {c.points} pt</span>}
-                    {c.actor && <span className="muted small"> · by {c.actor}</span>}
+                    {c.points !== null && <span className="muted small"> · {t('{n} pt', { n: c.points })}</span>}
+                    {c.actor && <span className="muted small"> · {t('by {name}', { name: c.actor })}</span>}
                   </li>
                 ))}
               </ul>
@@ -215,7 +215,7 @@ function VelocityReport({ projectKey: key, projectId }: ReportProps) {
   if (entries.length === 0) {
     return (
       <EmptyState icon={<Gauge size={28} />} title={t("No completed sprints yet")}>
-        Velocity shows story points completed per sprint once you finish your first sprint.
+        {t('Velocity shows story points completed per sprint once you finish your first sprint.')}
       </EmptyState>
     );
   }
@@ -229,7 +229,7 @@ function VelocityReport({ projectKey: key, projectId }: ReportProps) {
     <>
       <div className="stats">
         <div className="stat panel"><span className="muted">{t("Average velocity")}</span><strong>{average}</strong>
-          <span className="muted small">points, last {recent.length} sprint{recent.length === 1 ? '' : 's'}</span></div>
+          <span className="muted small">{recent.length === 1 ? t('points, last sprint') : t('points, last {n} sprints', { n: recent.length })}</span></div>
         <div className="stat panel"><span className="muted">{t("Last sprint")}</span><strong>{entries[entries.length - 1].completedPoints}</strong>
           <span className="muted small">{t("points completed")}</span></div>
         <div className="stat panel"><span className="muted">{t("Say/do ratio")}</span>
@@ -266,7 +266,7 @@ function FlowReport({ projectKey: key, projectId }: ReportProps) {
         <div className="chip-row">
           {[14, 30, 90].map((d) => (
             <button key={d} className={`chip ${days === d ? 'active' : ''}`} aria-pressed={days === d} onClick={() => setDays(d)}>
-              Last {d} days
+              {t('Last {n} days', { n: d })}
             </button>
           ))}
         </div>
@@ -275,7 +275,7 @@ function FlowReport({ projectKey: key, projectId }: ReportProps) {
         <div className="stat panel"><span className="muted">{t("Work in progress")}</span><strong>{wip}</strong>
           <span className="muted small">{t("in progress or review today")}</span></div>
         <div className="stat panel"><span className="muted">{t("Finished")}</span><strong>{finished}</strong>
-          <span className="muted small">tasks in the last {days} days</span></div>
+          <span className="muted small">{t('tasks in the last {n} days', { n: days })}</span></div>
         <div className="stat panel"><span className="muted">{t("Waiting")}</span><strong>{today?.todo ?? 0}</strong>
           <span className="muted small">{t("to do")}</span></div>
       </div>
@@ -313,25 +313,25 @@ function CycleReportView({ projectKey: key, projectId }: ReportProps) {
     <>
       <div className="stats">
         <div className="stat panel"><span className="muted">{t("Cycle time (median)")}</span><strong>{days(report.cycleP50)}</strong>
-          <span className="muted small">started → done · 85% within {days(report.cycleP85)}</span></div>
+          <span className="muted small">{t('started → done · 85% within {n}', { n: days(report.cycleP85) })}</span></div>
         <div className="stat panel"><span className="muted">{t("Lead time (median)")}</span><strong>{days(report.leadP50)}</strong>
-          <span className="muted small">created → done · 85% within {days(report.leadP85)}</span></div>
+          <span className="muted small">{t('created → done · 85% within {n}', { n: days(report.leadP85) })}</span></div>
         <div className="stat panel"><span className="muted">{t("Throughput")}</span><strong>{perWeek}</strong>
           <span className="muted small">{t("tasks per week, last 4 weeks")}</span></div>
       </div>
       {report.count === 0 ? (
         <EmptyState icon={<Timer size={28} />} title={t("Nothing finished in the last 90 days")}>
-          Cycle time appears once tasks move through In progress to Done.
+          {t('Cycle time appears once tasks move through In progress to Done.')}
         </EmptyState>
       ) : (
         <section className="panel">
           <div className="panel-head">
-            <h2 className="panel-title">{measure === 'cycle' ? 'Cycle' : 'Lead'} time per task</h2>
+            <h2 className="panel-title">{measure === 'cycle' ? t('Cycle time per task') : t('Lead time per task')}</h2>
             <div className="segmented small" role="radiogroup" aria-label={t("Measure")}>
               {(['cycle', 'lead'] as const).map((m) => (
                 <label key={m} className={measure === m ? 'active' : ''}>
                   <input type="radio" name="measure" checked={measure === m} onChange={() => setMeasure(m)} />
-                  {m === 'cycle' ? 'Cycle time' : 'Lead time'}
+                  {m === 'cycle' ? t('Cycle time') : t('Lead time')}
                 </label>
               ))}
             </div>
@@ -347,7 +347,7 @@ function CycleReportView({ projectKey: key, projectId }: ReportProps) {
             {(['tasks', 'points'] as const).map((u) => (
               <label key={u} className={unit === u ? 'active' : ''}>
                 <input type="radio" name="tp-unit" checked={unit === u} onChange={() => setUnit(u)} />
-                {u === 'tasks' ? 'Tasks' : 'Story points'}
+                {u === 'tasks' ? t('Tasks') : t('Story points')}
               </label>
             ))}
           </div>
@@ -390,7 +390,7 @@ function TimeReportView({ projectKey: key, projectId }: ReportProps) {
             <button key={days} className="chip" onClick={() => {
               setFrom(daysAgo(days - 1));
               setTo(todayIso());
-            }}>Last {days} days</button>
+            }}>{t('Last {n} days', { n: days })}</button>
           ))}
         </div>
       </div>
@@ -408,7 +408,7 @@ function TimeReportView({ projectKey: key, projectId }: ReportProps) {
           </div>
           {report.entries === 0 ? (
             <EmptyState icon={<Clock size={28} />} title={t("No time logged in this period")}>
-              Log work from a task's Time section, e.g. “1h 30m”.
+              {t("Log work from a task's Time section, e.g. “1h 30m”.")}
             </EmptyState>
           ) : (
             <div className="report-grid">

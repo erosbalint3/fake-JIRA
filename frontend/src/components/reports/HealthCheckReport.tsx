@@ -237,7 +237,7 @@ const DEFAULT_AREAS = ['Delivering value', 'Speed', 'Easy to release', 'Health o
 
 function CreateModal({ onCreate, onClose }: { onCreate: (title: string, categories: string[]) => void; onClose: () => void }) {
   const [title, setTitle] = useState(t('Health check {date}', { date: formatDay(new Date().toISOString().slice(0, 10), true) }));
-  const [areas, setAreas] = useState(DEFAULT_AREAS.join('\n'));
+  const [areas, setAreas] = useState(() => DEFAULT_AREAS.map((a) => t(a)).join('\n'));
   const list = areas.split('\n').map((a) => a.trim()).filter(Boolean);
   return (
     <Modal title={t('New health check')} onClose={onClose} footer={

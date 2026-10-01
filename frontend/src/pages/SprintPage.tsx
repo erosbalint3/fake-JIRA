@@ -56,7 +56,7 @@ export function SprintPage() {
           <p className="muted">
             {sprint.state === 'ACTIVE' ? 'Active' : sprint.state === 'COMPLETED' ? 'Completed' : 'Planned'}
             {sprint.startDate && sprint.endDate && ` · ${formatDay(sprint.startDate)} – ${formatDay(sprint.endDate)}`}
-            {sprint.goal && <> · Goal: {sprint.goal}</>}
+            {sprint.goal && <> · {t('Goal: {goal}', { goal: sprint.goal })}</>}
           </p>
         </div>
       </header>
@@ -98,7 +98,7 @@ function ReviewView({ review }: { review: SprintReview }) {
         <div className="stat panel"><span className="muted">{t("Completed")}</span><strong>{review.completedTasks}</strong>
           <span className="muted small">{t("tasks")}</span></div>
         <div className="stat panel"><span className="muted">{t("Points")}</span><strong>{review.completedPoints}</strong>
-          <span className="muted small">of {review.committedPoints} committed{percent !== null ? ` (${percent}%)` : ''}</span></div>
+          <span className="muted small">{t('of {n} committed', { n: review.committedPoints })}{percent !== null ? ` (${percent}%)` : ''}</span></div>
         <div className="stat panel"><span className="muted">{t("Scope change")}</span>
           <strong>+{review.added.length} / −{review.removed.length}</strong>
           <span className="muted small">{t("tasks added / removed after the start")}</span></div>
@@ -118,8 +118,8 @@ function ReviewView({ review }: { review: SprintReview }) {
         <AiNotesModal title={t('Sprint review by Claude')} load={() => api.aiSprintReview(review.sprint.id)} onClose={() => setDrafting(false)} />
       )}
       <div className="report-grid">
-        <ReviewList title={t("Completed")} tasks={review.completed} empty="Nothing was finished." />
-        <ReviewList title={t("Not finished")} tasks={review.unfinished} empty="Everything was finished." />
+        <ReviewList title={t("Completed")} tasks={review.completed} empty={t('Nothing was finished.')} />
+        <ReviewList title={t("Not finished")} tasks={review.unfinished} empty={t('Everything was finished.')} />
         {review.added.length > 0 && <ReviewList title={t("Added during the sprint")} tasks={review.added} />}
         {review.removed.length > 0 && <ReviewList title={t("Removed during the sprint")} tasks={review.removed} />}
         {review.people.length > 0 && (
@@ -203,7 +203,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
   if (!open) {
     return (
       <EmptyState icon={<MessageSquareHeart size={28} />} title={t("The retrospective opens when the sprint starts")}>
-        Come back once the sprint is running.
+        {t('Come back once the sprint is running.')}
       </EmptyState>
     );
   }
@@ -213,16 +213,16 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
       {COLUMNS.map((column) => {
         const cards = items.filter((i) => i.kind === column.kind);
         return (
-          <section key={column.kind} className={`retro-column retro-${column.kind.toLowerCase()}`} aria-label={column.title}>
+          <section key={column.kind} className={`retro-column retro-${column.kind.toLowerCase()}`} aria-label={t(column.title)}>
             <header>
-              <h2>{column.title}</h2>
+              <h2>{t(column.title)}</h2>
               <span className="count">{cards.length}</span>
             </header>
-            <p className="muted small">{column.hint}</p>
+            <p className="muted small">{t(column.hint)}</p>
             {canEdit && (
               <form onSubmit={add(column.kind)} className="retro-add">
                 <textarea rows={2} maxLength={500} placeholder={t("Add a card…")} value={drafts[column.kind]}
-                  aria-label={`Add to ${column.title}`}
+                  aria-label={t('Add to {name}', { name: t(column.title) })}
                   onChange={(e) => setDrafts((d) => ({ ...d, [column.kind]: e.target.value }))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -259,7 +259,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                         {item.taskKey && item.taskId && <Link className="small" to={`/tasks/${item.taskId}`}>{item.taskKey}</Link>}
                         {canEdit && item.kind === 'ACTION' && !item.taskId && (
                           <button className="icon-button sm" title={t("Create a backlog task")} aria-label={t("Create a backlog task")}
-                            onClick={() => run(() => api.retroToTask(item.id), 'Task created in the backlog')}>
+                            onClick={() => run(() => api.retroToTask(item.id), t('Task created in the backlog'))}>
                             <ListPlus size={15} />
                           </button>
                         )}
@@ -274,7 +274,7 @@ function RetroBoard({ sprintId, projectId, open }: { sprintId: number; projectId
                           </>
                         )}
                         <button className={`vote ${item.voted ? 'voted' : ''}`} disabled={!canEdit} aria-pressed={item.voted}
-                          aria-label={`${item.voted ? 'Remove vote' : 'Vote'} (${item.votes})`}
+                          aria-label={`${item.voted ? t('Remove vote') : t('Vote')} (${item.votes})`}
                           onClick={() => run(() => api.voteRetroItem(item.id))}>
                           <ThumbsUp size={14} /> {item.votes}
                         </button>

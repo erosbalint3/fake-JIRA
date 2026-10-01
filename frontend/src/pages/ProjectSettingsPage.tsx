@@ -23,6 +23,7 @@ import { ServiceDeskSection } from '../components/settings/ServiceDeskSection';
 import { GithubRepoSection } from '../components/settings/GithubRepoSection';
 import { ChatCommandsSection } from '../components/settings/ChatCommandsSection';
 import { RolesSection } from '../components/settings/RolesSection';
+import { EmojiPicker } from '../components/EmojiPicker';
 import { Spinner } from '../components/States';
 import { NotFoundPage } from './NotFoundPage';
 import { formatDate } from '../format';
@@ -39,7 +40,7 @@ async function copy(text: string, toast: (message: string) => void) {
     await navigator.clipboard.writeText(text);
     toast(t("Copied to clipboard"));
   } catch {
-    window.prompt('Copy this:', text);
+    window.prompt(t('Copy this:'), text);
   }
 }
 
@@ -82,7 +83,7 @@ export function ProjectSettingsPage() {
 
   const save = (event: FormEvent) => {
     event.preventDefault();
-    run(() => api.updateProject(key, name, description), 'Project updated');
+    run(() => api.updateProject(key, name, description), t('Project updated'));
   };
 
   return (
@@ -105,6 +106,11 @@ export function ProjectSettingsPage() {
             <span>{t("Key")}</span>
             <input value={project.key} disabled />
           </label>
+          <div className="field">
+            <span id="project-icon-label">{t("Icon")}</span>
+            <EmojiPicker value={project.icon} label={t("Project icon")} disabled={!isOwner}
+              onPick={(icon) => run(() => api.setProjectIcon(project.key, icon), icon ? t("Icon updated") : t("Icon removed"))} />
+          </div>
           <label className="field">
             <span>{t("Description")}</span>
             <textarea rows={3} maxLength={1000} value={description} disabled={!isOwner} onChange={(e) => setDescription(e.target.value)} />
@@ -121,14 +127,14 @@ export function ProjectSettingsPage() {
               <label key={String(kanban)} className={project.kanban === kanban ? 'active' : ''}>
                 <input type="radio" name="mode" checked={project.kanban === kanban} disabled={!isOwner || busy}
                   onChange={() => run(() => api.updateProject(key, project.name, project.description, { kanban }),
-                    kanban ? 'Switched to Kanban' : 'Switched to Scrum')} />
+                    kanban ? t('Switched to Kanban') : t('Switched to Scrum'))} />
                 {kanban ? 'Kanban' : 'Scrum'}
               </label>
             ))}
           </div>
           <p className="muted small">{project.kanban
-            ? 'Kanban: no sprints. The board shows all work continuously; use WIP limits and the flow reports.'
-            : 'Scrum: plan work in time-boxed sprints with burndown and velocity reports.'}</p>
+            ? t('Kanban: no sprints. The board shows all work continuously; use WIP limits and the flow reports.')
+            : t('Scrum: plan work in time-boxed sprints with burndown and velocity reports.')}</p>
           <div className="field">
             <span>{t("Accent colour")}</span>
             <div className="color-row">
@@ -136,20 +142,20 @@ export function ProjectSettingsPage() {
                 <button key={color || 'default'} type="button" disabled={!isOwner || busy}
                   className={`color-swatch ${(project.color ?? '') === color ? 'picked' : ''}`}
                   style={color ? { background: color } : undefined}
-                  aria-label={color ? `Accent ${color}` : 'Default accent'} aria-pressed={(project.color ?? '') === color}
-                  onClick={() => run(() => api.updateProject(key, project.name, project.description, { color }), 'Colour updated')}>
+                  aria-label={color ? t('Accent {color}', { color }) : t('Default accent')} aria-pressed={(project.color ?? '') === color}
+                  onClick={() => run(() => api.updateProject(key, project.name, project.description, { color }), t('Colour updated'))}>
                   {!color && 'A'}
                 </button>
               ))}
               <input type="color" aria-label={t("Custom accent colour")} disabled={!isOwner || busy} value={project.color ?? '#2a78d6'}
-                onChange={(e) => run(() => api.updateProject(key, project.name, project.description, { color: e.target.value }), 'Colour updated')} />
+                onChange={(e) => run(() => api.updateProject(key, project.name, project.description, { color: e.target.value }), t('Colour updated'))} />
             </div>
             <span className="muted small">{t("Used for the project's accent while you work in it.")}</span>
           </div>
           <label className="toggle">
             <input type="checkbox" checked={project.autoSchedule} disabled={!isOwner || busy}
               onChange={(e) => run(() => api.updateProject(key, project.name, project.description, { autoSchedule: e.target.checked }),
-                e.target.checked ? 'Automatic rescheduling on' : 'Automatic rescheduling off')} />
+                e.target.checked ? t('Automatic rescheduling on') : t('Automatic rescheduling off'))} />
             {t('Reschedule blocked tasks automatically when a task blocking them slips')}
           </label>
         </div>
@@ -179,18 +185,18 @@ export function ProjectSettingsPage() {
 
       <section className="panel danger-zone">
         <div>
-          <h2 className="panel-title">{isOwner ? 'Delete project' : 'Leave project'}</h2>
+          <h2 className="panel-title">{isOwner ? t('Delete project') : t('Leave project')}</h2>
           <p className="muted">{isOwner
-            ? 'Permanently deletes the project with all its tasks, sprints, epics, comments and files.'
-            : 'You will lose access to this project. Your tasks here become unassigned.'}</p>
+            ? t('Permanently deletes the project with all its tasks, sprints, epics, comments and files.')
+            : t('You will lose access to this project. Your tasks here become unassigned.')}</p>
         </div>
         <button className="btn btn-ghost danger" onClick={() => setConfirm(isOwner ? { kind: 'delete' } : { kind: 'leave' })}>
-          {isOwner ? 'Delete project' : 'Leave project'}
+          {isOwner ? t('Delete project') : t('Leave project')}
         </button>
       </section>
 
       {confirm?.kind === 'remove' && (
-        <ConfirmDialog title={`Remove ${confirm.member.displayName}?`} confirmLabel={t("Remove")} danger busy={busy}
+        <ConfirmDialog title={t('Remove {name}?', { name: confirm.member.displayName })} confirmLabel={t("Remove")} danger busy={busy}
           message={t("They lose access to this project and their tasks here become unassigned.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
@@ -199,25 +205,25 @@ export function ProjectSettingsPage() {
           }} />
       )}
       {confirm?.kind === 'transfer' && (
-        <ConfirmDialog title={`Make ${confirm.member.displayName} the owner?`} confirmLabel={t("Hand over")} busy={busy}
+        <ConfirmDialog title={t('Make {name} the owner?', { name: confirm.member.displayName })} confirmLabel={t("Hand over")} busy={busy}
           message={t("They get full control of the project and its settings. You stay a member.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            await run(() => api.transferOwnership(key, confirm.member.id), `${confirm.member.displayName} now owns ${project.name}`);
+            await run(() => api.transferOwnership(key, confirm.member.id), t('{name} now owns {project}', { name: confirm.member.displayName, project: project.name }));
             setConfirm(null);
           }} />
       )}
       {confirm?.kind === 'leave' && (
-        <ConfirmDialog title={`Leave ${project.name}?`} confirmLabel={t("Leave project")} danger busy={busy}
+        <ConfirmDialog title={t('Leave {project}?', { project: project.name })} confirmLabel={t("Leave project")} danger busy={busy}
           message={t("You will need to be added again by the owner to come back.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            if (await run(() => api.removeMember(key, user.id), `You left ${project.name}`)) navigate('/projects');
+            if (await run(() => api.removeMember(key, user.id), t('You left {project}', { project: project.name }))) navigate('/projects');
           }} />
       )}
       {confirm?.kind === 'delete' && (
-        <ConfirmDialog title={`Delete ${project.name}?`} confirmLabel={t("Delete forever")} danger busy={busy || deleteText !== project.key}
-          message={`This cannot be undone. Type ${project.key} below to confirm.`}
+        <ConfirmDialog title={t('Delete {name}?', { name: project.name })} confirmLabel={t("Delete forever")} danger busy={busy || deleteText !== project.key}
+          message={t('This cannot be undone. Type {key} below to confirm.', { key: project.key })}
           onClose={() => {
             setConfirm(null);
             setDeleteText('');
@@ -266,7 +272,7 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
   const add = async (event?: FormEvent, value = login) => {
     event?.preventDefault();
     if (!value.trim()) return;
-    if (await run(() => api.addMember(project.key, value.trim(), role), `${value.trim()} added as ${ROLE_LABEL[role].toLowerCase()}`)) {
+    if (await run(() => api.addMember(project.key, value.trim(), role), t('{name} added as {role}', { name: value.trim(), role: t(ROLE_LABEL[role]).toLowerCase() }))) {
       setLogin('');
       setSuggestions([]);
     }
@@ -304,31 +310,31 @@ function MembersSection({ project, isOwner, busy, run, onRemove, onTransfer }: M
             <Avatar user={member} size={32} />
             <div className="member-text">
               <strong>{member.displayName}{member.id === user?.id && <span className="muted"> {t("(you)")}</span>}
-                {member.awayUntil && <span className="away-badge" title={`Away until ${member.awayUntil}`}>{t("away")}</span>}</strong>
+                {member.awayUntil && <span className="away-badge" title={t('Away until {date}', { date: member.awayUntil })}>{t("away")}</span>}</strong>
               <span className="muted small">@{member.username}{member.email ? ` · ${member.email}` : ''}</span>
             </div>
             {member.role === 'OWNER' ? (
               <span className="owner-badge"><Crown size={13} /> {t("Owner")}</span>
             ) : isOwner ? (
               <>
-                <select className="role-select" value={member.role} aria-label={`Role of ${member.displayName}`}
+                <select className="role-select" value={member.role} aria-label={t('Role of {name}', { name: member.displayName })}
                   onChange={(e) => run(() => api.setRole(project.key, member.id, e.target.value as Role),
-                    `${member.displayName} is now a ${ROLE_LABEL[e.target.value as Role].toLowerCase()}`)}>
+                    t('{name} is now: {role}', { name: member.displayName, role: t(ROLE_LABEL[e.target.value as Role]).toLowerCase() }))}>
                   <option value="MEMBER">{t("Member")}</option>
                   <option value="VIEWER">{t("Viewer")}</option>
                   <option value="GUEST">{t("Guest")}</option>
                 </select>
-                <button className="icon-button" aria-label={`Make ${member.displayName} the owner`} title={t("Hand over ownership")}
+                <button className="icon-button" aria-label={t('Make {name} the owner', { name: member.displayName })} title={t("Hand over ownership")}
                   onClick={() => onTransfer(member)}>
                   <Crown size={17} />
                 </button>
-                <button className="icon-button" aria-label={`Remove ${member.displayName}`} title={t("Remove from project")}
+                <button className="icon-button" aria-label={t('Remove {name}', { name: member.displayName })} title={t("Remove from project")}
                   onClick={() => onRemove(member)}>
                   <UserMinus size={17} />
                 </button>
               </>
             ) : (
-              <span className={`role-badge role-${member.role.toLowerCase()}`}>{ROLE_LABEL[member.role]}</span>
+              <span className={`role-badge role-${member.role.toLowerCase()}`}>{t(ROLE_LABEL[member.role])}</span>
             )}
           </li>
         ))}
@@ -387,8 +393,8 @@ function InvitesSection({ project }: { project: Project }) {
           {pending.map((invite) => (
             <li key={invite.id}>
               <div className="invite-text">
-                <strong>{invite.email ?? 'Anyone with the link'}</strong>
-                <span className="muted small">{invite.role && invite.role !== 'MEMBER' ? `${t(ROLE_LABEL[invite.role])} · ` : ''}Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
+                <strong>{invite.email ?? t('Anyone with the link')}</strong>
+                <span className="muted small">{invite.role && invite.role !== 'MEMBER' ? `${t(ROLE_LABEL[invite.role])} · ` : ''}{t('Expires {date}', { date: formatDate(invite.expiresAt) })} · {t('by {name}', { name: invite.createdBy })}</span>
               </div>
               <button className="icon-button sm" aria-label={t("Copy invite link")} title={t("Copy link")} onClick={() => copy(inviteLink(invite.code), toast)}>
                 <Copy size={15} />
@@ -445,8 +451,7 @@ function ColumnsSection({ project, canEdit }: { project: Project; canEdit: boole
     <section className="panel">
       <h2 className="panel-title">{t("Board columns")}</h2>
       <p className="muted small hint">
-        Each column maps to a status. Split a status into several columns (e.g. “QA” and “Code review” for In review) and set
-        work-in-progress limits — the column turns red when it holds more cards.
+        {t('Each column maps to a status. Split a status into several columns (e.g. “QA” and “Code review” for In review) and set work-in-progress limits — the column turns red when it holds more cards.')}
       </p>
       {!columns ? <Spinner /> : (
         <ul className="column-editor">
@@ -457,24 +462,24 @@ function ColumnsSection({ project, canEdit }: { project: Project; canEdit: boole
                 <>
                   <input className="column-name" defaultValue={column.name} maxLength={40} aria-label={t("Column name")}
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== column.name && update(column, { name: e.target.value.trim() })} />
-                  <select value={column.status} aria-label={`Status of ${column.name}`}
+                  <select value={column.status} aria-label={t('Status of {name}', { name: column.name })}
                     onChange={(e) => update(column, { status: e.target.value as Status })}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                    {STATUSES.map((s) => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
                   </select>
                   <input className="wip-input" type="number" min={1} max={99} placeholder={t("No limit")} defaultValue={column.wipLimit ?? ''}
-                    aria-label={`WIP limit of ${column.name}`}
+                    aria-label={t('WIP limit of {name}', { name: column.name })}
                     onBlur={(e) => limit(e.target.value) !== column.wipLimit && update(column, { wipLimit: limit(e.target.value) })} />
-                  <button className="icon-button sm" disabled={index === 0} aria-label={`Move ${column.name} left`}
+                  <button className="icon-button sm" disabled={index === 0} aria-label={t('Move {name} left', { name: column.name })}
                     onClick={() => apply(() => api.moveColumn(column.id, -1))}><ArrowUp size={15} /></button>
-                  <button className="icon-button sm" disabled={index === columns.length - 1} aria-label={`Move ${column.name} right`}
+                  <button className="icon-button sm" disabled={index === columns.length - 1} aria-label={t('Move {name} right', { name: column.name })}
                     onClick={() => apply(() => api.moveColumn(column.id, 1))}><ArrowDown size={15} /></button>
-                  <button className="icon-button sm" aria-label={`Delete ${column.name}`}
+                  <button className="icon-button sm" aria-label={t('Delete {name}', { name: column.name })}
                     onClick={() => apply(() => api.deleteColumn(column.id))}><Trash2 size={15} /></button>
                 </>
               ) : (
                 <>
-                  <strong className="column-name">{column.name}</strong>
-                  <span className="muted small">{STATUS_LABEL[column.status]}{column.wipLimit ? ` · limit ${column.wipLimit}` : ''}</span>
+                  <strong className="column-name">{t(column.name)}</strong>
+                  <span className="muted small">{t(STATUS_LABEL[column.status])}{column.wipLimit ? ` · ${t('limit {n}', { n: column.wipLimit })}` : ''}</span>
                 </>
               )}
             </li>
@@ -486,7 +491,7 @@ function ColumnsSection({ project, canEdit }: { project: Project; canEdit: boole
           <input value={draft.name} maxLength={40} placeholder={t("New column name")} aria-label={t("New column name")}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           <select value={draft.status} aria-label={t("New column status")} onChange={(e) => setDraft({ ...draft, status: e.target.value as Status })}>
-            {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+            {STATUSES.map((s) => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
           </select>
           <input className="wip-input" type="number" min={1} max={99} placeholder={t("WIP limit")} value={draft.wipLimit ?? ''}
             aria-label={t("New column WIP limit")} onChange={(e) => setDraft({ ...draft, wipLimit: limit(e.target.value) })} />
@@ -523,12 +528,11 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
     <section className="panel">
       <h2 className="panel-title"><GitBranch size={16} /> {t("Git hosting")}</h2>
       <p className="muted small hint">
-        Mention task keys like <code>{project.key}-12</code> in commit messages, branch names or pull request titles and they show up on
-        the task. Optionally move tasks to Done when their pull request is merged.
+        {t('Mention task keys like {example} in commit messages, branch names or pull request titles and they show up on the task. Optionally move tasks to Done when their pull request is merged.', { example: `${project.key}-12` })}
       </p>
       {!settings ? <Spinner /> : !settings.enabled ? (
-        <button className="btn btn-soft" onClick={() => act(() => api.enableGithub(project.key), 'GitHub integration enabled')}>
-          <GitBranch size={16} /> Connect a repository
+        <button className="btn btn-soft" onClick={() => act(() => api.enableGithub(project.key), t('GitHub integration enabled'))}>
+          <GitBranch size={16} /> {t('Connect a repository')}
         </button>
       ) : (
         <div className="github-setup">
@@ -582,12 +586,12 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
           <label className="toggle">
             <input type="checkbox" checked={settings.autoDone}
               onChange={(e) => act(() => api.setGithubAutoDone(project.key, e.target.checked),
-                e.target.checked ? 'Merged pull requests now complete their tasks' : 'Automatic completion turned off')} />
-            Move tasks to Done when a pull/merge request mentioning them is merged
+                e.target.checked ? t('Merged pull requests now complete their tasks') : t('Automatic completion turned off'))} />
+            {t('Move tasks to Done when a pull/merge request mentioning them is merged')}
           </label>
           <div className="button-row">
-            <button className="btn btn-ghost" onClick={() => act(() => api.enableGithub(project.key), 'New secret generated — update the webhook')}>
-              <RefreshCw size={15} /> Rotate secret
+            <button className="btn btn-ghost" onClick={() => act(() => api.enableGithub(project.key), t('New secret generated — update the webhook'))}>
+              <RefreshCw size={15} /> {t('Rotate secret')}
             </button>
             <button className="btn btn-ghost danger" onClick={() => setConfirmOff(true)}>{t("Disconnect")}</button>
           </div>
@@ -598,7 +602,7 @@ function GithubSection({ project, onChange }: { project: Project; onChange: () =
           message={t("Webhook deliveries will be rejected. Links already shown on tasks stay.")}
           onClose={() => setConfirmOff(false)}
           onConfirm={async () => {
-            await act(() => api.disableGithub(project.key), 'GitHub disconnected');
+            await act(() => api.disableGithub(project.key), t('GitHub disconnected'));
             setConfirmOff(false);
           }} />
       )}
@@ -630,7 +634,7 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
       const outcome = kind === 'jira' ? await api.importJira(project.key, file)
         : kind === 'trello' ? await api.importTrello(project.key, file) : await api.importCsv(project.key, file);
       setResult(outcome);
-      toast(`${outcome.created} task${outcome.created === 1 ? '' : 's'} imported`);
+      toast(outcome.created === 1 ? t('1 task imported') : t('{n} tasks imported', { n: outcome.created }));
     } catch (e) {
       toast((e as ApiError).message, 'error');
     } finally {
@@ -643,15 +647,14 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
       <h2 className="panel-title">{t("Import & export")}</h2>
       <StorageLine projectKey={project.key} />
       <p className="muted small hint">
-        Export every task as a CSV for spreadsheets. Import creates one task per row — columns: <code>Title</code> (required),
-        Description, Status, Priority, Assignee, Labels (separated by ;), Due date, Story points, Epic.
+        {t('Export every task as a CSV for spreadsheets. Import creates one task per row — columns: Title (required), Description, Status, Priority, Assignee, Labels (separated by ;), Due date, Story points, Epic.')}
       </p>
       <div className="button-row">
         <button className="btn btn-soft" onClick={exportCsv}><Download size={16} /> {t("Export CSV")}</button>
         {canEdit && (
           <>
             <button className="btn btn-soft" disabled={busy} onClick={() => fileRef.current?.click()}>
-              <Upload size={16} /> {busy ? 'Importing…' : 'Import CSV'}
+              <Upload size={16} /> {busy ? t('Importing…') : t('Import CSV')}
             </button>
             <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={(e) => {
               importCsv(e.target.files?.[0]);
@@ -664,9 +667,8 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
         <>
           <h3 className="subsection-title import-heading">{t("Move from another tool")}</h3>
           <p className="muted small hint">
-            <b>Jira:</b> Filters → Export → CSV (all fields). Epics, sub-tasks, statuses, priorities, labels and story points come along.
-            <br /><b>Trello:</b> Board menu → Print, export and share → Export as JSON. Lists become statuses (and labels), checklists and
-            comments are kept. People are matched to members by username, email or name.
+            <b>Jira:</b> {t('Filters → Export → CSV (all fields). Epics, sub-tasks, statuses, priorities, labels and story points come along.')}
+            <br /><b>Trello:</b> {t('Board menu → Print, export and share → Export as JSON. Lists become statuses (and labels), checklists and comments are kept. People are matched to members by username, email or name.')}
           </p>
           <div className="button-row">
             <button className="btn btn-ghost" disabled={busy} onClick={() => jiraRef.current?.click()}><Upload size={16} /> {t("Import from Jira")}</button>
@@ -684,15 +686,15 @@ function CsvSection({ project, canEdit }: { project: Project; canEdit: boolean }
       )}
       {result && (
         <div className="import-result">
-          <p><b>{result.created}</b> task{result.created === 1 ? '' : 's'} created
+          <p>{result.created === 1 ? t('1 task created') : t('{n} tasks created', { n: result.created })}
             {result.keys.length > 0 && <span className="muted"> ({result.keys.slice(0, 6).join(', ')}{result.keys.length > 6 ? '…' : ''})</span>}.
           </p>
           {result.errors.length > 0 && (
             <ul className="import-errors">
               {result.errors.slice(0, 20).map((error) => (
-                <li key={`${error.row}-${error.message}`}>Item {error.row}: {error.message}</li>
+                <li key={`${error.row}-${error.message}`}>{t('Item {n}: {message}', { n: error.row, message: error.message })}</li>
               ))}
-              {result.errors.length > 20 && <li className="muted">…and {result.errors.length - 20} more</li>}
+              {result.errors.length > 20 && <li className="muted">{t('…and {n} more', { n: result.errors.length - 20 })}</li>}
             </ul>
           )}
         </div>
@@ -712,8 +714,8 @@ function EmailInSection({ projectKey }: { projectKey: string }) {
   return (
     <section className="panel">
       <h2 className="panel-title">{t("Create tasks by email")}</h2>
-      <p className="muted small hint">Members can email this address: the subject becomes the title and the text the description.
-        Replying to a notification email adds a comment.</p>
+      <p className="muted small hint">{t('Members can email this address: the subject becomes the title and the text the description. Replying to a notification email adds a comment.')}
+        </p>
       <div className="copy-field">
         <input readOnly value={address} aria-label={t("Project email address")} onFocus={(e) => e.target.select()} />
         <button className="btn btn-soft btn-sm" onClick={() => navigator.clipboard.writeText(address)
@@ -733,8 +735,8 @@ function StorageLine({ projectKey }: { projectKey: string }) {
   const percent = usage.quotaBytes ? Math.min(100, Math.round((usage.usedBytes / usage.quotaBytes) * 100)) : null;
   return (
     <p className="muted small storage-line">
-      Attachments: {usage.files} file{usage.files === 1 ? '' : 's'}, {mb(usage.usedBytes)}
-      {usage.quotaBytes ? <> of {mb(usage.quotaBytes)} <span className="storage-bar"><span style={{ width: `${percent}%` }} /></span></> : ''}
+      {t('Attachments: {n} files, {size}', { n: usage.files, size: mb(usage.usedBytes) })}
+      {usage.quotaBytes ? <> {t('of {max}', { max: mb(usage.quotaBytes) })} <span className="storage-bar"><span style={{ width: `${percent}%` }} /></span></> : ''}
     </p>
   );
 }

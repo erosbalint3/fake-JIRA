@@ -94,7 +94,7 @@ public class User {
     @Column(length = 200)
     private String awayMessage;
 
-    /** Interface language: "en" or "hu". */
+    /** Interface language: "en", "hu", "de" or "es". */
     @Column(length = 5, columnDefinition = "varchar(5) default 'en'")
     private String language = "en";
 

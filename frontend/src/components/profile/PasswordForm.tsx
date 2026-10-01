@@ -4,6 +4,7 @@ import { api, ApiError } from '../../api';
 import { useAuth } from '../../auth';
 import { useToast } from '../../toast';
 import { usePasswordRules } from '../../passwordRules';
+import { t } from '../../i18n';
 
 /** Change (or, for Google/GitHub-only accounts, set) the password. Other devices get signed out. */
 export function PasswordForm({ hasPassword, onDone }: { hasPassword: boolean; onDone?: () => void }) {
@@ -17,11 +18,11 @@ export function PasswordForm({ hasPassword, onDone }: { hasPassword: boolean; on
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (rules.some((rule) => !rule.test(values.next))) {
-      setErrors({ next: 'Password does not meet the requirements' });
+      setErrors({ next: t('Password does not meet the requirements') });
       return;
     }
     if (values.next !== values.confirm) {
-      setErrors({ confirm: 'Passwords do not match' });
+      setErrors({ confirm: t('Passwords do not match') });
       return;
     }
     setBusy(true);
@@ -30,7 +31,7 @@ export function PasswordForm({ hasPassword, onDone }: { hasPassword: boolean; on
       await api.changePassword(values.current, values.next);
       setValues({ current: '', next: '', confirm: '' });
       passwordChanged();
-      toast(hasPassword ? 'Password updated. Your other devices were signed out.' : 'Password set');
+      toast(hasPassword ? t('Password updated. Your other devices were signed out.') : t('Password set'));
       onDone?.();
     } catch (e) {
       const apiError = e as ApiError;
@@ -44,7 +45,7 @@ export function PasswordForm({ hasPassword, onDone }: { hasPassword: boolean; on
 
   const input = (key: keyof typeof values, label: string, autoComplete: string) => (
     <label className="field">
-      <span>{label}</span>
+      <span>{t(label)}</span>
       <input type="password" autoComplete={autoComplete} value={values[key]}
         onChange={(e) => setValues({ ...values, [key]: e.target.value })} aria-invalid={!!errors[key]} />
       {errors[key] && <small className="field-error">{errors[key]}</small>}
@@ -63,7 +64,7 @@ export function PasswordForm({ hasPassword, onDone }: { hasPassword: boolean; on
       {input('confirm', 'Confirm new password', 'new-password')}
       <div>
         <button className="btn btn-primary" disabled={busy || (hasPassword && !values.current) || !values.next}>
-          {hasPassword ? 'Update password' : 'Set password'}
+          {hasPassword ? t('Update password') : t('Set password')}
         </button>
       </div>
     </form>

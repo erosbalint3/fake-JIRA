@@ -1,3 +1,5 @@
+import { TablePage } from './pages/TablePage';
+import { GalleryPage } from './pages/GalleryPage';
 import { useLanguage } from './i18n';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
@@ -103,6 +105,8 @@ export function App() {
         <Route path="/p/:key/board" element={<BoardPage />} />
         <Route path="/p/:key/backlog" element={<BacklogPage />} />
         <Route path="/p/:key/roadmap" element={<RoadmapPage />} />
+        <Route path="/p/:key/table" element={<TablePage />} />
+        <Route path="/p/:key/gallery" element={<GalleryPage />} />
         <Route path="/p/:key/timeline" element={<TimelinePage />} />
         <Route path="/p/:key/wiki" element={<WikiPage />} />
         <Route path="/p/:key/wiki/:slug" element={<WikiPage />} />

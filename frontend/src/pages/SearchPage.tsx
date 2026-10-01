@@ -94,7 +94,7 @@ export function SearchPage() {
   const header = (key: SortKey, label: string, className = '') => (
     <th className={className} aria-sort={sort?.key === key ? (sort.desc ? 'descending' : 'ascending') : undefined}>
       <button className="th-sort" onClick={() => setSort(sort?.key === key ? { key, desc: !sort.desc } : { key, desc: false })}>
-        {label}{sort?.key === key ? (sort.desc ? ' ↓' : ' ↑') : ''}
+        {t(label)}{sort?.key === key ? (sort.desc ? ' ↓' : ' ↑') : ''}
       </button>
     </th>
   );
@@ -150,18 +150,18 @@ export function SearchPage() {
       }} />
       <div className="chip-row fql-examples">
         {EXAMPLES.map((e) => (
-          <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{e.label}</button>
+          <button key={e.label} className="chip" onClick={() => setParams({ q: e.q })}>{t(e.label)}</button>
         ))}
         <details className="fql-help">
           <summary className="link small">{t("Syntax help")}</summary>
           <div className="fql-help-body small">
-            <p><code>field operator value</code> {t("joined with")} <code>AND</code>, <code>OR</code>, <code>NOT</code> and parentheses,
-              then optionally <code>ORDER BY field [ASC|DESC]</code>.</p>
-            <p>Operators: <code>=</code> <code>!=</code> <code>~</code> {t("(contains)")} <code>&gt;</code> <code>&lt;</code>
+            <p><code>field operator value</code> {t("joined with")} <code>AND</code>, <code>OR</code>, <code>NOT</code> {t('and parentheses,')}
+              {t('then optionally')} <code>ORDER BY field [ASC|DESC]</code>.</p>
+            <p>{t('Operators:')} <code>=</code> <code>!=</code> <code>~</code> {t("(contains)")} <code>&gt;</code> <code>&lt;</code>
               <code>in (a, b)</code> <code>not in (…)</code> <code>is empty</code>.</p>
-            <p>Dates: <code>2026-10-01</code>, <code>today</code>, <code>-7d</code>, <code>+2w</code>, <code>startOfWeek</code>,
-              <code>endOfMonth</code>. People: <code>me</code>, a username, <code>membersOf(team)</code>.</p>
-            <p>Example: <code>project = WEB AND (type = bug OR priority &gt;= high) AND text ~ "checkout" ORDER BY due</code></p>
+            <p>{t('Dates:')} <code>2026-10-01</code>, <code>today</code>, <code>-7d</code>, <code>+2w</code>, <code>startOfWeek</code>,
+              <code>endOfMonth</code>. {t('People:')} <code>me</code>, {t('a username')}, <code>membersOf(team)</code>.</p>
+            <p>{t('Example:')} <code>project = WEB AND (type = bug OR priority &gt;= high) AND text ~ "checkout" ORDER BY due</code></p>
           </div>
         </details>
       </div>
@@ -171,8 +171,8 @@ export function SearchPage() {
         <section className="panel search-results">
           <div className="panel-head">
             <h2 className="panel-title">
-              {result.total} task{result.total === 1 ? '' : 's'}
-              {result.truncated && <span className="muted small"> · showing the first {result.tasks.length}</span>}
+              {result.total === 1 ? t('1 task') : t('{n} tasks', { n: result.total })}
+              {result.truncated && <span className="muted small"> · {t('showing the first {n}', { n: result.tasks.length })}</span>}
             </h2>
             <div className="header-actions">
               <button className="btn btn-ghost btn-sm" onClick={copyLink}><Link2 size={15} /> {t("Copy link")}</button>
@@ -195,8 +195,8 @@ export function SearchPage() {
                     {header('status', 'Status')}
                     {header('priority', 'Priority')}
                     {header('assignee', 'Assignee')}
-                    {header('due', 'Due')}
-                    {header('points', 'Pts', 'num')}
+                    {header('due', 'Due date')}
+                    {header('points', 'Points', 'num')}
                   </tr>
                 </thead>
                 <tbody>
@@ -220,7 +220,7 @@ export function SearchPage() {
       )}
       {saving && <SaveSearchModal query={text} onClose={() => setSaving(false)} onSaved={(name) => {
         setSaving(false);
-        toast(`Filter "${name}" saved`);
+        toast(t('Filter “{name}” saved', { name }));
         window.dispatchEvent(new Event(FILTERS_CHANGED));
       }} />}
       {scheduling && <ScheduleReportModal kind="filter" target={params.get('q') ?? text} defaultTitle=""
@@ -265,7 +265,7 @@ function SaveSearchModal({ query, onClose, onSaved }: { query: string; onClose: 
           </select>
         </label>
         <label className="toggle">
-          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} /> Share with the project
+          <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} /> {t('Share with the project')}
         </label>
         <p className="muted small">{t("Saved filters appear in the sidebar and the command palette.")}</p>
       </form>

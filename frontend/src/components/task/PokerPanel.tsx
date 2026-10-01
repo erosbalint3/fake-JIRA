@@ -5,6 +5,7 @@ import { useLiveRefresh } from '../../live';
 import { useToast } from '../../toast';
 import { Avatar } from '../Avatar';
 import type { PokerState, Task } from '../../types';
+import { t } from '../../i18n';
 
 /** Planning poker: everyone picks a card in secret, then the votes are revealed and an estimate accepted. */
 export function PokerPanel({ task, canEdit, onAccepted }: { task: Task; canEdit: boolean; onAccepted: () => void }) {
@@ -38,8 +39,8 @@ export function PokerPanel({ task, canEdit, onAccepted }: { task: Task; canEdit:
     if (!canEdit) return null;
     return (
       <div className="poker poker-idle">
-        <button className="btn btn-ghost btn-sm btn-block" onClick={() => run(() => api.startPoker(task.id), 'Planning poker started')}>
-          <Dices size={15} /> Estimate with planning poker
+        <button className="btn btn-ghost btn-sm btn-block" onClick={() => run(() => api.startPoker(task.id), t('Planning poker started'))}>
+          <Dices size={15} /> {t('Estimate with planning poker')}
         </button>
       </div>
     );
@@ -47,19 +48,19 @@ export function PokerPanel({ task, canEdit, onAccepted }: { task: Task; canEdit:
 
   const numeric = state.deck.filter((c) => /^\d+$/.test(c));
   return (
-    <section className="poker" aria-label="Planning poker">
+    <section className="poker" aria-label={t('Planning poker')}>
       <header>
-        <h3><Dices size={15} /> Planning poker</h3>
+        <h3><Dices size={15} /> {t('Planning poker')}</h3>
         {canEdit && (
-          <button className="icon-button sm" aria-label="Cancel planning poker" title="Cancel"
-            onClick={() => run(() => api.cancelPoker(task.id), 'Planning poker cancelled')}><X size={15} /></button>
+          <button className="icon-button sm" aria-label={t('Cancel planning poker')} title={t('Cancel')}
+            onClick={() => run(() => api.cancelPoker(task.id), t('Planning poker cancelled'))}><X size={15} /></button>
         )}
       </header>
       {!state.revealed ? (
         <>
-          <p className="muted small">{state.votes.length ? `${state.votes.length} voted` : 'Nobody has voted yet'} · votes stay hidden until revealed</p>
+          <p className="muted small">{state.votes.length ? t('{n} voted', { n: state.votes.length }) : t('Nobody has voted yet')} · {t('votes stay hidden until revealed')}</p>
           {canEdit && (
-            <div className="poker-deck" role="radiogroup" aria-label="Your estimate">
+            <div className="poker-deck" role="radiogroup" aria-label={t('Your estimate')}>
               {state.deck.map((card) => (
                 <button key={card} role="radio" aria-checked={state.myVote === card}
                   className={`poker-card ${state.myVote === card ? 'picked' : ''}`}
@@ -72,8 +73,8 @@ export function PokerPanel({ task, canEdit, onAccepted }: { task: Task; canEdit:
         </>
       ) : (
         <p className="poker-result">
-          {state.average !== null ? <>Average <strong>{state.average}</strong> · suggested <strong>{state.suggestion}</strong></> : 'No numeric votes.'}
-          {state.consensus && <span className="chip success">Consensus!</span>}
+          {state.average !== null ? <>{t('Average')} <strong>{state.average}</strong> · {t('suggested')} <strong>{state.suggestion}</strong></> : t('No numeric votes.')}
+          {state.consensus && <span className="chip success">{t('Consensus!')}</span>}
         </p>
       )}
       <ul className="poker-votes">
@@ -89,22 +90,22 @@ export function PokerPanel({ task, canEdit, onAccepted }: { task: Task; canEdit:
         <div className="poker-actions">
           {!state.revealed ? (
             <button className="btn btn-soft btn-sm" disabled={state.votes.length === 0}
-              onClick={() => run(() => api.revealPoker(task.id))}>Reveal votes</button>
+              onClick={() => run(() => api.revealPoker(task.id))}>{t('Reveal votes')}</button>
           ) : (
             <>
-              <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label="Estimate to accept">
-                {numeric.map((c) => <option key={c} value={c}>{c} pts</option>)}
+              <select value={choice} onChange={(e) => setChoice(e.target.value)} aria-label={t('Estimate to accept')}>
+                {numeric.map((c) => <option key={c} value={c}>{t('{n} pts', { n: c })}</option>)}
               </select>
               <button className="btn btn-primary btn-sm" disabled={!choice}
                 onClick={() => run(async () => {
                   const next = await api.acceptPoker(task.id, Number(choice));
                   onAccepted();
                   return next;
-                }, `Estimated at ${choice} points`)}><Check size={15} /> Accept estimate</button>
+                }, t('Estimated at {n} points', { n: choice }))}><Check size={15} /> {t('Accept estimate')}</button>
             </>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={() => run(() => api.startPoker(task.id), 'New round')}>
-            <RotateCcw size={14} /> Restart
+          <button className="btn btn-ghost btn-sm" onClick={() => run(() => api.startPoker(task.id), t('New round'))}>
+            <RotateCcw size={14} /> {t('Restart')}
           </button>
         </div>
       )}

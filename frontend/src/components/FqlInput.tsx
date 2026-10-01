@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { api } from '../api';
 import { useProjects } from '../projects';
 import type { SearchField, Team } from '../types';
+import { t } from '../i18n';
 
 const OPERATORS = ['=', '!=', '~', 'in (', 'not in (', 'is empty', 'is not empty', '>', '>=', '<', '<='];
 const JOINERS = ['AND', 'OR', 'NOT', 'ORDER BY'];
@@ -156,7 +157,7 @@ export function FqlInput({ value, onChange, onSubmit, errorAt }: Props) {
         spellCheck={false}
         autoComplete="off"
         role="combobox"
-        aria-label="Query"
+        aria-label={t('Query')}
         aria-autocomplete="list"
         aria-expanded={open && suggestions.length > 0}
         aria-controls="fql-suggestions"

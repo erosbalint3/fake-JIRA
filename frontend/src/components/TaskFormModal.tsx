@@ -119,11 +119,11 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.title.trim()) {
-      setErrors({ title: 'Title is required' });
+      setErrors({ title: t('Title is required') });
       return;
     }
     if (mode.kind === 'create' && !projectKey) {
-      setErrors({ projectKey: 'Choose a project' });
+      setErrors({ projectKey: t('Choose a project') });
       return;
     }
     setBusy(true);
@@ -180,7 +180,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
           </label>
         )}
         {mode.kind === 'create' && mode.parent && (
-          <p className="muted form-note">{t("Subtask of")} <b>{mode.parent.key}</b>. It joins the parent's sprint and epic.</p>
+          <p className="muted form-note">{t("Subtask of")} <b>{mode.parent.key}</b>. {t("It joins the parent's sprint and epic.")}</p>
         )}
         {mode.kind === 'create' && !mode.projectKey && (
           <label className="field">
@@ -261,7 +261,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
               <label key={type} className={form.type === type ? 'active' : ''}>
                 <input type="radio" name="type" value={type} checked={form.type === type}
                   onChange={() => setForm({ ...form, type })} />
-                <TypeIcon type={type} /> {TASK_TYPE_LABEL[type]}
+                <TypeIcon type={type} /> {t(TASK_TYPE_LABEL[type])}
               </label>
             ))}
           </div>
@@ -279,7 +279,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
                   onChange={() => setForm({ ...form, priority })}
                 />
                 <PriorityBadge priority={priority} compact />
-                {PRIORITY_LABEL[priority]}
+                {t(PRIORITY_LABEL[priority])}
               </label>
             ))}
           </div>
@@ -318,7 +318,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
           <label className="field">
             <span>{t("Epic")}</span>
             <select value={form.epicId ?? ''} onChange={(e) => setForm({ ...form, epicId: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">{mode.kind === 'create' && mode.parent ? 'Same as parent' : 'No epic'}</option>
+              <option value="">{mode.kind === 'create' && mode.parent ? t('Same as parent') : t('No epic')}</option>
               {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
             </select>
           </label>
@@ -338,7 +338,7 @@ export function TaskFormModal({ title, submitLabel, mode, onClose, uploadImage }
             <ul className="template-checklist">
               {checklist.map((item, i) => (
                 <li key={`${item}-${i}`}>{item}
-                  <button type="button" className="icon-button sm" aria-label={`Remove ${item}`}
+                  <button type="button" className="icon-button sm" aria-label={t('Remove {name}', { name: item })}
                     onClick={() => setChecklist(checklist.filter((_, j) => j !== i))}>×</button>
                 </li>
               ))}

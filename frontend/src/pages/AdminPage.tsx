@@ -80,7 +80,7 @@ export function AdminPage() {
       await navigator.clipboard.writeText(text);
       toast(t("Invite link copied"));
     } catch {
-      window.prompt('Copy the invite link:', text);
+      window.prompt(t('Copy the invite link:'), text);
     }
   };
 
@@ -118,10 +118,10 @@ export function AdminPage() {
         <>
           {site && site.url !== window.location.origin && (
             <div className="alert">
-              Links in emails point to <b>{site.url}</b>, but you are using {window.location.origin}.
+              {t('Links in emails point to {url}, but you are using {origin}.', { url: site.url, origin: window.location.origin })}
               {site.configured
-                ? ' Update APP_BASE_URL in your .env and restart the app.'
-                : ' Reload this page to update it, or set APP_BASE_URL in your .env.'}
+                ? ` ${t('Update APP_BASE_URL in your .env and restart the app.')}`
+                : ` ${t('Reload this page to update it, or set APP_BASE_URL in your .env.')}`}
             </div>
           )}
           <nav className="tabs" role="tablist" aria-label={t("Admin sections")}>
@@ -139,8 +139,8 @@ export function AdminPage() {
                 <label key={option.mode} className={`mode-option ${mode === option.mode ? 'active' : ''}`}>
                   <input type="radio" name="registration" checked={mode === option.mode} disabled={busy}
                     onChange={() => act(() => api.setRegistrationMode(option.mode), `Sign-up is now: ${option.title.toLowerCase()}`)} />
-                  <strong>{option.title}</strong>
-                  <span className="muted small">{option.text}</span>
+                  <strong>{t(option.title)}</strong>
+                  <span className="muted small">{t(option.text)}</span>
                 </label>
               ))}
             </div>
@@ -155,7 +155,7 @@ export function AdminPage() {
                     <Avatar user={u} size={32} />
                     <div className="member-text">
                       <strong>{u.username}</strong>
-                      <span className="muted small">{u.email} · signed up {timeAgo(createdAt)}</span>
+                      <span className="muted small">{u.email} · {t('signed up {when}', { when: timeAgo(createdAt) })}</span>
                     </div>
                     <button className="btn btn-soft sm" disabled={busy}
                       onClick={() => act(() => api.approveUser(u.id), `${u.username} approved`)}><Check size={15} /> {t("Approve")}</button>
@@ -169,8 +169,8 @@ export function AdminPage() {
 
           <section className="panel">
             <h2 className="panel-title"><Link2 size={16} /> {t("Invites")}</h2>
-            <p className="muted small hint">Invite links work in every sign-up mode and are valid for 7 days. Project owners can also invite people
-              to their project from its settings.</p>
+            <p className="muted small hint">{t('Invite links work in every sign-up mode and are valid for 7 days. Project owners can also invite people to their project from its settings.')}
+              </p>
             <form className="inline-form" onSubmit={createInvite}>
               <input type="email" value={inviteEmail} placeholder={t("Email (optional — binds the invite)")} aria-label={t("Invite email")}
                 onChange={(e) => setInviteEmail(e.target.value)} />
@@ -181,14 +181,14 @@ export function AdminPage() {
                 {openInvites.map((invite) => (
                   <li key={invite.id}>
                     <div className="invite-text">
-                      <strong>{invite.email ?? 'Anyone with the link'}{invite.projectKey && <span className="muted"> → {invite.projectKey}</span>}</strong>
-                      <span className="muted small">Expires {formatDate(invite.expiresAt)} · by {invite.createdBy}</span>
+                      <strong>{invite.email ?? t('Anyone with the link')}{invite.projectKey && <span className="muted"> → {invite.projectKey}</span>}</strong>
+                      <span className="muted small">{t('Expires {date}', { date: formatDate(invite.expiresAt) })} · {t('by {name}', { name: invite.createdBy })}</span>
                     </div>
                     <button className="icon-button sm" aria-label={t("Copy invite link")} title={t("Copy link")} onClick={() => copy(inviteLink(invite.code))}>
                       <Copy size={15} />
                     </button>
                     <button className="icon-button sm" aria-label={t("Revoke invite")} title={t("Revoke")}
-                      onClick={() => act(() => api.revokeInvite(invite.id), 'Invite revoked')}>
+                      onClick={() => act(() => api.revokeInvite(invite.id), t('Invite revoked'))}>
                       <Trash2 size={15} />
                     </button>
                   </li>
@@ -205,23 +205,23 @@ export function AdminPage() {
                   <Avatar user={u} size={32} />
                   <div className="member-text">
                     <strong>{u.displayName}{u.id === user?.id && <span className="muted"> {t("(you)")}</span>}</strong>
-                    <span className="muted small">@{u.username} · {u.email} · joined {formatDate(createdAt)}</span>
+                    <span className="muted small">@{u.username} · {u.email} · {t('joined {date}', { date: formatDate(createdAt) })}</span>
                   </div>
                   {twoFactor && <span className="tag-2fa" title={t("Two-step verification is on")}>{t("2FA")}</span>}
                   {mustChangePassword && <span className="tag-warn">{t("Must change password")}</span>}
                   {isAdmin && <span className="owner-badge"><Shield size={13} /> {t("Admin")}</span>}
-                  <ActionMenu label={`Actions for ${u.username}`} actions={[
-                    { label: isAdmin ? 'Remove admin rights' : 'Make admin',
-                      onSelect: () => act(() => api.setAdmin(u.id, !isAdmin), isAdmin ? `${u.username} is no longer an admin` : `${u.username} is now an admin`) },
-                    { label: 'Require password change', hidden: mustChangePassword,
-                      onSelect: () => act(() => api.requirePasswordChange(u.id), `${u.username} must choose a new password`) },
-                    { label: 'Turn off two-step verification', hidden: !twoFactor,
+                  <ActionMenu label={t('Actions for {key}', { key: u.username })} actions={[
+                    { label: isAdmin ? t('Remove admin rights') : t('Make admin'),
+                      onSelect: () => act(() => api.setAdmin(u.id, !isAdmin), isAdmin ? t('{name} is no longer an admin', { name: u.username }) : t('{name} is now an admin', { name: u.username })) },
+                    { label: t('Require password change'), hidden: mustChangePassword,
+                      onSelect: () => act(() => api.requirePasswordChange(u.id), t('{name} must choose a new password', { name: u.username })) },
+                    { label: t('Turn off two-step verification'), hidden: !twoFactor,
                       onSelect: () => setConfirm({ kind: 'reset2fa', user: u }) },
-                    { label: 'Sign out everywhere',
-                      onSelect: () => act(() => api.signOutUser(u.id), `${u.username} was signed out everywhere`) },
+                    { label: t('Sign out everywhere'),
+                      onSelect: () => act(() => api.signOutUser(u.id), t('{name} was signed out everywhere', { name: u.username })) },
                     { label: t('Deactivate'), hidden: u.id === user?.id,
                       onSelect: () => act(() => api.suspendUser(u.id), t('{name} was deactivated', { name: u.username })) },
-                    { label: 'Delete account…', danger: true, hidden: u.id === user?.id,
+                    { label: t('Delete account…'), danger: true, hidden: u.id === user?.id,
                       onSelect: () => setConfirm({ kind: 'delete', user: u }) },
                   ]} />
                 </li>
@@ -268,10 +268,10 @@ export function AdminPage() {
             <div className="panel-head">
               <h2 className="panel-title"><Archive size={16} /> {t("Backups")}</h2>
               <button className="btn btn-soft sm" disabled={busy}
-                onClick={() => act(() => api.backupNow(), 'Backup created')}>{t("Back up now")}</button>
+                onClick={() => act(() => api.backupNow(), t('Backup created'))}>{t("Back up now")}</button>
             </div>
-            <p className="muted small hint">A backup of the database and attachments is made every night; the last 14 are kept in the data
-              volume. Download one to keep a copy off the server — the README explains how to restore it.</p>
+            <p className="muted small hint">{t('A backup of the database and attachments is made every night; the last 14 are kept in the data volume. Download one to keep a copy off the server — the README explains how to restore it.')}
+              </p>
             {!backups ? <Spinner /> : backups.length === 0 ? <p className="muted">{t("No backups yet.")}</p> : (
               <ul className="mini-list">
                 {backups.map((backup) => (
@@ -280,7 +280,7 @@ export function AdminPage() {
                       <strong className="mono small">{backup.name}</strong>
                       <span className="muted small">{formatDate(backup.createdAt)} · {fileSize(backup.size)}</span>
                     </div>
-                    <button className="icon-button sm" aria-label={`Download ${backup.name}`} title={t("Download")}
+                    <button className="icon-button sm" aria-label={t('Download {name}', { name: backup.name })} title={t("Download")}
                       onClick={async () => {
                         try {
                           saveBlob(await api.backupBlob(backup.name), backup.name);
@@ -347,20 +347,20 @@ export function AdminPage() {
         </Modal>
       )}
       {confirm?.kind === 'delete' && (
-        <ConfirmDialog title={`Delete ${confirm.user.username}'s account?`} confirmLabel={t("Delete account")} danger busy={busy}
+        <ConfirmDialog title={t("Delete {name}'s account?", { name: confirm.user.username })} confirmLabel={t("Delete account")} danger busy={busy}
           message={t("Projects they own alone are deleted, they leave other projects, and their personal data is erased. Comments and history stay as “Deleted user”. This cannot be undone.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            await act(() => api.deleteUserAccount(confirm.user.id), `${confirm.user.username}'s account was deleted`);
+            await act(() => api.deleteUserAccount(confirm.user.id), t("{name}'s account was deleted", { name: confirm.user.username }));
             setConfirm(null);
           }} />
       )}
       {confirm?.kind === 'reset2fa' && (
-        <ConfirmDialog title={`Turn off two-step verification for ${confirm.user.username}?`} confirmLabel={t("Turn off")} busy={busy}
+        <ConfirmDialog title={t('Turn off two-step verification for {name}?', { name: confirm.user.username })} confirmLabel={t("Turn off")} busy={busy}
           message={t("Use this when they lost their phone and recovery codes. They can sign in with their password alone and set it up again.")}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            await act(() => api.resetTwoFactor(confirm.user.id), 'Two-step verification turned off');
+            await act(() => api.resetTwoFactor(confirm.user.id), t('Two-step verification turned off'));
             setConfirm(null);
           }} />
       )}

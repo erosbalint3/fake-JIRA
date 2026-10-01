@@ -39,6 +39,7 @@ export function TimelinePage() {
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState<Zoom>('week');
   const [criticalOnly, setCriticalOnly] = useState(false);
+  const [groupBy, setGroupBy] = useState<'task' | 'person'>('task');
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
 
@@ -68,6 +69,41 @@ export function TimelinePage() {
   const dayW = ZOOMS[zoom];
   const width = (range.last - range.first + 1) * dayW;
   const index = new Map(bars.map((b, i) => [b.id, i]));
+  // Rows: one per task, or per person with their work packed into as few lanes as possible.
+  type NameRow = { kind: 'task'; bar: TimelineBar } | { kind: 'person'; user: TimelineBar['assignee']; lane: number; lanes: number; count: number };
+  const rowOf = new Map<number, number>();
+  const nameRows: NameRow[] = [];
+  if (groupBy === 'task') {
+    bars.forEach((b, i) => {
+      rowOf.set(b.id, i);
+      nameRows.push({ kind: 'task', bar: b });
+    });
+  } else {
+    const groups = new Map<string, TimelineBar[]>();
+    for (const b of bars) {
+      const id = b.assignee ? String(b.assignee.id) : '';
+      groups.set(id, [...(groups.get(id) ?? []), b]);
+    }
+    const ordered = [...groups.entries()].sort(([a, x], [b, y]) => (a === '' ? 1 : b === '' ? -1
+      : (x[0].assignee?.displayName ?? '').localeCompare(y[0].assignee?.displayName ?? '')));
+    for (const [, list] of ordered) {
+      const lanes: number[] = [];
+      const laneOf = new Map<number, number>();
+      for (const b of [...list].sort((a, c) => a.start.localeCompare(c.start))) {
+        const start = toDays(b.start);
+        let lane = lanes.findIndex((end) => end < start);
+        if (lane < 0) lane = lanes.length;
+        lanes[lane] = toDays(b.due);
+        laneOf.set(b.id, lane);
+      }
+      const base = nameRows.length;
+      for (let l = 0; l < lanes.length; l++) {
+        nameRows.push({ kind: 'person', user: list[0].assignee, lane: l, lanes: lanes.length, count: list.length });
+      }
+      list.forEach((b) => rowOf.set(b.id, base + (laneOf.get(b.id) ?? 0)));
+    }
+  }
+  const rowCount = nameRows.length;
   const geometry = (b: TimelineBar) => {
     let start = toDays(b.start);
     let end = toDays(b.due);
@@ -140,9 +176,9 @@ export function TimelinePage() {
     const a = geometry(from);
     const b = geometry(to);
     const x1 = a.left + a.width;
-    const y1 = index.get(dep.from)! * ROW + ROW / 2;
+    const y1 = rowOf.get(dep.from)! * ROW + ROW / 2;
     const x2 = b.left;
-    const y2 = index.get(dep.to)! * ROW + ROW / 2;
+    const y2 = rowOf.get(dep.to)! * ROW + ROW / 2;
     // Room for a simple elbow; otherwise step back around the start of the next bar.
     const d = x2 - x1 >= 16
       ? `M ${x1} ${y1} H ${x1 + 8} V ${y2} H ${x2 - 2}`
@@ -164,6 +200,14 @@ export function TimelinePage() {
               <label key={z} className={zoom === z ? 'active' : ''}>
                 <input type="radio" name="zoom" checked={zoom === z} onChange={() => setZoom(z)} />
                 {z === 'day' ? t('Days') : z === 'week' ? t('Weeks') : t('Months')}
+              </label>
+            ))}
+          </div>
+          <div className="segmented segmented-2" role="radiogroup" aria-label={t('Rows')}>
+            {(['task', 'person'] as const).map((g) => (
+              <label key={g} className={groupBy === g ? 'active' : ''}>
+                <input type="radio" name="groupBy" checked={groupBy === g} onChange={() => setGroupBy(g)} />
+                {g === 'task' ? t('By task') : t('By person')}
               </label>
             ))}
           </div>
@@ -197,12 +241,23 @@ export function TimelinePage() {
             <div className="gantt" onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
               <div className="gantt-names">
                 <div className="gantt-head" />
-                {bars.map((b) => (
-                  <div key={b.id} className={`gantt-name ${b.critical ? 'critical' : ''}`} style={{ height: ROW }}>
-                    <TypeIcon type={b.type} />
-                    <Link to={`/tasks/${b.id}`} className="task-key">{b.key}</Link>
-                    <span className="gantt-title" title={b.title}>{b.title}</span>
-                    {b.assignee && <Avatar user={b.assignee} size={20} />}
+                {nameRows.map((row, i) => row.kind === 'task' ? (
+                  <div key={row.bar.id} className={`gantt-name ${row.bar.critical ? 'critical' : ''}`} style={{ height: ROW }}>
+                    <TypeIcon type={row.bar.type} />
+                    <Link to={`/tasks/${row.bar.id}`} className="task-key">{row.bar.key}</Link>
+                    <span className="gantt-title" title={row.bar.title}>{row.bar.title}</span>
+                    {row.bar.assignee && <Avatar user={row.bar.assignee} size={20} />}
+                  </div>
+                ) : (
+                  <div key={`p${i}`} className={`gantt-name gantt-person ${row.lane === 0 ? 'first' : ''}`} style={{ height: ROW }}>
+                    {row.lane === 0 && (
+                      <>
+                        {row.user ? <Avatar user={row.user} size={22} /> : <span className="avatar-empty sm" />}
+                        <span className="gantt-title">{row.user?.displayName ?? t('Unassigned')}</span>
+                        <span className="muted small">{t('{n} tasks', { n: row.count })}</span>
+                        {row.lanes > 1 && row.user && <span className="chip chip-warn chip-sm" title={t('Some of their tasks overlap in time')}>{t('Overlapping')}</span>}
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -213,10 +268,10 @@ export function TimelinePage() {
                       <span key={tick.x} className={`gantt-tick ${tick.major ? 'major' : ''}`} style={{ left: tick.x }}>{tick.label}</span>
                     ))}
                   </div>
-                  <div className="gantt-body" style={{ height: bars.length * ROW }}>
+                  <div className="gantt-body" style={{ height: rowCount * ROW }}>
                     {ticks.map((tick) => <span key={tick.x} className={`gantt-line ${tick.major ? 'major' : ''}`} style={{ left: tick.x }} />)}
                     <span className="gantt-today" style={{ left: (range.today - range.first) * dayW + dayW / 2 }} title={t('Today')} />
-                    <svg className="gantt-arrows" width={width} height={bars.length * ROW} aria-hidden>
+                    <svg className="gantt-arrows" width={width} height={rowCount * ROW} aria-hidden>
                       <defs>
                         <marker id="gantt-head" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
                           <path d="M0,0 L8,4 L0,8 z" className="gantt-arrow-head" />
@@ -227,8 +282,9 @@ export function TimelinePage() {
                           className={`gantt-arrow ${a.critical ? 'critical' : ''} ${a.late ? 'late' : ''}`} />
                       ))}
                     </svg>
-                    {bars.map((b, i) => {
+                    {bars.map((b) => {
                       const g = geometry(b);
+                      const i = rowOf.get(b.id) ?? 0;
                       return (
                         <div key={b.id} className={`gantt-bar status-${b.status.toLowerCase()} ${b.critical ? 'critical' : ''} ${b.conflict ? 'conflict' : ''} ${drag?.id === b.id ? 'dragging' : ''}`}
                           style={{ left: g.left, width: g.width, top: i * ROW + 7 }}

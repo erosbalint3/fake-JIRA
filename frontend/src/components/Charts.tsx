@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Frame, HEIGHT, PAD, useWidth } from './FlowCharts';
+import { t } from '../i18n';
 
 /** Chart colours, in order; each has a light and dark variant in the stylesheet. */
 const SERIES = ['series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6', 'series-7', 'series-8'];
@@ -127,7 +128,7 @@ export function DonutChart({ slices, label }: { slices: { label: string; value: 
           return element;
         })}
         <text x={90} y={86} textAnchor="middle" className="donut-total">{total}</text>
-        <text x={90} y={106} textAnchor="middle" className="viz-axis">total</text>
+        <text x={90} y={106} textAnchor="middle" className="viz-axis">{t('total')}</text>
       </svg>
       <ul className="donut-legend">
         {slices.map((slice, i) => (

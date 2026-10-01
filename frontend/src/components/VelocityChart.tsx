@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { VelocityEntry } from '../types';
+import { t } from '../i18n';
 
 const HEIGHT = 260;
 const PAD = { top: 16, right: 16, bottom: 36, left: 40 };
@@ -54,19 +55,19 @@ export function VelocityChart({ entries }: { entries: VelocityEntry[] }) {
   return (
     <div className="viz-root">
       <div className="viz-head">
-        <ul className="viz-legend" aria-label="Legend">
-          <li><i className="swatch-box" style={{ background: 'var(--cat-1)' }} />Committed</li>
-          <li><i className="swatch-box" style={{ background: 'var(--cat-0)' }} />Completed</li>
+        <ul className="viz-legend" aria-label={t('Legend')}>
+          <li><i className="swatch-box" style={{ background: 'var(--cat-1)' }} />{t('Committed')}</li>
+          <li><i className="swatch-box" style={{ background: 'var(--cat-0)' }} />{t('Completed')}</li>
         </ul>
         <button type="button" className="link small" onClick={() => setAsTable(!asTable)}>
-          {asTable ? 'Show chart' : 'Show as table'}
+          {asTable ? t('Show chart') : t('Show as table')}
         </button>
       </div>
 
       {asTable ? (
         <div className="viz-table-wrap">
           <table className="viz-table">
-            <thead><tr><th>Sprint</th><th>Committed pts</th><th>Completed pts</th><th>Tasks done</th></tr></thead>
+            <thead><tr><th>{t('Sprint')}</th><th>{t('Committed pts')}</th><th>{t('Completed pts')}</th><th>{t('Tasks done')}</th></tr></thead>
             <tbody>
               {entries.map((e) => (
                 <tr key={e.sprintId}>
@@ -82,7 +83,7 @@ export function VelocityChart({ entries }: { entries: VelocityEntry[] }) {
       ) : (
         <div className="viz-plot" ref={wrapRef}>
           <svg width={width} height={HEIGHT} role="img"
-            aria-label={`Velocity over the last ${entries.length} sprints`}>
+            aria-label={t('Velocity over the last {n} sprints', { n: entries.length })}>
             {yTicks.map((v) => (
               <g key={v}>
                 <line x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)} className="viz-grid" />
@@ -110,9 +111,9 @@ export function VelocityChart({ entries }: { entries: VelocityEntry[] }) {
               top: PAD.top,
             }}>
               <strong>{hovered.name}</strong>
-              <span><i className="swatch-box" style={{ background: 'var(--cat-1)' }} />{hovered.committedPoints} pts committed</span>
-              <span><i className="swatch-box" style={{ background: 'var(--cat-0)' }} />{hovered.completedPoints} pts completed</span>
-              <span>{hovered.completedTasks} of {hovered.committedTasks} tasks done</span>
+              <span><i className="swatch-box" style={{ background: 'var(--cat-1)' }} />{t('{n} pts committed', { n: hovered.committedPoints })}</span>
+              <span><i className="swatch-box" style={{ background: 'var(--cat-0)' }} />{t('{n} pts completed', { n: hovered.completedPoints })}</span>
+              <span>{t('{done} of {total} tasks done', { done: hovered.completedTasks, total: hovered.committedTasks })}</span>
             </div>
           )}
         </div>

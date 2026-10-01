@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api';
 import { useToast } from '../../toast';
 import { StatusBadge } from '../Badges';
 import { LINK_TYPES, type LinkType, type TaskLink } from '../../types';
+import { t } from '../../i18n';
 
 interface Props {
   taskId: number;
@@ -42,10 +43,10 @@ export function LinksPanel({ taskId, projectKey, links, canEdit, onChange }: Pro
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><Link2 size={16} /> Linked tasks {links.length > 0 && <span className="count">{links.length}</span>}</h2>
+      <h2 className="panel-title"><Link2 size={16} /> {t('Linked tasks')} {links.length > 0 && <span className="count">{links.length}</span>}</h2>
       {[...groups.entries()].map(([label, items]) => (
         <div key={label} className="link-group">
-          <span className="link-label">{label}</span>
+          <span className="link-label">{t(label)}</span>
           <ul className="mini-list">
             {items.map((link) => (
               <li key={link.id}>
@@ -53,7 +54,7 @@ export function LinksPanel({ taskId, projectKey, links, canEdit, onChange }: Pro
                 <Link to={`/tasks/${link.task.id}`} className="mini-title">{link.task.title}</Link>
                 <StatusBadge status={link.task.status} />
                 {canEdit && (
-                  <button className="icon-button sm" aria-label={`Remove link to ${link.task.key}`}
+                  <button className="icon-button sm" aria-label={t('Remove link to {key}', { key: link.task.key })}
                     onClick={async () => {
                       await api.deleteLink(taskId, link.id).catch((e: ApiError) => toast(e.message, 'error'));
                       onChange();
@@ -66,15 +67,15 @@ export function LinksPanel({ taskId, projectKey, links, canEdit, onChange }: Pro
           </ul>
         </div>
       ))}
-      {links.length === 0 && <p className="muted">No links yet.</p>}
+      {links.length === 0 && <p className="muted">{t('No links yet.')}</p>}
       {canEdit && (
         <form className="inline-add link-form" onSubmit={add}>
-          <select value={type} onChange={(e) => setType(e.target.value as LinkType)} aria-label="Link type">
-            {LINK_TYPES.map((t) => <option key={t.type} value={t.type}>This task {t.outward}</option>)}
+          <select value={type} onChange={(e) => setType(e.target.value as LinkType)} aria-label={t('Link type')}>
+            {LINK_TYPES.map((l) => <option key={l.type} value={l.type}>{t('This task {relation}', { relation: t(l.outward) })}</option>)}
           </select>
           <input value={target} placeholder={`${projectKey}-12`} onChange={(e) => setTarget(e.target.value)}
-            aria-label="Task key to link" />
-          <button className="btn btn-soft btn-sm" disabled={busy || !target.trim()}>Link</button>
+            aria-label={t('Task key to link')} />
+          <button className="btn btn-soft btn-sm" disabled={busy || !target.trim()}>{t('Link')}</button>
         </form>
       )}
     </section>

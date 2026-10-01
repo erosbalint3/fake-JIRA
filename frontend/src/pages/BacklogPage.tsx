@@ -196,7 +196,7 @@ export function BacklogPage() {
     try {
       const saved = await save(task);
       setTasks((current) => current?.map((t) => (t.id === saved.id ? saved : t)) ?? null);
-      toast(message, 'success', { action: { label: 'Undo', onClick: () => undo().then(load).catch(load) } });
+      toast(message, 'success', { action: { label: t('Undo'), onClick: () => undo().then(load).catch(load) } });
     } catch (e) {
       toast((e as ApiError).message, 'error');
       load();
@@ -235,7 +235,7 @@ export function BacklogPage() {
         onDragEnd: () => setDragging(null),
       }}
       actions={canEdit &&
-        <select className="move-select" value={task.sprint?.id ?? ''} aria-label={`Move ${task.key}`}
+        <select className="move-select" value={task.sprint?.id ?? ''} aria-label={t('Move {key}', { key: task.key })}
           onChange={(e) => move(task, e.target.value ? Number(e.target.value) : null)}>
           <option value="">{t("Backlog")}</option>
           {openSprints.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -260,19 +260,19 @@ export function BacklogPage() {
           <span className="eyebrow">{project.name}</span>
           <h1>{t("Backlog")}</h1>
           <p className="muted">{kanban
-            ? 'Kanban: every open task is on the board. Order the queue by priority here.'
-            : 'Plan sprints by dragging tasks between sections.'}</p>
+            ? t('Kanban: every open task is on the board. Order the queue by priority here.')
+            : t('Plan sprints by dragging tasks between sections.')}</p>
         </div>
         <div className="header-actions">
           {canEdit ? (
             <>
               {!kanban && (
                 <button className="btn btn-ghost" onClick={() => setDialog({ kind: 'create' })}>
-                  <CalendarRange size={17} /> Create sprint
+                  <CalendarRange size={17} /> {t('Create sprint')}
                 </button>
               )}
               <button className="btn btn-primary" onClick={() => openCreate({ projectKey: key })}>
-                <Plus size={18} /> Create task
+                <Plus size={18} /> {t('Create task')}
               </button>
             </>
           ) : <span className="readonly-badge"><Eye size={13} /> {t("Read-only")}</span>}
@@ -293,7 +293,7 @@ export function BacklogPage() {
         </select>
         <select value={priority} onChange={(e) => setFilter('priority', e.target.value)} aria-label={t("Priority")}>
           <option value="">{t("Any priority")}</option>
-          {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+          {PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
         </select>
         <select value={label} onChange={(e) => setFilter('label', e.target.value)} aria-label={t("Label")}>
           <option value="">{t("Any label")}</option>
@@ -301,7 +301,7 @@ export function BacklogPage() {
         </select>
         <select value={typeFilter} onChange={(e) => setFilter('type', e.target.value)} aria-label={t("Type")}>
           <option value="">{t("Any type")}</option>
-          {TASK_TYPES.map((t) => <option key={t} value={t}>{TASK_TYPE_LABEL[t]}</option>)}
+          {TASK_TYPES.map((type) => <option key={type} value={type}>{t(TASK_TYPE_LABEL[type])}</option>)}
         </select>
         <select value={epicFilter} onChange={(e) => setFilter('epic', e.target.value)} aria-label={t("Epic")}>
           <option value="">{t("Any epic")}</option>
@@ -311,7 +311,7 @@ export function BacklogPage() {
         {filtered && (
           <>
             <button className="btn btn-ghost btn-sm filter-action" onClick={() => setSavingFilter(true)}>
-              <Bookmark size={15} /> Save filter
+              <Bookmark size={15} /> {t('Save filter')}
             </button>
             <button className="link small filter-action" onClick={() => setParams({}, { replace: true })}>{t("Clear")}</button>
           </>
@@ -328,9 +328,9 @@ export function BacklogPage() {
         const unestimated = items.filter((t) => t.storyPoints === null).length;
         const overCapacity = averageVelocity !== null && planned > averageVelocity * 1.1;
         const perPerson = new Map<string, number>();
-        items.forEach((t) => {
-          const name = t.assignee?.displayName ?? 'Unassigned';
-          perPerson.set(name, (perPerson.get(name) ?? 0) + (t.storyPoints ?? 0));
+        items.forEach((task) => {
+          const name = task.assignee?.displayName ?? t('Unassigned');
+          perPerson.set(name, (perPerson.get(name) ?? 0) + (task.storyPoints ?? 0));
         });
         return (
           <section key={sprint.id} className={`sprint-section ${dropTarget === `s${sprint.id}` ? 'drop-target' : ''}`}
@@ -344,12 +344,12 @@ export function BacklogPage() {
                 {sprint.startDate && sprint.endDate && (
                   <span className="muted small">{formatDay(sprint.startDate)} – {formatDay(sprint.endDate)}</span>
                 )}
-                <span className="muted small">{items.length} task{items.length === 1 ? '' : 's'}{items.length ? ` · ${done} done` : ''}</span>
+                <span className="muted small">{items.length === 1 ? t('1 task') : t('{n} tasks', { n: items.length })}{items.length ? ` · ${t('{n} done', { n: done })}` : ''}</span>
               </div>
               {canEdit && <div className="sprint-actions">
                 {sprint.state === 'PLANNED' && (
                   <button className="btn btn-soft btn-sm" disabled={hasActive}
-                    title={hasActive ? 'Complete the active sprint first' : undefined}
+                    title={hasActive ? t('Complete the active sprint first') : undefined}
                     onClick={() => setDialog({ kind: 'start', sprint })}>{t("Start sprint")}</button>
                 )}
                 {sprint.state === 'ACTIVE' && (
@@ -370,11 +370,11 @@ export function BacklogPage() {
             <SprintGoals sprintId={sprint.id} canEdit={canEdit} compact />
             {items.length > 0 && (
               <div className={`capacity ${overCapacity ? 'over' : ''}`} aria-label={t("Sprint capacity")}>
-                <strong>{planned} pts planned</strong>
+                <strong>{t('{n} pts planned', { n: planned })}</strong>
                 {averageVelocity !== null
-                  ? <span>· team average {averageVelocity} pts{overCapacity ? ' — more than the team usually finishes' : ''}</span>
+                  ? <span>· {t('team average {n} pts', { n: averageVelocity })}{overCapacity ? ` — ${t('more than the team usually finishes')}` : ''}</span>
                   : <span className="muted">{t("· complete a sprint to see the team's velocity")}</span>}
-                {unestimated > 0 && <span className="muted">· {unestimated} unestimated</span>}
+                {unestimated > 0 && <span className="muted">· {t('{n} unestimated', { n: unestimated })}</span>}
                 <span className="capacity-people">
                   {[...perPerson.entries()].sort((a, b) => b[1] - a[1]).map(([name, pts]) => (
                     <span key={name} className="chip">{name} {pts}</span>
@@ -383,7 +383,7 @@ export function BacklogPage() {
               </div>
             )}
             {items.length ? <ul className="task-list">{items.map(row)}</ul>
-              : <div className="column-empty">{filtered ? 'No matching tasks.' : 'Drag tasks here to plan this sprint.'}</div>}
+              : <div className="column-empty">{filtered ? t('No matching tasks.') : t('Drag tasks here to plan this sprint.')}</div>}
           </section>
         );
       })}
@@ -395,15 +395,15 @@ export function BacklogPage() {
             <div className="sprint-title">
               {sectionCheckbox(backlog)}
               <h2>{t("Backlog")}</h2>
-              <span className="muted small">{backlog.length} task{backlog.length === 1 ? '' : 's'}</span>
+              <span className="muted small">{backlog.length === 1 ? t('1 task') : t('{n} tasks', { n: backlog.length })}</span>
             </div>
             <label className="toggle small">
-              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
+              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> {t('Show done')}
             </label>
           </header>
           {backlog.length ? <ul className="task-list">{backlog.map(row)}</ul> : (
-            <EmptyState icon={<Inbox size={28} />} title={filtered ? 'No matching tasks' : 'The backlog is empty'}>
-              {filtered ? 'Try a different filter.' : canEdit ? <>Everything is planned. <button className="link" onClick={() => openCreate({ projectKey: key })}>{t("Create a task")}</button></> : null}
+            <EmptyState icon={<Inbox size={28} />} title={filtered ? t('No matching tasks') : t('The backlog is empty')}>
+              {filtered ? t('Try a different filter.') : canEdit ? <>{t('Everything is planned.')} <button className="link" onClick={() => openCreate({ projectKey: key })}>{t("Create a task")}</button></> : null}
             </EmptyState>
           )}
         </section>
@@ -416,7 +416,7 @@ export function BacklogPage() {
             {completedSprints.slice(0, 8).map((s) => (
               <li key={s.id}>
                 <Link to={`/p/${key}/sprints/${s.id}`}>{s.name}</Link>
-                {s.completedAt && <span className="muted small"> · completed {formatDay(s.completedAt.slice(0, 10))}</span>}
+                {s.completedAt && <span className="muted small"> · {t('completed {date}', { date: formatDay(s.completedAt.slice(0, 10)) })}</span>}
               </li>
             ))}
           </ul>
@@ -433,7 +433,7 @@ export function BacklogPage() {
         <SaveFilterModal projectKey={key} query={params.toString()} onClose={() => setSavingFilter(false)}
           onSaved={(name) => {
             setSavingFilter(false);
-            toast(`Filter "${name}" saved`);
+            toast(t('Filter “{name}” saved', { name }));
             window.dispatchEvent(new Event(FILTERS_CHANGED));
           }} />
       )}
@@ -449,11 +449,11 @@ export function BacklogPage() {
       )}
       {confirm && (
         <ConfirmDialog
-          title={confirm.kind === 'complete' ? `Complete ${confirm.sprint.name}?` : `Delete ${confirm.sprint.name}?`}
+          title={confirm.kind === 'complete' ? t('Complete {name}?', { name: confirm.sprint.name }) : t('Delete {name}?', { name: confirm.sprint.name })}
           message={confirm.kind === 'complete'
-            ? 'Unfinished tasks will move back to the backlog. The sprint stays in reports.'
-            : 'Its tasks will move back to the backlog.'}
-          confirmLabel={confirm.kind === 'complete' ? 'Complete sprint' : 'Delete sprint'}
+            ? t('Unfinished tasks will move back to the backlog. The sprint stays in reports.')
+            : t('Its tasks will move back to the backlog.')}
+          confirmLabel={confirm.kind === 'complete' ? t('Complete sprint') : t('Delete sprint')}
           danger={confirm.kind === 'delete'}
           onClose={() => setConfirm(null)}
           onConfirm={() => {
@@ -532,7 +532,7 @@ function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints,
         onDone(`${created.name} created`);
       } else if (dialog.kind === 'edit') {
         await api.updateSprint(dialog.sprint.id, { name, goal, ...dates });
-        onDone('Sprint updated');
+        onDone(t('Sprint updated'));
       } else {
         await api.updateSprint(dialog.sprint.id, { name, goal, ...dates });
         await api.startSprint(dialog.sprint.id, dates);
@@ -544,13 +544,13 @@ function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints,
     }
   };
 
-  const title = dialog.kind === 'create' ? 'Create sprint' : dialog.kind === 'start' ? `Start ${dialog.sprint.name}` : 'Edit sprint';
+  const title = dialog.kind === 'create' ? t('Create sprint') : dialog.kind === 'start' ? t('Start {name}', { name: dialog.sprint.name }) : t('Edit sprint');
   return (
     <Modal title={title} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="sprint-form" disabled={busy}>
-          {dialog.kind === 'start' ? 'Start sprint' : dialog.kind === 'create' ? 'Create sprint' : 'Save'}
+          {dialog.kind === 'start' ? t('Start sprint') : dialog.kind === 'create' ? t('Create sprint') : t('Save')}
         </button>
       </>
     }>
@@ -558,15 +558,15 @@ function SprintDialogModal({ dialog, projectKey, averageVelocity, plannedPoints,
         {error && <div className="alert">{error}</div>}
         {dialog.kind === 'start' && (
           <p className={`capacity ${averageVelocity !== null && plannedPoints > averageVelocity * 1.1 ? 'over' : ''}`}>
-            <strong>{plannedPoints} pts planned.</strong>{' '}
+            <strong>{t('{n} pts planned.', { n: plannedPoints })}</strong>{' '}
             {averageVelocity !== null
-              ? `The team finished ${averageVelocity} pts per sprint on average recently.`
-              : 'No velocity yet: this is the first sprint.'}
+              ? t('The team finished {n} pts per sprint on average recently.', { n: averageVelocity })
+              : t('No velocity yet: this is the first sprint.')}
           </p>
         )}
         <label className="field">
           <span>{t("Name")}</span>
-          <input value={name} maxLength={80} placeholder={dialog.kind === 'create' ? 'Leave empty for an automatic name' : ''}
+          <input value={name} maxLength={80} placeholder={dialog.kind === 'create' ? t('Leave empty for an automatic name') : ''}
             onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="field">
@@ -622,7 +622,7 @@ function SaveFilterModal({ projectKey, query, onClose, onSaved }: {
         </label>
         <label className="toggle">
           <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
-          Share with everyone in the project
+          {t('Share with everyone in the project')}
         </label>
         <p className="muted small">{t("It appears in the sidebar and in the command palette (Ctrl+K).")}</p>
       </form>

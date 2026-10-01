@@ -29,14 +29,14 @@ export function ProjectsPage() {
           <p className="muted">{t("Each project has its own backlog, board, sprints and members.")}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          <FolderPlus size={18} /> New project
+          <FolderPlus size={18} /> {t('New project')}
         </button>
       </header>
 
       {!projects && <Spinner />}
       {projects && projects.length === 0 && (
         <EmptyState icon={<FolderPlus size={28} />} title={t("Create your first project")}>
-          Projects group tasks, sprints and people. Give it a short key like <b>{t("WEB")}</b>; tasks will be numbered WEB-1, WEB-2…
+          {t('Projects group tasks, sprints and people. Give it a short key like WEB; tasks will be numbered WEB-1, WEB-2…')}
           <div><button className="btn btn-primary" onClick={() => setCreating(true)}>{t("New project")}</button></div>
         </EmptyState>
       )}
@@ -45,14 +45,14 @@ export function ProjectsPage() {
           {projects.map((project) => (
             <Link key={project.key} to={`/p/${project.key}/board`} className="project-card panel">
               <div className="project-card-head">
-                <span className="project-icon">{project.key.slice(0, 2)}</span>
+                <span className={`project-icon ${project.icon ? "has-emoji" : ""}`} aria-hidden>{project.icon || project.key.slice(0, 2)}</span>
                 <div>
                   <strong>{project.name}</strong>
                   <span className="muted small">{project.key}</span>
                 </div>
               </div>
               {project.description && <p className="muted project-card-desc">{project.description}</p>}
-              <span className="muted small project-card-members"><Users size={14} /> {project.members.length} member{project.members.length === 1 ? '' : 's'}</span>
+              <span className="muted small project-card-members"><Users size={14} /> {project.members.length === 1 ? t('1 member') : t('{n} members', { n: project.members.length })}</span>
             </Link>
           ))}
         </div>
@@ -94,7 +94,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
     try {
       const project = await api.createProject(key, name, description, template);
       await onCreated();
-      toast(`Project ${project.key} created`);
+      toast(t('Project {key} created', { key: project.key }));
       navigate(`/p/${project.key}/board`);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -128,7 +128,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
             setKeyEdited(true);
             setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
           }} aria-invalid={!!errors.key} />
-          <small className="muted">Prefix for task keys, e.g. {key || 'WEB'}-1. Cannot be changed later.</small>
+          <small className="muted">{t('Prefix for task keys, e.g. {example}. Cannot be changed later.', { example: `${key || 'WEB'}-1` })}</small>
           {errors.key && <small className="field-error">{errors.key}</small>}
         </label>
         <label className="field">

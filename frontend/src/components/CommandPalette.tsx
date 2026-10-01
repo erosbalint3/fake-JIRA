@@ -77,30 +77,30 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
     };
     const key = projectKey;
     const all: Item[] = [
-      { id: 'create', group: 'Actions', label: 'Create task', icon: <Plus size={16} />, hint: <kbd>C</kbd>,
+      { id: 'create', group: 'Actions', label: t('Create task'), icon: <Plus size={16} />, hint: <kbd>C</kbd>,
         run: () => { onClose(); onCreate(); } },
-      { id: 'theme', group: 'Actions', label: 'Toggle dark mode', icon: <Moon size={16} />, run: () => { toggle(); onClose(); } },
+      { id: 'theme', group: 'Actions', label: t('Toggle dark mode'), icon: <Moon size={16} />, run: () => { toggle(); onClose(); } },
       ...(key ? [
-        { id: 'board', group: 'Go to', label: `${key} board`, icon: <KanbanSquare size={16} />, run: go(`/p/${key}/board`) },
-        { id: 'backlog', group: 'Go to', label: `${key} backlog`, icon: <ListTodo size={16} />, run: go(`/p/${key}/backlog`) },
-        { id: 'roadmap', group: 'Go to', label: `${key} roadmap`, icon: <Map size={16} />, run: go(`/p/${key}/roadmap`) },
-        { id: 'releases', group: 'Go to', label: `${key} releases`, icon: <Package size={16} />, run: go(`/p/${key}/releases`) },
-        { id: 'reports', group: 'Go to', label: `${key} reports`, icon: <BarChart3 size={16} />, run: go(`/p/${key}/reports`) },
-        { id: 'settings', group: 'Go to', label: `${key} settings`, icon: <Settings size={16} />, run: go(`/p/${key}/settings`) },
+        { id: 'board', group: 'Go to', label: t('{key} board', { key: key ?? '' }), icon: <KanbanSquare size={16} />, run: go(`/p/${key}/board`) },
+        { id: 'backlog', group: 'Go to', label: t('{key} backlog', { key: key ?? '' }), icon: <ListTodo size={16} />, run: go(`/p/${key}/backlog`) },
+        { id: 'roadmap', group: 'Go to', label: t('{key} roadmap', { key: key ?? '' }), icon: <Map size={16} />, run: go(`/p/${key}/roadmap`) },
+        { id: 'releases', group: 'Go to', label: t('{key} releases', { key: key ?? '' }), icon: <Package size={16} />, run: go(`/p/${key}/releases`) },
+        { id: 'reports', group: 'Go to', label: t('{key} reports', { key: key ?? '' }), icon: <BarChart3 size={16} />, run: go(`/p/${key}/reports`) },
+        { id: 'settings', group: 'Go to', label: t('{key} settings', { key: key ?? '' }), icon: <Settings size={16} />, run: go(`/p/${key}/settings`) },
       ] : []),
-      { id: 'dashboard', group: 'Go to', label: 'Dashboard', icon: <LayoutDashboard size={16} />, run: go('/dashboard') },
-      { id: 'search', group: 'Go to', label: 'Advanced search', icon: <Search size={16} />, run: go('/search') },
-      { id: 'mywork', group: 'Go to', label: 'My work', icon: <UserSquare2 size={16} />, run: go('/my-work') },
-      { id: 'calendar', group: 'Go to', label: 'Calendar', icon: <CalendarDays size={16} />, run: go('/calendar') },
-      { id: 'activity', group: 'Go to', label: 'Activity', icon: <Activity size={16} />, run: go('/activity') },
-      { id: 'teams', group: 'Go to', label: 'Teams', icon: <Users size={16} />, run: go('/teams') },
-      { id: 'notifications', group: 'Go to', label: 'Notifications', icon: <Bell size={16} />, run: go('/notifications') },
-      { id: 'projects', group: 'Go to', label: 'All projects', icon: <FolderKanban size={16} />, run: go('/projects') },
-      { id: 'profile', group: 'Go to', label: 'Profile', icon: <UserRound size={16} />, run: go('/profile') },
-      ...(admin ? [{ id: 'admin', group: 'Go to', label: 'Admin', icon: <Shield size={16} />, run: go('/admin') }] : []),
+      { id: 'dashboard', group: 'Go to', label: t('Dashboard'), icon: <LayoutDashboard size={16} />, run: go('/dashboard') },
+      { id: 'search', group: 'Go to', label: t('Advanced search'), icon: <Search size={16} />, run: go('/search') },
+      { id: 'mywork', group: 'Go to', label: t('My work'), icon: <UserSquare2 size={16} />, run: go('/my-work') },
+      { id: 'calendar', group: 'Go to', label: t('Calendar'), icon: <CalendarDays size={16} />, run: go('/calendar') },
+      { id: 'activity', group: 'Go to', label: t('Activity'), icon: <Activity size={16} />, run: go('/activity') },
+      { id: 'teams', group: 'Go to', label: t('Teams'), icon: <Users size={16} />, run: go('/teams') },
+      { id: 'notifications', group: 'Go to', label: t('Notifications'), icon: <Bell size={16} />, run: go('/notifications') },
+      { id: 'projects', group: 'Go to', label: t('All projects'), icon: <FolderKanban size={16} />, run: go('/projects') },
+      { id: 'profile', group: 'Go to', label: t('Profile'), icon: <UserRound size={16} />, run: go('/profile') },
+      ...(admin ? [{ id: 'admin', group: 'Go to', label: t('Admin'), icon: <Shield size={16} />, run: go('/admin') }] : []),
       ...(projects ?? []).map((p) => ({
         id: `project-${p.key}`, group: 'Projects', label: p.name, hint: <span className="muted">{p.key}</span>,
-        icon: <span className="project-icon sm">{p.key.slice(0, 2)}</span>, run: go(`/p/${p.key}/board`),
+        icon: <span className={`project-icon sm ${p.icon ? "has-emoji" : ""}`} aria-hidden>{p.icon || p.key.slice(0, 2)}</span>, run: go(`/p/${p.key}/board`),
       })),
       ...filters.map((f) => ({
         id: `filter-${f.id}`, group: 'Saved filters', label: f.name, hint: f.shared ? <span className="muted">{t("shared")}</span> : undefined,
@@ -126,7 +126,7 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
       icon: <Clock size={16} />, run: go(`/tasks/${task.id}`),
     }));
     const searchAll: Item[] = q.length >= 2 ? [{
-      id: 'search-all', group: 'Search', label: `Search everything for “${query.trim()}”`, icon: <Search size={16} />,
+      id: 'search-all', group: 'Search', label: t('Search everything for “{q}”', { q: query.trim() }), icon: <Search size={16} />,
       run: go(`/search?q=${encodeURIComponent(`text ~ "${query.trim().replace(/"/g, '')}" ORDER BY updated DESC`)}`),
     }] : [];
     return [...recentItems, ...hitItems, ...matching, ...searchAll].slice(0, 50);
@@ -166,13 +166,13 @@ export function CommandPalette({ projectKey, onClose, onCreate }: Props) {
           <kbd>Esc</kbd>
         </label>
         <ul className="palette-list" id="palette-list" role="listbox" ref={listRef}>
-          {items.length === 0 && <li className="palette-empty muted">No results for “{query}”.</li>}
+          {items.length === 0 && <li className="palette-empty muted">{t('No results for “{q}”.', { q: query })}</li>}
           {items.map((item, index) => {
             const heading = item.group !== lastGroup ? item.group : null;
             lastGroup = item.group;
             return (
               <li key={item.id} role="presentation">
-                {heading && <div className="palette-group">{heading}</div>}
+                {heading && <div className="palette-group">{t(heading)}</div>}
                 <button id={`palette-${item.id}`} role="option" aria-selected={index === active} data-index={index}
                   className={`palette-item ${index === active ? 'active' : ''}`}
                   onMouseMove={() => setActive(index)} onClick={item.run}>

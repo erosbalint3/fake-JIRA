@@ -27,8 +27,8 @@ function AttachmentImage({ id, alt }: { id: number; alt: string }) {
     };
   }, [id]);
 
-  if (failed) return <span className="muted small">[image unavailable: {alt || `attachment ${id}`}]</span>;
-  if (!src) return <span className="img-loading" aria-label={`Loading ${alt}`} />;
+  if (failed) return <span className="muted small">[{t('image unavailable: {name}', { name: alt || t('attachment {id}', { id }) })}]</span>;
+  if (!src) return <span className="img-loading" aria-label={t('Loading {name}', { name: alt ?? '' })} />;
   return (
     <a href={src} target="_blank" rel="noopener noreferrer">
       <img src={src} alt={alt} loading="lazy" />

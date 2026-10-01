@@ -95,7 +95,7 @@ export function WorkflowSection({ projectKey, projectId, canEdit }: { projectKey
           <tbody>
             {columns.map((c) => (
               <tr key={c.id}>
-                <th scope="row">{c.name}</th>
+                <th scope="row">{t(c.name)}</th>
                 {requirementOptions.map((o) => {
                   const disabled = !canEdit || (o.id === 'resolution' && c.status !== 'DONE');
                   return (
@@ -124,12 +124,12 @@ export function WorkflowSection({ projectKey, projectId, canEdit }: { projectKey
           <div className="table-wrap">
             <table className="viz-table workflow-matrix">
               <thead>
-                <tr><th>{t('From ↓ / to →')}</th>{columns.map((c) => <th key={c.id} className="center">{c.name}</th>)}</tr>
+                <tr><th>{t('From ↓ / to →')}</th>{columns.map((c) => <th key={c.id} className="center">{t(c.name)}</th>)}</tr>
               </thead>
               <tbody>
                 {[null, ...columns].map((from) => (
                   <tr key={from?.id ?? 'any'}>
-                    <th scope="row">{from ? from.name : t('Any column')}</th>
+                    <th scope="row">{from ? t(from.name) : t('Any column')}</th>
                     {columns.map((to) => (
                       <td key={to.id} className="center">
                         {from?.id === to.id ? <span className="muted">—</span> : (

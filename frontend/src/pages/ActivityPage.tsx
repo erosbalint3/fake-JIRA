@@ -84,7 +84,7 @@ export function ActivityPage() {
                   <Avatar user={item.actor} size={30} />
                   <div className="feed-body">
                     <p>
-                      <strong>{item.actor.displayName}</strong> {item.message} on{' '}
+                      <strong>{item.actor.displayName}</strong> {item.message} {t('on')}{' '}
                       <Link to={`/tasks/${item.task.id}`}><span className="task-key">{item.task.key}</span> {item.task.title}</Link>
                     </p>
                     {item.body && <blockquote className="feed-comment"><MessageSquare size={13} /> {item.body}</blockquote>}

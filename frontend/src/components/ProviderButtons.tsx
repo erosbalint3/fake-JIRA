@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { api, ApiError } from '../api';
+import { t } from '../i18n';
 
 let cached: { id: string; label: string }[] | null = null;
 
@@ -50,7 +51,7 @@ export function ProviderButtons({ invite, verb, onError }: Props) {
   if (providers.length === 0) return null;
   return (
     <div className="providers">
-      <div className="divider"><span>or</span></div>
+      <div className="divider"><span>{t('or')}</span></div>
       {providers.map((p) => (
         <button key={p.id} type="button" className="btn btn-ghost btn-block provider-button" disabled={busy !== null}
           onClick={async () => {
@@ -62,7 +63,7 @@ export function ProviderButtons({ invite, verb, onError }: Props) {
               setBusy(null);
             }
           }}>
-          <Mark id={p.id} /> {busy === p.id ? 'Redirecting…' : `${verb} with ${p.label}`}
+          <Mark id={p.id} /> {busy === p.id ? t('Redirecting…') : t('{verb} with {provider}', { verb: t(verb), provider: p.label })}
         </button>
       ))}
     </div>

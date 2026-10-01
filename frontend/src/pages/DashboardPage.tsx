@@ -131,18 +131,18 @@ export function DashboardPage() {
       )}
       <div className="dashboard-grid">
         {dashboard.widgets.map((widget, index) => (
-          <section key={`${dashboard.id}-${index}`} className={`panel widget widget-${widget.type}`} aria-label={widget.title}>
+          <section key={`${dashboard.id}-${index}`} className={`panel widget widget-${widget.type}`} aria-label={t(widget.title)}>
             <header className="widget-head">
-              <h2 className="panel-title">{widget.title}</h2>
+              <h2 className="panel-title">{t(widget.title)}</h2>
               {editing && (
                 <span className="widget-tools">
-                  <button className="icon-button sm" aria-label={`Move ${widget.title} up`} disabled={index === 0}
+                  <button className="icon-button sm" aria-label={t('Move {name} up', { name: widget.title })} disabled={index === 0}
                     onClick={() => move(index, -1)}><ArrowUp size={14} /></button>
-                  <button className="icon-button sm" aria-label={`Move ${widget.title} down`} disabled={index === dashboard.widgets.length - 1}
+                  <button className="icon-button sm" aria-label={t('Move {name} down', { name: widget.title })} disabled={index === dashboard.widgets.length - 1}
                     onClick={() => move(index, 1)}><ArrowDown size={14} /></button>
-                  <button className="icon-button sm" aria-label={`Edit ${widget.title}`} onClick={() => setWidgetDialog({ index })}>
+                  <button className="icon-button sm" aria-label={t('Edit {name}', { name: widget.title })} onClick={() => setWidgetDialog({ index })}>
                     <Pencil size={14} /></button>
-                  <button className="icon-button sm" aria-label={`Remove ${widget.title}`}
+                  <button className="icon-button sm" aria-label={t('Remove {name}', { name: widget.title })}
                     onClick={() => save(dashboard.widgets.filter((_, i) => i !== index))}><Trash2 size={14} /></button>
                 </span>
               )}
@@ -166,7 +166,7 @@ export function DashboardPage() {
       {scheduling && <ScheduleReportModal kind="dashboard" target={String(dashboard.id)} defaultTitle={dashboard.name}
         onClose={() => setScheduling(false)} />}
       {nameDialog && (
-        <NameModal initial={nameDialog === 'rename' ? dashboard.name : ''} title={nameDialog === 'rename' ? 'Rename dashboard' : 'New dashboard'}
+        <NameModal initial={nameDialog === 'rename' ? dashboard.name : ''} title={nameDialog === 'rename' ? t('Rename dashboard') : t('New dashboard')}
           onClose={() => setNameDialog(null)}
           onSave={async (name) => {
             try {
@@ -184,7 +184,7 @@ export function DashboardPage() {
           }} />
       )}
       {confirmDelete && (
-        <ConfirmDialog title={`Delete ${dashboard.name}?`} message={t("Its widgets are removed. Your tasks are not affected.")}
+        <ConfirmDialog title={t('Delete {name}?', { name: dashboard.name })} message={t("Its widgets are removed. Your tasks are not affected.")}
           confirmLabel={t("Delete dashboard")} danger onClose={() => setConfirmDelete(false)}
           onConfirm={async () => {
             setConfirmDelete(false);
@@ -250,7 +250,7 @@ function FilterWidget({ query, limit, tick }: { query: string; limit: number; ti
             ))}
           </ul>
           <Link className="small widget-more" to={`/search?q=${encodeURIComponent(query)}`}>
-            {data.total > data.tasks.length ? `All ${data.total} tasks →` : 'Open in search →'}
+            {data.total > data.tasks.length ? t('All {n} tasks →', { n: data.total }) : t('Open in search →')}
           </Link>
         </>
       ))}
@@ -265,7 +265,7 @@ function CounterWidget({ query, tick }: { query: string; tick: number }) {
       {data && (
         <Link className="counter" to={`/search?q=${encodeURIComponent(query)}`}>
           <strong>{data.total}</strong>
-          <span className="muted small">task{data.total === 1 ? '' : 's'}</span>
+          <span className="muted small">{data.total === 1 ? t('task') : t('tasks')}</span>
         </Link>
       )}
     </WidgetState>
@@ -279,9 +279,9 @@ function ChartWidget({ query, groupBy, kind, tick }: { query: string; groupBy: s
   return (
     <WidgetState error={error} loading={!data}>
       {data && (data.length === 0 ? <p className="muted">{t("No tasks match.")}</p> : kind === 'donut' ? (
-        <DonutChart label={`Tasks by ${groupBy}`} slices={data.map((g) => ({ label: g.label, value: g.count }))} />
+        <DonutChart label={t('Tasks by {field}', { field: t(groupBy) })} slices={data.map((g) => ({ label: g.label, value: g.count }))} />
       ) : (
-        <table className="bar-table" aria-label={`Tasks by ${groupBy}`}>
+        <table className="bar-table" aria-label={t('Tasks by {field}', { field: t(groupBy) })}>
           <tbody>
             {data.map((g, i) => (
               <tr key={g.key || '∅'}>
@@ -381,7 +381,7 @@ function SprintWidget({ project, tick }: { project: string; tick: number }) {
     const active = sprints.find((s) => s.state === 'ACTIVE');
     return active ? api.burndown(active.id) : 'none';
   }, [project, tick]);
-  if (data === 'none') return <p className="muted">{project} has no active sprint.</p>;
+  if (data === 'none') return <p className="muted">{t('{project} has no active sprint.', { project })}</p>;
   const b = data;
   const usePoints = !!b && b.totalPoints > 0;
   const total = b ? (usePoints ? b.totalPoints : b.total) : 0;
@@ -394,10 +394,10 @@ function SprintWidget({ project, tick }: { project: string; tick: number }) {
       {b && (
         <div className="sprint-widget">
           <p><Zap size={14} /> <strong>{b.sprint.name}</strong>
-            {daysLeft !== null && <span className="muted"> · {daysLeft < 0 ? `${-daysLeft} days over` : `${daysLeft} days left`}</span>}</p>
+            {daysLeft !== null && <span className="muted"> · {daysLeft < 0 ? t('{n} days over', { n: -daysLeft }) : t('{n} days left', { n: daysLeft })}</span>}</p>
           <div className="progress big"><span style={{ width: `${percent}%` }} /></div>
-          <p className="muted small">{done} of {total} {usePoints ? 'points' : 'tasks'} done ({percent}%)
-            {b.changes.length > 0 && ` · ${b.changes.length} scope change${b.changes.length === 1 ? '' : 's'}`}</p>
+          <p className="muted small">{t(usePoints ? '{done} of {total} points done ({percent}%)' : '{done} of {total} tasks done ({percent}%)', { done, total, percent })}
+            {b.changes.length > 0 && ` · ${b.changes.length === 1 ? t('1 scope change') : t('{n} scope changes', { n: b.changes.length })}`}</p>
           <Link className="small" to={`/p/${project}/board`}>{t("Open board →")}</Link>
         </div>
       )}
@@ -417,7 +417,7 @@ function UpcomingWidget({ project, tick }: { project?: string; tick: number }) {
               <span className={`cal-dot cal-${e.kind.toLowerCase()}`} />
               <span className="muted small nowrap">{formatDay(e.start)}</span>
               {e.kind === 'TASK' ? <Link to={`/tasks/${e.id}`}>{e.key} {e.title}</Link>
-                : <span>{e.kind === 'AWAY' ? `${e.person?.displayName} away` : e.kind === 'SPRINT' ? `${e.title} (sprint)` : `${e.title} release`}</span>}
+                : <span>{e.kind === 'AWAY' ? t('{name} away', { name: e.person?.displayName ?? '' }) : e.kind === 'SPRINT' ? t('{name} (sprint)', { name: e.title ?? '' }) : t('{name} release', { name: e.title ?? '' })}</span>}
             </li>
           ))}
         </ul>
@@ -496,11 +496,11 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
       try {
         await api.search(query, 1);
       } catch (e) {
-        setError(`Query: ${(e as ApiError).message}`);
+        setError(t('Query: {error}', { error: (e as ApiError).message }));
         return;
       }
     }
-    const label = WIDGET_TYPES.find((w) => w.type === type)!.label;
+    const label = t(WIDGET_TYPES.find((w) => w.type === type)!.label);
     onSave({
       type, title: title.trim() || label,
       ...(needsQuery ? { query } : {}),
@@ -513,7 +513,7 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
   };
 
   return (
-    <Modal title={widget ? 'Edit widget' : 'Add widget'} onClose={onClose} footer={
+    <Modal title={widget ? t('Edit widget') : t('Add widget')} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="widget-form">{widget ? 'Save' : 'Add'}</button>
@@ -525,14 +525,14 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
           {WIDGET_TYPES.map((w) => (
             <label key={w.type} className={`widget-type ${type === w.type ? 'active' : ''}`}>
               <input type="radio" name="widget-type" checked={type === w.type} onChange={() => setType(w.type)} />
-              {icons[w.type]} <strong>{w.label}</strong>
-              <span className="muted small">{w.hint}</span>
+              {icons[w.type]} <strong>{t(w.label)}</strong>
+              <span className="muted small">{t(w.hint)}</span>
             </label>
           ))}
         </div>
         <label className="field">
           <span>{t("Title")}</span>
-          <input value={title} maxLength={60} placeholder={WIDGET_TYPES.find((w) => w.type === type)?.label}
+          <input value={title} maxLength={60} placeholder={t(WIDGET_TYPES.find((w) => w.type === type)?.label ?? '')}
             onChange={(e) => setTitle(e.target.value)} />
         </label>
         {needsQuery && (
@@ -579,7 +579,7 @@ function WidgetModal({ widget, onClose, onSave }: { widget: Widget | null; onClo
           <label className="field">
             <span>{t("Show")}</span>
             <select value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-              {[5, 8, 12, 20].map((n) => <option key={n} value={n}>{n} tasks</option>)}
+              {[5, 8, 12, 20].map((n) => <option key={n} value={n}>{t('{n} tasks', { n })}</option>)}
             </select>
           </label>
         )}

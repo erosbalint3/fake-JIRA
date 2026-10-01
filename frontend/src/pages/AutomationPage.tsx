@@ -95,14 +95,17 @@ const RECIPES: { title: string; description: string; rule: RuleInput }[] = [
 ];
 
 function describeAction(a: RuleAction) {
-  const label = ACTIONS.find((x) => x.value === a.type)?.label ?? a.type;
+  const label = t(ACTIONS.find((x) => x.value === a.type)?.label ?? a.type);
+  const choice = ASSIGN_CHOICES.find((c) => c.value === a.value)?.label;
+  const status = STATUS_LABEL[a.value as keyof typeof STATUS_LABEL];
+  const priority = PRIORITY_LABEL[a.value as keyof typeof PRIORITY_LABEL];
   switch (a.type) {
-    case 'assign': return `assign to ${ASSIGN_CHOICES.find((c) => c.value === a.value)?.label.toLowerCase() ?? a.value}`;
-    case 'set_status': return `set status to ${STATUS_LABEL[a.value as keyof typeof STATUS_LABEL] ?? a.value}`;
-    case 'set_priority': return `set priority to ${PRIORITY_LABEL[a.value as keyof typeof PRIORITY_LABEL] ?? a.value}`;
-    case 'comment': return 'add a comment';
-    case 'move_to_active_sprint': return 'move to the active sprint';
-    case 'set_due_in_days': return `make it due in ${a.value} days`;
+    case 'assign': return t('assign to {who}', { who: choice ? t(choice).toLowerCase() : a.value ?? '' });
+    case 'set_status': return t('set status to {status}', { status: status ? t(status) : a.value ?? '' });
+    case 'set_priority': return t('set priority to {priority}', { priority: priority ? t(priority) : a.value ?? '' });
+    case 'comment': return t('add a comment');
+    case 'move_to_active_sprint': return t('move to the active sprint');
+    case 'set_due_in_days': return t('make it due in {n} days', { n: a.value ?? '' });
     default: return `${label.toLowerCase()} ${a.value ?? ''}`.trim();
   }
 }
@@ -158,27 +161,27 @@ export function AutomationPage() {
       {!rules && !error && <Spinner />}
       {rules && rules.length === 0 && (
         <EmptyState icon={<Bot size={28} />} title={t("No rules yet")}>
-          {canEdit ? <button className="link" onClick={() => setRecipes(true)}>{t("Start from a recipe")}</button> : 'Editors can add rules.'}
+          {canEdit ? <button className="link" onClick={() => setRecipes(true)}>{t("Start from a recipe")}</button> : t('Editors can add rules.')}
         </EmptyState>
       )}
       <ul className="rule-list">
         {rules?.map((rule) => (
           <li key={rule.id} className={`rule panel ${rule.enabled ? '' : 'paused'}`}>
             <div className="rule-head">
-              <label className="switch" title={rule.enabled ? 'On' : 'Paused'}>
+              <label className="switch" title={rule.enabled ? t('On') : t('Paused')}>
                 <input type="checkbox" checked={rule.enabled} disabled={!canEdit} onChange={() => toggle(rule)}
-                  aria-label={`${rule.name} enabled`} />
+                  aria-label={t('{name} enabled', { name: rule.name })} />
                 <span />
               </label>
               <h2>{rule.name}</h2>
               <span className="spacer" />
-              <button className="icon-button" aria-label={`Log of ${rule.name}`} title={t("Recent runs")} onClick={() => setLogFor(rule)}>
+              <button className="icon-button" aria-label={t('Log of {name}', { name: rule.name })} title={t("Recent runs")} onClick={() => setLogFor(rule)}>
                 <History size={16} /></button>
               {canEdit && rule.trigger === 'SCHEDULED' && (
-                <button className="icon-button" aria-label={`Run ${rule.name} now`} title={t("Run now")} onClick={async () => {
+                <button className="icon-button" aria-label={t('Run {name} now', { name: rule.name })} title={t("Run now")} onClick={async () => {
                   try {
                     const r = await api.runAutomation(rule.id);
-                    toast(r.tasks ? `Acted on ${r.tasks} task${r.tasks === 1 ? '' : 's'}` : 'Nothing new matched');
+                    toast(r.tasks ? (r.tasks === 1 ? t('Acted on 1 task') : t('Acted on {n} tasks', { n: r.tasks })) : t('Nothing new matched'));
                     load();
                   } catch (e) {
                     toast((e as ApiError).message, 'error');
@@ -187,23 +190,23 @@ export function AutomationPage() {
               )}
               {canEdit && (
                 <>
-                  <button className="icon-button" aria-label={`Edit ${rule.name}`} onClick={() => setEditing({ rule, initial: {
+                  <button className="icon-button" aria-label={t('Edit {name}', { name: rule.name })} onClick={() => setEditing({ rule, initial: {
                     name: rule.name, trigger: rule.trigger, triggerStatus: rule.triggerStatus, condition: rule.condition, actions: rule.actions,
                   } })}><Pencil size={16} /></button>
-                  <button className="icon-button" aria-label={`Delete ${rule.name}`} onClick={() => setDeleting(rule)}><Trash2 size={16} /></button>
+                  <button className="icon-button" aria-label={t('Delete {name}', { name: rule.name })} onClick={() => setDeleting(rule)}><Trash2 size={16} /></button>
                 </>
               )}
             </div>
             <p className="rule-sentence">
-              <strong>{t("When")}</strong> {TRIGGERS.find((t) => t.value === rule.trigger)?.label.toLowerCase()}
-              {rule.triggerStatus && <> to <em>{STATUS_LABEL[rule.triggerStatus]}</em></>}
+              <strong>{t("When")}</strong> {t(TRIGGERS.find((tr) => tr.value === rule.trigger)?.label ?? '').toLowerCase()}
+              {rule.triggerStatus && <> {t('to')} <em>{t(STATUS_LABEL[rule.triggerStatus])}</em></>}
               {rule.condition && <> <strong>{t("and")}</strong> <code>{rule.condition}</code></>}
               {' '}<strong>{t("then")}</strong> {rule.actions.map(describeAction).join(', ')}.
             </p>
             <p className="muted small rule-meta">
-              <Avatar user={rule.owner} size={16} /> by {rule.owner.displayName}
-              {' · '}{rule.runCount ? `ran ${rule.runCount} time${rule.runCount === 1 ? '' : 's'}, last ${timeAgo(rule.lastRunAt!)}` : 'has not run yet'}
-              {rule.lastError && <span className="overdue-text"> · last error: {rule.lastError}</span>}
+              <Avatar user={rule.owner} size={16} /> {t('by {name}', { name: rule.owner.displayName })}
+              {' · '}{rule.runCount ? t(rule.runCount === 1 ? 'ran once, last {when}' : 'ran {n} times, last {when}', { n: rule.runCount, when: timeAgo(rule.lastRunAt!) }) : t('has not run yet')}
+              {rule.lastError && <span className="overdue-text"> · {t('last error: {error}', { error: rule.lastError })}</span>}
             </p>
           </li>
         ))}
@@ -216,10 +219,10 @@ export function AutomationPage() {
               <li key={r.title}>
                 <button className="recipe" onClick={() => {
                   setRecipes(false);
-                  setEditing({ rule: null, initial: r.rule });
+                  setEditing({ rule: null, initial: { ...r.rule, name: t(r.rule.name), actions: r.rule.actions.map((a) => (a.type === 'comment' && a.value ? { ...a, value: t(a.value) } : a)) } });
                 }}>
-                  <strong>{r.title}</strong>
-                  <span className="muted small">{r.description}</span>
+                  <strong>{t(r.title)}</strong>
+                  <span className="muted small">{t(r.description)}</span>
                 </button>
               </li>
             ))}
@@ -235,7 +238,7 @@ export function AutomationPage() {
           }} />
       )}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} message={t("The rule stops running. Changes it already made stay.")}
+        <ConfirmDialog title={t('Delete {name}?', { name: deleting.name })} message={t("The rule stops running. Changes it already made stay.")}
           confirmLabel={t("Delete rule")} danger onClose={() => setDeleting(null)}
           onConfirm={async () => {
             const r = deleting;
@@ -256,7 +259,7 @@ function RuleLog({ rule, onClose }: { rule: AutomationRule; onClose: () => void 
     api.automationLog(rule.id).then(setRuns).catch(() => setRuns([]));
   }, [rule.id]);
   return (
-    <Modal title={`Recent runs · ${rule.name}`} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}>
+    <Modal title={`${t('Recent runs')} · ${rule.name}`} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>}>
       {!runs ? <Spinner /> : runs.length === 0 ? <p className="muted">{t("This rule has not run yet.")}</p> : (
         <ul className="run-list">
           {runs.map((r) => (
@@ -316,7 +319,7 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
   };
 
   return (
-    <Modal title={rule ? `Edit ${rule.name}` : 'New rule'} onClose={onClose} footer={
+    <Modal title={rule ? t('Edit {name}', { name: rule.name }) : t('New rule')} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="rule-form" disabled={busy || !form.name.trim() || form.actions.length === 0}>{t("Save rule")}</button>
@@ -332,7 +335,7 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
           <label className="field">
             <span>{t("When")}</span>
             <select value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value as RuleTrigger })}>
-              {TRIGGERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {TRIGGERS.map((tr) => <option key={tr.value} value={tr.value}>{t(tr.label)}</option>)}
             </select>
           </label>
           {form.trigger === 'STATUS_CHANGED' && (
@@ -340,18 +343,18 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
               <span>{t("To status")}</span>
               <select value={form.triggerStatus ?? ''} onChange={(e) => setForm({ ...form, triggerStatus: (e.target.value || null) as RuleInput['triggerStatus'] })}>
                 <option value="">{t("Any status")}</option>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
               </select>
             </label>
           )}
         </div>
         <div className="field">
-          <span>{form.trigger === 'SCHEDULED' ? 'For tasks matching' : 'Only if the task matches'} <span className="muted">
-            {form.trigger === 'SCHEDULED' ? '(required)' : '(optional)'}</span></span>
+          <span>{form.trigger === 'SCHEDULED' ? t('For tasks matching') : t('Only if the task matches')} <span className="muted">
+            {form.trigger === 'SCHEDULED' ? t('(required)') : t('(optional)')}</span></span>
           <FqlInput value={form.condition} onChange={(condition) => setForm({ ...form, condition })} onSubmit={() => {}} />
           {errors.condition ? <span className="field-error">{errors.condition}</span> : (
             <span className="muted small">{t("Same language as Search, e.g.")} <code>type = bug AND priority &gt;= high</code>
-              {form.trigger === 'SCHEDULED' && <> or <code>status = todo AND updated &lt; -4h</code>. Each task is handled once while it keeps matching.</>}
+              {form.trigger === 'SCHEDULED' && <> {t('or')} <code>status = todo AND updated &lt; -4h</code>. {t('Each task is handled once while it keeps matching.')}</>}
             </span>
           )}
         </div>
@@ -359,19 +362,19 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
           <legend>{t("Then")}</legend>
           {form.actions.map((action, index) => (
             <div key={index} className="rule-action">
-              <select aria-label={`Action ${index + 1}`} value={action.type}
+              <select aria-label={t('Action {n}', { n: index + 1 })} value={action.type}
                 onChange={(e) => setAction(index, { type: e.target.value as RuleActionType, value: defaultValue(e.target.value as RuleActionType) })}>
-                {ACTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                {ACTIONS.map((a) => <option key={a.value} value={a.value}>{t(a.label)}</option>)}
               </select>
               <ActionValue action={action} editors={editors} onChange={(value) => setAction(index, { ...action, value })} index={index} />
-              <button type="button" className="icon-button" aria-label={`Remove action ${index + 1}`}
+              <button type="button" className="icon-button" aria-label={t('Remove action {n}', { n: index + 1 })}
                 onClick={() => setForm({ ...form, actions: form.actions.filter((_, i) => i !== index) })}><X size={16} /></button>
             </div>
           ))}
           {errors.actions && <span className="field-error">{errors.actions}</span>}
           {form.actions.length < 8 && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm({ ...form, actions: [...form.actions, { type: 'add_label', value: '' }] })}>
-              <Plus size={15} /> Add action
+              <Plus size={15} /> {t('Add action')}
             </button>
           )}
         </fieldset>
@@ -383,25 +386,25 @@ function RuleModal({ projectKey, members, rule, initial, onClose, onSaved }: {
 function ActionValue({ action, editors, onChange, index }: {
   action: RuleAction; editors: Member[]; onChange: (value: string) => void; index: number;
 }) {
-  const label = `Value for action ${index + 1}`;
+  const label = t('Value for action {n}', { n: index + 1 });
   switch (action.type) {
     case 'assign':
       return (
         <select aria-label={label} value={action.value} onChange={(e) => onChange(e.target.value)}>
-          {ASSIGN_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          {ASSIGN_CHOICES.map((c) => <option key={c.value} value={c.value}>{t(c.label)}</option>)}
           {editors.map((m) => <option key={m.id} value={m.username}>{m.displayName}</option>)}
         </select>
       );
     case 'set_status':
       return (
         <select aria-label={label} value={action.value} onChange={(e) => onChange(e.target.value)}>
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
         </select>
       );
     case 'set_priority':
       return (
         <select aria-label={label} value={action.value} onChange={(e) => onChange(e.target.value)}>
-          {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+          {PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
         </select>
       );
     case 'set_due_in_days':

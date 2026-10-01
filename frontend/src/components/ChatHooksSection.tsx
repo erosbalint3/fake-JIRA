@@ -39,7 +39,7 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
     try {
       await api.addChatHook(projectKey, kind, url.trim(), ['TASK_CREATED', 'TASK_DONE', 'SPRINT']);
       setUrl('');
-      toast('Webhook added — send a test message to check it');
+      toast(t('Webhook added — send a test message to check it'));
       load();
     } catch (e) {
       toast((e as ApiError).message, 'error');
@@ -74,10 +74,10 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
                 <span className="spacer" />
                 <button className="btn btn-ghost btn-sm" onClick={async () => {
                   const result = await api.testChatHook(hook.id);
-                  toast(result.delivered ? 'Test message sent' : `Not delivered: ${result.error}`, result.delivered ? 'success' : 'error');
+                  toast(result.delivered ? t('Test message sent') : t('Not delivered: {error}', { error: result.error ?? '' }), result.delivered ? 'success' : 'error');
                   load();
-                }}><Send size={14} /> Test</button>
-                <button className="icon-button sm" aria-label="Remove webhook" onClick={async () => {
+                }}><Send size={14} /> {t('Test')}</button>
+                <button className="icon-button sm" aria-label={t('Remove webhook')} onClick={async () => {
                   await api.deleteChatHook(hook.id);
                   load();
                 }}><Trash2 size={15} /></button>
@@ -86,13 +86,13 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
                 {EVENTS.map((event) => (
                   <label key={event.id} className={`chip chip-toggle ${hook.events.includes(event.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={hook.events.includes(event.id)} onChange={() => toggle(hook, event.id)} />
-                    {event.label}
+                    {t(event.label)}
                   </label>
                 ))}
               </div>
               {hook.lastDeliveryAt && (
                 <p className={`small ${hook.lastError ? 'field-error' : 'muted'}`}>
-                  Last delivery {timeAgo(hook.lastDeliveryAt)}{hook.lastError ? ` failed: ${hook.lastError}` : ' succeeded'}
+                  {hook.lastError ? t('Last delivery {when} failed: {error}', { when: timeAgo(hook.lastDeliveryAt), error: hook.lastError }) : t('Last delivery {when} succeeded', { when: timeAgo(hook.lastDeliveryAt) })}
                 </p>
               )}
             </li>
@@ -101,15 +101,15 @@ export function ChatHooksSection({ projectKey }: { projectKey: string }) {
       )}
       {(hooks?.length ?? 0) < 5 && (
         <form className="inline-form hook-form" onSubmit={add}>
-          <select value={kind} onChange={(e) => setKind(e.target.value as ChatHook['kind'])} aria-label="Chat app">
+          <select value={kind} onChange={(e) => setKind(e.target.value as ChatHook['kind'])} aria-label={t('Chat app')}>
             <option value="SLACK">Slack</option>
             <option value="DISCORD">Discord</option>
             <option value="TEAMS">Microsoft Teams</option>
             <option value="MATTERMOST">Mattermost</option>
           </select>
-          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Webhook URL"
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} aria-label={t('Webhook URL')}
             placeholder={PLACEHOLDER[kind]} />
-          <button className="btn btn-soft" disabled={busy || !url.trim()}><Plus size={16} /> Add</button>
+          <button className="btn btn-soft" disabled={busy || !url.trim()}><Plus size={16} /> {t('Add')}</button>
         </form>
       )}
     </section>

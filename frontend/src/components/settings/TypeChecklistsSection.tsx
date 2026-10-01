@@ -41,7 +41,7 @@ export function TypeChecklistsSection({ projectKey, canEdit }: { projectKey: str
         {TASK_TYPES.map((type) => (
           <label key={type} className="field">
             <span><TypeIcon type={type} /> {t(TASK_TYPE_LABEL[type])}</span>
-            <textarea rows={4} value={lists[type]} disabled={!canEdit} placeholder={type === 'BUG' ? 'Repro steps\nFix\nTest\nRelease notes' : ''}
+            <textarea rows={4} value={lists[type]} disabled={!canEdit} placeholder={type === 'BUG' ? t('Repro steps\nFix\nTest\nRelease notes') : ''}
               onChange={(e) => setLists({ ...lists, [type]: e.target.value })} />
             {canEdit && lists[type] !== saved[type] && (
               <button type="button" className="btn btn-soft btn-sm" onClick={() => save(type)}>{t('Save')}</button>

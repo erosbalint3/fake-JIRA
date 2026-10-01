@@ -94,7 +94,7 @@ export function ProfilePage() {
         await enablePush();
         setPushOn(true);
         const result = await api.pushTest();
-        toast(result.delivered ? 'Push notifications are on — check for a test notification' : 'Push notifications are on');
+        toast(result.delivered ? t('Push notifications are on — check for a test notification') : t('Push notifications are on'));
       }
       setProfile(await api.profile());
     } catch (e) {
@@ -132,7 +132,7 @@ export function ProfilePage() {
         <div className="profile-hero-text">
           <h1>{profile.user.displayName}</h1>
           <p className="muted">@{profile.user.username} · {profile.user.email}</p>
-          <p className="muted small">Member since {formatDate(profile.memberSince)}{profile.admin ? ' · Admin' : ''}</p>
+          <p className="muted small">{t('Member since {date}', { date: formatDate(profile.memberSince) })}{profile.admin ? ` · ${t('Admin')}` : ''}</p>
           {profile.user.avatarUrl && (
             <button className="link small" onClick={removeAvatar}><Trash2 size={13} /> {t("Remove photo")}</button>
           )}
@@ -144,7 +144,7 @@ export function ProfilePage() {
           <div key={label} className="stat panel">
             <Icon size={20} />
             <strong>{value}</strong>
-            <span className="muted">{label}</span>
+            <span className="muted">{t(label)}</span>
           </div>
         ))}
       </div>
@@ -156,7 +156,7 @@ export function ProfilePage() {
             onChange={(e) => setDisplayName(e.target.value)} />
           <button className="btn btn-soft">{t("Save")}</button>
         </form>
-        <p className="muted small hint">Shown instead of your username. Mentions still use @{profile.user.username}.</p>
+        <p className="muted small hint">{t('Shown instead of your username. Mentions still use @{name}.', { name: profile.user.username })}</p>
       </section>
 
       <section className="panel">
@@ -172,6 +172,8 @@ export function ProfilePage() {
           setLanguage(next);
         }}>
           <option value="en">English</option>
+          <option value="de">Deutsch</option>
+          <option value="es">Español</option>
           <option value="hu">Magyar</option>
         </select>
       </section>
@@ -189,14 +191,14 @@ export function ProfilePage() {
               }
             }}>
             {(Object.keys(EMAIL_FREQUENCY_LABEL) as EmailFrequency[]).map((f) => (
-              <option key={f} value={f}>{EMAIL_FREQUENCY_LABEL[f]}</option>
+              <option key={f} value={f}>{t(EMAIL_FREQUENCY_LABEL[f])}</option>
             ))}
           </select>
         </div>
         <p className="muted small hint">
           {profile.emailAvailable
-            ? 'Get an email when someone assigns, mentions or updates your tasks — right away, or bundled into one digest.'
-            : 'Email is not set up on this server yet. Ask the administrator to configure SMTP.'}
+            ? t('Get an email when someone assigns, mentions or updates your tasks — right away, or bundled into one digest.')
+            : t('Email is not set up on this server yet. Ask the administrator to configure SMTP.')}
         </p>
       </section>
 
@@ -206,11 +208,11 @@ export function ProfilePage() {
           <>
             <label className="toggle">
               <input type="checkbox" checked={pushOn} disabled={busy} onChange={togglePush} />
-              Notify me on this device, even when FakeJIRA is closed
+              {t('Notify me on this device, even when FakeJIRA is closed')}
             </label>
             <p className="muted small hint">
-              {profile.pushDevices > 0 ? `Enabled on ${profile.pushDevices} device${profile.pushDevices === 1 ? '' : 's'}. ` : ''}
-              On phones, first add FakeJIRA to your home screen (Share → Add to Home Screen on iOS).
+              {profile.pushDevices > 0 ? `${profile.pushDevices === 1 ? t('Enabled on 1 device.') : t('Enabled on {n} devices.', { n: profile.pushDevices })} ` : ''}
+              {t('On phones, first add FakeJIRA to your home screen (Share → Add to Home Screen on iOS).')}
             </p>
           </>
         ) : (
@@ -225,7 +227,7 @@ export function ProfilePage() {
 
       <h2 className="section-heading" id="security">{t("Security")}</h2>
       <section className="panel">
-        <h2 className="panel-title">{profile.passwordSet ? 'Change password' : 'Set a password'}</h2>
+        <h2 className="panel-title">{profile.passwordSet ? t('Change password') : t('Set a password')}</h2>
         {!profile.passwordSet && (
           <p className="muted small hint">{t("You sign in with Google or GitHub. Set a password to also sign in with your username.")}</p>
         )}

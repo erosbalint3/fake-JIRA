@@ -3,6 +3,7 @@ import { ScrollText } from 'lucide-react';
 import { api, ApiError, type AuditPage } from '../../api';
 import { formatDate, timeAgo } from '../../format';
 import { ErrorBanner, Spinner } from '../States';
+import { t } from '../../i18n';
 
 /** Who did what and from where: sign-ins, role and settings changes, deletions. */
 export function AuditLogPanel() {
@@ -30,15 +31,15 @@ export function AuditLogPanel() {
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><ScrollText size={16} /> Audit log</h2>
+      <h2 className="panel-title"><ScrollText size={16} /> {t('Audit log')}</h2>
       <div className="report-toolbar">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search user, target, IP…" aria-label="Search the audit log"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Search user, target, IP…')} aria-label={t('Search the audit log')}
           className="audit-search" />
         <select value={action} onChange={(e) => {
           setAction(e.target.value);
           setPage(0);
-        }} aria-label="Action">
-          <option value="">All actions</option>
+        }} aria-label={t('Action')}>
+          <option value="">{t('All actions')}</option>
           {data?.actions.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
       </div>
@@ -48,7 +49,7 @@ export function AuditLogPanel() {
         <>
           <div className="table-scroll">
             <table className="viz-table audit-table">
-              <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Details</th><th>IP</th></tr></thead>
+              <thead><tr><th>{t('When')}</th><th>{t('Who')}</th><th>{t('Action')}</th><th>{t('Target')}</th><th>{t('Details')}</th><th>IP</th></tr></thead>
               <tbody>
                 {data.items.map((e) => (
                   <tr key={e.id}>
@@ -60,15 +61,15 @@ export function AuditLogPanel() {
                     <td className="mono small">{e.ip ?? ''}</td>
                   </tr>
                 ))}
-                {data.items.length === 0 && <tr><td colSpan={6} className="muted">Nothing found.</td></tr>}
+                {data.items.length === 0 && <tr><td colSpan={6} className="muted">{t('Nothing found.')}</td></tr>}
               </tbody>
             </table>
           </div>
           {data.pages > 1 && (
             <div className="pager">
-              <button className="btn btn-ghost btn-sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Newer</button>
-              <span className="muted small">Page {page + 1} of {data.pages} · {data.total} entries</span>
-              <button className="btn btn-ghost btn-sm" disabled={page + 1 >= data.pages} onClick={() => setPage(page + 1)}>Older</button>
+              <button className="btn btn-ghost btn-sm" disabled={page === 0} onClick={() => setPage(page - 1)}>{t('Newer')}</button>
+              <span className="muted small">{t('Page {page} of {pages} · {total} entries', { page: page + 1, pages: data.pages, total: data.total })}</span>
+              <button className="btn btn-ghost btn-sm" disabled={page + 1 >= data.pages} onClick={() => setPage(page + 1)}>{t('Older')}</button>
             </div>
           )}
         </>

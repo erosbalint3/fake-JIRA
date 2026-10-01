@@ -5,6 +5,7 @@ import { useToast } from '../../toast';
 import { Avatar } from '../Avatar';
 import { formatDay, formatMinutes, parseDuration, todayIso } from '../../format';
 import type { TimeEntry } from '../../types';
+import { t } from '../../i18n';
 
 interface Props {
   taskId: number;
@@ -27,7 +28,7 @@ export function TimePanel({ taskId, entries, userId, isOwner, canEdit, onChange 
   const log = async (event: FormEvent) => {
     event.preventDefault();
     if (!minutes) {
-      toast('Enter a duration like 1h 30m, 45m or 1.5h', 'error');
+      toast(t('Enter a duration like 1h 30m, 45m or 1.5h'), 'error');
       return;
     }
     setBusy(true);
@@ -45,18 +46,18 @@ export function TimePanel({ taskId, entries, userId, isOwner, canEdit, onChange 
 
   return (
     <section className="panel">
-      <h2 className="panel-title"><Timer size={16} /> Time tracking {total > 0 && <span className="muted small">{formatMinutes(total)} logged</span>}</h2>
+      <h2 className="panel-title"><Timer size={16} /> {t('Time tracking')} {total > 0 && <span className="muted small">{t('{time} logged', { time: formatMinutes(total) })}</span>}</h2>
       {canEdit && (
         <form className="time-form" onSubmit={log}>
           <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="1h 30m"
-            aria-label="Time spent" aria-invalid={!!duration && !minutes} />
-          <input type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-          <input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="What did you work on? (optional)"
-            aria-label="Note" className="time-note" />
-          <button className="btn btn-soft btn-sm" disabled={busy || !minutes}>Log</button>
+            aria-label={t('Time spent')} aria-invalid={!!duration && !minutes} />
+          <input type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} aria-label={t('Date')} />
+          <input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder={t('What did you work on? (optional)')}
+            aria-label={t('Note')} className="time-note" />
+          <button className="btn btn-soft btn-sm" disabled={busy || !minutes}>{t('Log')}</button>
         </form>
       )}
-      {entries.length === 0 ? <p className="muted">No time logged yet.</p> : (
+      {entries.length === 0 ? <p className="muted">{t('No time logged yet.')}</p> : (
         <ul className="time-list">
           {entries.map((entry) => (
             <li key={entry.id}>
@@ -65,7 +66,7 @@ export function TimePanel({ taskId, entries, userId, isOwner, canEdit, onChange 
               <span className="muted small">{formatDay(entry.date)}</span>
               <span className="time-entry-note">{entry.note}</span>
               {(entry.user.id === userId || isOwner) && (
-                <button className="icon-button sm" aria-label="Delete time entry" onClick={async () => {
+                <button className="icon-button sm" aria-label={t('Delete time entry')} onClick={async () => {
                   await api.deleteTime(taskId, entry.id).catch((e: ApiError) => toast(e.message, 'error'));
                   onChange();
                 }}>

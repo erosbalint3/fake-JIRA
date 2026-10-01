@@ -66,13 +66,13 @@ export function ReleasesPage() {
           </button>
           <span className={`muted small ${late ? 'overdue-text' : ''}`}>
             {release.released
-              ? `Released ${formatDay((release.releasedAt ?? '').slice(0, 10) || release.releaseDate || '')}`
-              : release.releaseDate ? `${late ? 'Was due' : 'Due'} ${formatDay(release.releaseDate)}` : 'No date'}
+              ? t('Released {date}', { date: formatDay((release.releasedAt ?? '').slice(0, 10) || release.releaseDate || '') })
+              : release.releaseDate ? t(late ? 'Was due {date}' : 'Due {date}', { date: formatDay(release.releaseDate) }) : t('No date')}
           </span>
-          <span className="release-progress" title={`${release.doneCount} of ${release.taskCount} tasks done`}>
+          <span className="release-progress" title={t('{done} of {total} tasks done', { done: release.doneCount, total: release.taskCount })}>
             <span style={{ width: `${percent}%` }} />
           </span>
-          <span className="muted small">{release.doneCount}/{release.taskCount} done{release.points ? ` · ${release.donePoints}/${release.points} pts` : ''}</span>
+          <span className="muted small">{t('{done}/{total} done', { done: release.doneCount, total: release.taskCount })}{release.points ? ` · ${t('{done}/{total} pts', { done: release.donePoints, total: release.points })}` : ''}</span>
           <span className="spacer" />
           <button className="btn btn-ghost btn-sm" onClick={() => api.releaseNotes(release.id).then(setNotes)
             .catch((e: ApiError) => toast(e.message, 'error'))}><FileText size={15} /> {t("Notes")}</button>
@@ -84,13 +84,13 @@ export function ReleasesPage() {
             <button className="btn btn-soft btn-sm" onClick={() => setShipping(release)}><Rocket size={15} /> {t("Release")}</button>
           )}
           {canEdit && release.released && (
-            <button className="icon-button" aria-label={`Mark ${release.name} unreleased`} title={t("Mark unreleased")}
-              onClick={() => run(() => api.unshipRelease(release.id), `${release.name} marked unreleased`)}><Undo2 size={16} /></button>
+            <button className="icon-button" aria-label={t('Mark {name} unreleased', { name: release.name })} title={t("Mark unreleased")}
+              onClick={() => run(() => api.unshipRelease(release.id), t('{name} marked unreleased', { name: release.name }))}><Undo2 size={16} /></button>
           )}
           {canEdit && (
             <>
-              <button className="icon-button" aria-label={`Edit ${release.name}`} onClick={() => setEditing(release)}><Pencil size={16} /></button>
-              <button className="icon-button" aria-label={`Delete ${release.name}`} onClick={() => setDeleting(release)}><Trash2 size={16} /></button>
+              <button className="icon-button" aria-label={t('Edit {name}', { name: release.name })} onClick={() => setEditing(release)}><Pencil size={16} /></button>
+              <button className="icon-button" aria-label={t('Delete {name}', { name: release.name })} onClick={() => setDeleting(release)}><Trash2 size={16} /></button>
             </>
           )}
         </div>
@@ -119,7 +119,7 @@ export function ReleasesPage() {
       {releases && releases.length === 0 && (
         <EmptyState icon={<Package size={28} />} title={t("No releases yet")}>
           {canEdit ? <button className="link" onClick={() => setEditing('new')}>{t("Create the first release")}</button>
-            : 'The project owner has not planned any releases.'}
+            : t('The project owner has not planned any releases.')}
         </EmptyState>
       )}
       {upcoming.length > 0 && (
@@ -148,11 +148,11 @@ export function ReleasesPage() {
           onShip={(target) => {
             const r = shipping;
             setShipping(null);
-            run(() => api.shipRelease(r.id, target), `${r.name} released 🚀`);
+            run(() => api.shipRelease(r.id, target), t('{name} released 🚀', { name: r.name }));
           }} />
       )}
       {deleting && (
-        <ConfirmDialog title={`Delete ${deleting.name}?`} message={t("Its tasks stay; they just no longer belong to a release.")}
+        <ConfirmDialog title={t('Delete {name}?', { name: deleting.name })} message={t("Its tasks stay; they just no longer belong to a release.")}
           confirmLabel={t("Delete release")} danger onClose={() => setDeleting(null)}
           onConfirm={() => {
             const r = deleting;
@@ -220,7 +220,7 @@ function ReleaseModal({ projectKey, release, onClose, onSaved }: {
     }
   };
   return (
-    <Modal title={release ? `Edit ${release.name}` : 'New release'} onClose={onClose} footer={
+    <Modal title={release ? t('Edit {name}', { name: release.name }) : t('New release')} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" form="release-form" disabled={busy || !name.trim()}>{release ? 'Save' : 'Create'}</button>
@@ -251,17 +251,17 @@ function ShipModal({ release, others, onClose, onShip }: {
   const open = release.taskCount - release.doneCount;
   const [target, setTarget] = useState<string>(others[0] ? String(others[0].id) : '');
   return (
-    <Modal title={`Release ${release.name}`} onClose={onClose} footer={
+    <Modal title={t('Release {name}', { name: release.name })} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Cancel")}</button>
         <button className="btn btn-primary" onClick={() => onShip(open && target ? Number(target) : null)}>
-          <Rocket size={16} /> Release
+          <Rocket size={16} /> {t('Release')}
         </button>
       </>
     }>
-      {open === 0 ? <p>All {release.taskCount} tasks are done. Ready to ship!</p> : (
+      {open === 0 ? <p>{t('All {n} tasks are done. Ready to ship!', { n: release.taskCount })}</p> : (
         <>
-          <p>{open} task{open === 1 ? ' is' : 's are'} not done yet.</p>
+          <p>{open === 1 ? t('1 task is not done yet.') : t('{n} tasks are not done yet.', { n: open })}</p>
           <label className="field">
             <span>{t("Move unfinished tasks to")}</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -286,7 +286,7 @@ function NotesModal({ notes, onClose }: { notes: { release: Release; markdown: s
     }
   };
   return (
-    <Modal title={`Release notes · ${notes.release.name}`} onClose={onClose} footer={
+    <Modal title={`${t('Release notes')} · ${notes.release.name}`} onClose={onClose} footer={
       <>
         <button className="btn btn-ghost" onClick={onClose}>{t("Close")}</button>
         <button className="btn btn-primary" onClick={copy}><ClipboardCopy size={16} /> {t("Copy Markdown")}</button>

@@ -50,7 +50,7 @@ export function MyWorkPage() {
           <p className="muted">{t("Everything assigned to you or that you help with, across all your projects.")}</p>
         </div>
         <label className="toggle">
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> {t('Show done')}
         </label>
       </header>
 
@@ -66,7 +66,7 @@ export function MyWorkPage() {
       {!tasks && !error && <Spinner />}
       {tasks && tasks.length === 0 && (
         <EmptyState icon={<Coffee size={28} />} title={t("Nothing assigned to you")}>
-          Pick something up from a project's <Link to="/projects">{t("backlog")}</Link>.
+          {t("Pick something up from a project's")} <Link to="/projects">{t("backlog")}</Link>.
         </EmptyState>
       )}
 
@@ -97,7 +97,7 @@ export function MyWorkPage() {
         if (!list.length) return null;
         return (
           <section key={status} className="group">
-            <h2 className="group-title">{STATUS_LABEL[status]} <span className="count muted-count">{list.length}</span></h2>
+            <h2 className="group-title">{t(STATUS_LABEL[status])} <span className="count muted-count">{list.length}</span></h2>
             <ul className="task-list">{sortTasks(list).map((t) => <TaskRow key={t.id} task={t} showProject />)}</ul>
           </section>
         );

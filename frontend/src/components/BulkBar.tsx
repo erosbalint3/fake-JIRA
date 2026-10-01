@@ -67,8 +67,8 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
     try {
       await api.bulk(selected, change);
       const undo = inverse(change, before);
-      toast(`${message} · ${selected.length} task${selected.length === 1 ? '' : 's'}`, 'success', undo.length ? {
-        action: { label: 'Undo', onClick: async () => {
+      toast(`${message} · ${selected.length === 1 ? t('1 task') : t('{n} tasks', { n: selected.length })}`, 'success', undo.length ? {
+        action: { label: t('Undo'), onClick: async () => {
           try {
             for (const [ids, back] of undo) await api.bulk(ids, back);
             toast(t("Change undone"));
@@ -95,8 +95,8 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
       onHide(null);
       onDone();
     });
-    toast(`Deleted ${ids.length} task${ids.length === 1 ? '' : 's'}`, 'success', {
-      action: { label: 'Undo', onClick: () => {
+    toast(ids.length === 1 ? t('Deleted 1 task') : t('Deleted {n} tasks', { n: ids.length }), 'success', {
+      action: { label: t('Undo'), onClick: () => {
         cancel();
         onHide(null);
       } },
@@ -104,30 +104,30 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
   };
 
   const select = (label: string, options: [string, string][], onPick: (value: string) => void) => (
-    <select value="" disabled={busy} aria-label={label} onChange={(e) => e.target.value && onPick(e.target.value)}>
-      <option value="">{label}</option>
-      {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+    <select value="" disabled={busy} aria-label={t(label)} onChange={(e) => e.target.value && onPick(e.target.value)}>
+      <option value="">{t(label)}</option>
+      {options.map(([value, text]) => <option key={value} value={value}>{t(text)}</option>)}
     </select>
   );
 
   return (
     <div className="bulk-bar" role="toolbar" aria-label={t("Bulk edit")}>
-      <strong>{selected.length} selected</strong>
+      <strong>{t('{n} selected', { n: selected.length })}</strong>
       {select('Status', STATUSES.map((s) => [s, STATUS_LABEL[s]]),
-        (v) => apply({ status: v as BulkChange['status'] }, `Moved to ${STATUS_LABEL[v as keyof typeof STATUS_LABEL]}`))}
-      {select('Assignee', [['none', 'Unassigned'], ...members.filter((m) => !isReadOnlyRole(m.role)).map((m) => [String(m.id), m.displayName] as [string, string])],
-        (v) => apply(v === 'none' ? { unassign: true } : { assigneeId: Number(v) }, 'Assignee updated'))}
+        (v) => apply({ status: v as BulkChange['status'] }, t('Moved to {status}', { status: t(STATUS_LABEL[v as keyof typeof STATUS_LABEL]) })))}
+      {select('Assignee', [['none', t('Unassigned')], ...members.filter((m) => !isReadOnlyRole(m.role)).map((m) => [String(m.id), m.displayName] as [string, string])],
+        (v) => apply(v === 'none' ? { unassign: true } : { assigneeId: Number(v) }, t('Assignee updated')))}
       {select('Sprint', [['backlog', 'Backlog'], ...sprints.filter((s) => s.state !== 'COMPLETED').map((s) => [String(s.id), s.name] as [string, string])],
-        (v) => apply(v === 'backlog' ? { clearSprint: true } : { sprintId: Number(v) }, 'Sprint updated'))}
+        (v) => apply(v === 'backlog' ? { clearSprint: true } : { sprintId: Number(v) }, t('Sprint updated')))}
       {select('Priority', PRIORITIES.map((p) => [p, PRIORITY_LABEL[p]]),
-        (v) => apply({ priority: v as BulkChange['priority'] }, 'Priority updated'))}
+        (v) => apply({ priority: v as BulkChange['priority'] }, t('Priority updated')))}
       {select('Type', TASK_TYPES.map((t) => [t, TASK_TYPE_LABEL[t]]),
-        (v) => apply({ type: v as BulkChange['type'] }, 'Type updated'))}
-      {select('Epic', [['none', 'No epic'], ...epics.map((e) => [String(e.id), e.name] as [string, string])],
-        (v) => apply(v === 'none' ? { clearEpic: true } : { epicId: Number(v) }, 'Epic updated'))}
+        (v) => apply({ type: v as BulkChange['type'] }, t('Type updated')))}
+      {select('Epic', [['none', t('No epic')], ...epics.map((e) => [String(e.id), e.name] as [string, string])],
+        (v) => apply(v === 'none' ? { clearEpic: true } : { epicId: Number(v) }, t('Epic updated')))}
       <form className="bulk-label" onSubmit={(e) => {
         e.preventDefault();
-        if (label.trim()) apply({ addLabels: [label.trim()] }, `Label "${label.trim()}" added`).then(() => setLabel(''));
+        if (label.trim()) apply({ addLabels: [label.trim()] }, t('Label “{name}” added', { name: label.trim() })).then(() => setLabel(''));
       }}>
         <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("+ label")} aria-label={t("Add label")} disabled={busy} />
       </form>
@@ -139,7 +139,7 @@ export function BulkBar({ selected, tasks, members, sprints, epics, onClear, onD
         <X size={17} />
       </button>
       {confirmDelete && (
-        <ConfirmDialog title={`Delete ${selected.length} tasks?`} danger busy={busy}
+        <ConfirmDialog title={t('Delete {n} tasks?', { n: selected.length })} danger busy={busy}
           message={t("They are removed with their subtasks, comments and files. You can undo for a few seconds.")}
           confirmLabel={t("Delete")} onClose={() => setConfirmDelete(false)}
           onConfirm={() => {
