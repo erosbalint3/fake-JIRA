@@ -208,17 +208,19 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 
 ### Behind Cloudflare Tunnel (no port forwarding)
 
-A Cloudflare Tunnel publishes FakeJIRA on your domain without opening any ports on your router or server: the `cloudflared` container connects out to Cloudflare, and Cloudflare handles HTTPS. Your domain must use Cloudflare's nameservers (it can stay registered anywhere).
+A Cloudflare Tunnel publishes FakeJIRA on your domain without opening any ports on your router or server: `cloudflared` connects out to Cloudflare, and Cloudflare handles HTTPS. Your domain must use Cloudflare's nameservers (it can stay registered anywhere).
 
-1. In the Cloudflare dashboard go to **Zero Trust → Networks → Tunnels → Create a tunnel**, pick **Cloudflared**, and copy the token from the install command.
-2. In the tunnel's **Public Hostname** tab add `jira.example.com` → type **HTTP** → URL `fakejira:8080`.
+1. In the Cloudflare dashboard go to **Networking → Tunnels → Create Tunnel** and copy the token from the install command.
+2. Open the tunnel, then **Routes → Add route → Published application**. Hostname: `jira.example.com`. Service URL: `http://localhost:8081` (your `FAKEJIRA_PORT`).
 3. In `.env` set `CLOUDFLARE_TUNNEL_TOKEN` and `APP_BASE_URL=https://jira.example.com`, then start:
 
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
    ```
 
-The app stays reachable on the server itself at http://localhost:8081 (loopback only, nothing is exposed to the network). Real client IPs come from the `CF-Connecting-IP` header (already the default for rate limiting), and live updates keep working because the stream pings every 25 seconds. Uploads are well under Cloudflare's 100 MB free-plan limit. To also open the database port, add `-f docker-compose.db.yml`.
+The `cloudflared` container runs on the host network, so `localhost` in the Service URL is the server itself; the app is published on `127.0.0.1` only and stays unreachable from the network. On Docker Desktop (macOS/Windows), turn on **Settings → Resources → Network → Enable host networking**, or skip the override and install cloudflared directly: `brew install cloudflared && sudo cloudflared service install <TOKEN>` (Linux: see Cloudflare's install command).
+
+Real client IPs come from the `CF-Connecting-IP` header (already the default for rate limiting), and live updates keep working because the stream pings every 25 seconds. Uploads are well under Cloudflare's 100 MB free-plan limit.
 
 ### Configuration
 

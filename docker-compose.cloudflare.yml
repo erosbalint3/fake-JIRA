@@ -2,19 +2,25 @@
 # ports and no port forwarding on your router. cloudflared makes an outbound
 # connection to Cloudflare, which handles HTTPS for your domain.
 #
-# 1. Cloudflare dashboard -> Zero Trust -> Networks -> Tunnels -> Create a tunnel
-#    (type Cloudflared) and copy the token into CLOUDFLARE_TUNNEL_TOKEN in .env.
-# 2. In the tunnel's Public Hostname tab add: jira.example.com -> HTTP -> fakejira:8080
+# 1. Cloudflare dashboard -> Networking -> Tunnels -> Create Tunnel, and copy the
+#    token from the install command into CLOUDFLARE_TUNNEL_TOKEN in .env.
+# 2. Open the tunnel -> Routes -> Add route -> Published application:
+#      Hostname:    jira.example.com
+#      Service URL: http://localhost:8081   (FAKEJIRA_PORT)
 #
 #   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+#
+# cloudflared uses the host's network, so "localhost" is the server itself, where
+# docker-compose.yml publishes the app on 127.0.0.1 only (nothing is exposed to the
+# network). Docker Desktop on macOS/Windows: turn on Settings -> Resources ->
+# Network -> "Enable host networking", or install cloudflared directly instead
+# (brew install cloudflared && sudo cloudflared service install <TOKEN>).
 services:
-  # fakejira keeps its 127.0.0.1:${FAKEJIRA_PORT} port from docker-compose.yml, so you can
-  # still open http://localhost:8081 on the server itself; nothing is exposed to the network.
-
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: fakejira-cloudflared
     restart: unless-stopped
+    network_mode: host
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
