@@ -206,6 +206,20 @@ See [`deploy/Caddyfile.example`](deploy/Caddyfile.example) and add one site bloc
 
   Then use `reverse_proxy fakejira:8080` in the Caddyfile. This override needs Docker Compose v2.24 or newer.
 
+### Behind Cloudflare Tunnel (no port forwarding)
+
+A Cloudflare Tunnel publishes FakeJIRA on your domain without opening any ports on your router or server: the `cloudflared` container connects out to Cloudflare, and Cloudflare handles HTTPS. Your domain must use Cloudflare's nameservers (it can stay registered anywhere).
+
+1. In the Cloudflare dashboard go to **Zero Trust → Networks → Tunnels → Create a tunnel**, pick **Cloudflared**, and copy the token from the install command.
+2. In the tunnel's **Public Hostname** tab add `jira.example.com` → type **HTTP** → URL `fakejira:8080`.
+3. In `.env` set `CLOUDFLARE_TUNNEL_TOKEN` and `APP_BASE_URL=https://jira.example.com`, then start:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+   ```
+
+The override stops publishing a host port, so the app is reachable only through the tunnel. Real client IPs come from the `CF-Connecting-IP` header (already the default for rate limiting), and live updates keep working because the stream pings every 25 seconds. Uploads are well under Cloudflare's 100 MB free-plan limit. This override needs Docker Compose v2.24 or newer. To also open the database port, add `-f docker-compose.db.yml`.
+
 ### Configuration
 
 | Setting | Env var | Default |

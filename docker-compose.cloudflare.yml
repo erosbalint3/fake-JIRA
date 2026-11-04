@@ -1,0 +1,23 @@
+# Use this override to publish FakeJIRA through a Cloudflare Tunnel: no open
+# ports and no port forwarding on your router. cloudflared makes an outbound
+# connection to Cloudflare, which handles HTTPS for your domain.
+#
+# 1. Cloudflare dashboard -> Zero Trust -> Networks -> Tunnels -> Create a tunnel
+#    (type Cloudflared) and copy the token into CLOUDFLARE_TUNNEL_TOKEN in .env.
+# 2. In the tunnel's Public Hostname tab add: jira.example.com -> HTTP -> fakejira:8080
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+services:
+  fakejira:
+    # Only reachable through the tunnel.
+    ports: !reset []
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fakejira-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      - fakejira
