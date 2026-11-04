@@ -8,9 +8,8 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
 services:
-  fakejira:
-    # Only reachable through the tunnel.
-    ports: !reset []
+  # fakejira keeps its 127.0.0.1:${FAKEJIRA_PORT} port from docker-compose.yml, so you can
+  # still open http://localhost:8081 on the server itself; nothing is exposed to the network.
 
   cloudflared:
     image: cloudflare/cloudflared:latest

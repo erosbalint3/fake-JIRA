@@ -218,7 +218,7 @@ A Cloudflare Tunnel publishes FakeJIRA on your domain without opening any ports 
    docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
    ```
 
-The override stops publishing a host port, so the app is reachable only through the tunnel. Real client IPs come from the `CF-Connecting-IP` header (already the default for rate limiting), and live updates keep working because the stream pings every 25 seconds. Uploads are well under Cloudflare's 100 MB free-plan limit. This override needs Docker Compose v2.24 or newer. To also open the database port, add `-f docker-compose.db.yml`.
+The app stays reachable on the server itself at http://localhost:8081 (loopback only, nothing is exposed to the network). Real client IPs come from the `CF-Connecting-IP` header (already the default for rate limiting), and live updates keep working because the stream pings every 25 seconds. Uploads are well under Cloudflare's 100 MB free-plan limit. To also open the database port, add `-f docker-compose.db.yml`.
 
 ### Configuration
 
